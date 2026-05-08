@@ -29,7 +29,7 @@ interface Harness {
 
 async function startServer(): Promise<Harness> {
   const manager = new SessionManager();
-  const app = await buildServer({ config, manager, internalHookToken });
+  const app = await buildServer({ config, manager, internalHookToken, webDistDir: null });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const addr = app.server.address() as AddressInfo;
   return { app, manager, port: addr.port };

@@ -32,6 +32,7 @@ describe('REST API', () => {
       config: baseConfig,
       manager: mgr,
       internalHookToken,
+      webDistDir: null,
     });
   });
 
@@ -317,6 +318,7 @@ describe('REST API with historyRoot for resume validation', () => {
       manager: mgr,
       internalHookToken,
       historyRoot,
+      webDistDir: null,
     });
   });
 
@@ -337,7 +339,7 @@ describe('REST API with historyRoot for resume validation', () => {
     expect((res.json() as { mode: string }).mode).toBe('resume');
   });
 
-  it('rejects resume when sessionId is not in history', async () => {
+  it('rejects resume when sessionId is not in history (boundary)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/sessions',
@@ -369,6 +371,7 @@ describe('REST API idempotency', () => {
       manager: mgr,
       internalHookToken,
       idempotencyTtlMs: 60_000,
+      webDistDir: null,
     });
   });
 
@@ -459,5 +462,91 @@ describe('REST API idempotency', () => {
     expect(res.json()).toEqual({
       error: { code: 'not_found', message: 'route not found' },
     });
+  });
+});
+
+describe('REST API SPA fallback', () => {
+  let mgr: SessionManager;
+  let app: FastifyInstance;
+  let webDistDir: string;
+
+  beforeEach(async () => {
+    webDistDir = mkdtempSync(join(tmpdir(), 'ccanywhere-web-'));
+    writeFileSync(
+      join(webDistDir, 'index.html'),
+      '<!doctype html><html><body data-test="spa">spa-marker</body></html>',
+    );
+    mgr = new SessionManager();
+    app = await buildServer({
+      config: baseConfig,
+      manager: mgr,
+      internalHookToken,
+      webDistDir,
+    });
+  });
+
+  afterEach(async () => {
+    await mgr.killAll();
+    await app.close();
+    rmSync(webDistDir, { recursive: true, force: true });
+  });
+
+  it('GET / serves index.html when web/dist exists', async () => {
+    const res = await app.inject({ method: 'GET', url: '/' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('spa-marker');
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+  });
+
+  it('unknown SPA path falls back to index.html', async () => {
+    const res = await app.inject({ method: 'GET', url: '/workspace/abc-123' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('spa-marker');
+  });
+
+  it('does not affect /api/* priority', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+  });
+
+  it('healthz still returns JSON', async () => {
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+  });
+});
+
+describe('REST API without web/dist', () => {
+  let mgr: SessionManager;
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    mgr = new SessionManager();
+    app = await buildServer({
+      config: baseConfig,
+      manager: mgr,
+      internalHookToken,
+      webDistDir: null,
+    });
+  });
+
+  afterEach(async () => {
+    await mgr.killAll();
+    await app.close();
+  });
+
+  it('unknown route still returns envelope when SPA disabled', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/somewhere',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: { code: 'not_found' } });
   });
 });

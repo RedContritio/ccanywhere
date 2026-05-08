@@ -8,7 +8,9 @@ declare module 'fastify' {
   }
 }
 
-const PUBLIC_PATHS = new Set<string>(['/healthz']);
+// Anything not under /api/ or /ws/ is treated as public (SPA static
+// assets, /healthz, the SPA fallback at /). The /api/hook/* sub-route
+// uses a different token domain handled below.
 
 function extractBearer(authHeader: unknown): string | null {
   if (typeof authHeader !== 'string') return null;
@@ -66,7 +68,10 @@ export async function registerAuth(
       return;
     }
 
-    if (PUBLIC_PATHS.has(url)) return;
+    if (!url.startsWith('/api/') && !url.startsWith('/ws/')) {
+      // SPA static assets, /healthz, and the SPA fallback are all public.
+      return;
+    }
 
     const token = extractBearer(req.headers.authorization) ?? extractQueryToken(req.query);
     if (token === null) {
