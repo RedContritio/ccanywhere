@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Token } from '../config/schema.js';
+import { logger } from '../log.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -37,6 +38,24 @@ export async function registerAuth(
   app.addHook('onRequest', async (req, reply) => {
     const url = req.url.split('?')[0] ?? '';
 
+    const isUpgrade =
+      typeof req.headers.upgrade === 'string' &&
+      req.headers.upgrade.toLowerCase() === 'websocket';
+
+    const rejectUpgrade = (status: number, message: string): void => {
+      const socket = req.raw.socket;
+      const body = `HTTP/1.1 ${status} Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`;
+      try {
+        socket.write(body);
+      } catch {
+        // ignore
+      }
+      socket.destroy();
+      // Suppress fastify reply
+      void reply.hijack();
+      logger.debug({ url, message }, 'ws upgrade rejected');
+    };
+
     if (url.startsWith('/api/hook/')) {
       const token = extractBearer(req.headers.authorization);
       if (token !== internalHookToken) {
@@ -51,12 +70,24 @@ export async function registerAuth(
 
     const token = extractBearer(req.headers.authorization) ?? extractQueryToken(req.query);
     if (token === null) {
-      await reply.code(401).send({ error: { code: 'unauthorized', message: 'missing token' } });
+      if (isUpgrade) {
+        rejectUpgrade(401, 'missing token');
+      } else {
+        await reply
+          .code(401)
+          .send({ error: { code: 'unauthorized', message: 'missing token' } });
+      }
       return;
     }
     const found = userTokens.get(token);
     if (!found) {
-      await reply.code(401).send({ error: { code: 'unauthorized', message: 'invalid token' } });
+      if (isUpgrade) {
+        rejectUpgrade(401, 'invalid token');
+      } else {
+        await reply
+          .code(401)
+          .send({ error: { code: 'unauthorized', message: 'invalid token' } });
+      }
       return;
     }
     req.authTokenLabel = found.label;

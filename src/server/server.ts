@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from '../config/schema.js';
 import type { SessionManager } from '../session/manager.js';
+import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
@@ -14,7 +15,11 @@ export interface BuildServerOptions {
 }
 
 export async function buildServer(opts: BuildServerOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false, disableRequestLogging: true });
+  const app = Fastify({
+    logger: false,
+    disableRequestLogging: true,
+    forceCloseConnections: true,
+  });
 
   await registerAuth(app, opts.config.tokens, opts.internalHookToken);
 
@@ -27,6 +32,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   }
   await registerSessionRoutes(app, opts.config, opts.manager);
   await registerHookRoutes(app, opts.manager);
+  await registerWebSocketRoutes(app, opts.manager);
 
   app.setErrorHandler((err, _req, reply) => {
     if (reply.statusCode < 400) reply.code(500);
