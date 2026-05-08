@@ -1,30 +1,28 @@
 # frpc.toml — copy this to your frpc working dir, fill in authToken,
-# certificate paths, and (optional) override customDomains, then run:
-#   frpc -c frpc.toml
+# then run:  frpc -c frpc.toml
 #
-# Architecture (frps does NOT terminate TLS — frpc does, via the
-# https2http plugin):
+# THIS IS THE SIMPLIFIED HTTP-ONLY VARIANT for getting end-to-end
+# connectivity working first. No certificates, no vhost, no custom
+# domain — just a raw TCP tunnel from frps:62275 to ccanywhere on the
+# local machine.
 #
-#   browser (https://ccanywhere.recoco.xyz)
-#     → frps @ recoco.xyz:443 (SNI route only, no TLS termination)
+# Topology:
+#   browser (http://recoco.xyz:62275)
+#     → frps @ recoco.xyz:62275 (frps owns this port)
 #       → frpc on this host
-#         → https2http plugin (terminates TLS with cert below)
-#           → ccanywhere @ 127.0.0.1:62275 (plain HTTP)
+#         → ccanywhere @ 127.0.0.1:62275 (plain HTTP)
 #
 # Required on frps (recoco.xyz):
-#   - vhostHTTPSPort = 443 in frps.toml
-#   - matching auth.token
+#   - port 62275 reachable on the public network (firewall open)
+#   - matching auth.token in frps.toml
 #
-# Required on THIS host (where frpc runs):
-#   - TLS certificate + private key covering ccanywhere.recoco.xyz
-#     (Let's Encrypt with DNS-01 challenge, or a wildcard *.recoco.xyz cert)
-#     placed at crtPath / keyPath below.
+# Required on THIS host (where frpc and ccanywhere both run):
+#   - ccanywhere built and started (its config.port matches localPort)
 #
-# Required DNS:
-#   - ccanywhere.recoco.xyz A or CNAME pointing at recoco.xyz's IP.
-#
-# `localPort` MUST match `port` in your ccanywhere config.json (default
-# 62275 — see examples/config.json).
+# After things work end-to-end, switch back to the https variant:
+# vhost + https2http plugin + cert files. The https flow is documented
+# in the previous git revisions of this file (search for `type = "https"`
+# in the history).
 
 serverAddr = "recoco.xyz"
 serverPort = 7000
@@ -34,14 +32,7 @@ auth.token = "REPLACE-WITH-YOUR-FRPS-TOKEN"
 
 [[proxies]]
 name = "ccanywhere"
-type = "https"
-customDomains = ["ccanywhere.recoco.xyz"]
-
-[proxies.plugin]
-type = "https2http"
-localAddr = "127.0.0.1:62275"
-# Absolute paths — frp does NOT expand `~`. On macOS expand $HOME yourself,
-# e.g. /Users/<you>/.config/ccanywhere/certs/ccanywhere.recoco.xyz.crt
-crtPath = "/Users/<you>/.config/ccanywhere/certs/ccanywhere.recoco.xyz.crt"
-keyPath = "/Users/<you>/.config/ccanywhere/certs/ccanywhere.recoco.xyz.key"
-hostHeaderRewrite = "ccanywhere.recoco.xyz"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 62275
+remotePort = 62275
