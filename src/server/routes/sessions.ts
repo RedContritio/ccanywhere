@@ -65,7 +65,7 @@ export async function registerSessionRoutes(
     }
 
     const store = options.idempotencyStore;
-    const scope = req.authTokenLabel ?? '';
+    const scope = req.authDevice?.id ?? req.authTokenLabel ?? '';
     const bodyHash = idempotencyKey !== null ? hashBody(req.body) : '';
 
     if (idempotencyKey !== null && store) {

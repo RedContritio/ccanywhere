@@ -36,7 +36,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 |------|------|
 | `port` | 默认 `62275`（一次性随机选定）。多机部署改成别的 |
 | `claudeBin` | 写**绝对路径**。LaunchAgent 的 PATH 不含 `~/.local/bin`，相对名 `claude` 会找不到导致 spawn 立即 dead |
-| `tokens[].token` | 用 `openssl rand -hex 32` 生成新值，至少 16 字符 |
+| `webOrigin` | web SPA 实际服务的 origin（如 `https://ccanywhere.example.com`）。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；改这一项会让所有已配对设备失效 |
 | `projectsRoot` | 项目集合根目录（绝对路径），其直接子目录被自动列为可选项目；启动时不存在会自动 mkdir，不可读直接 fatal，不可写则只能列/选不能新建 |
 | `outputFps` | WS 输出最大帧率，1..240 默认 60。带宽紧张可调到 24 |
 | `deletedSessionTtlMs` | 软删除保留时长，默认 600_000（10 分钟）|
@@ -310,18 +310,23 @@ curl http://127.0.0.1:62275/healthz
 curl http://<frps>:62275/healthz
 # {"ok":true}
 
-# 带 token 列项目
-curl -H "Authorization: Bearer <你的 token>" http://127.0.0.1:62275/api/projects
+# 列项目（需要先 pair + login，浏览器里完成）
+# 命令行调试 API 时用 mac CLI 的 internal 路由（cliToken 在 ~/.config/ccanywhere/cli-token）
+CLI_TOKEN=$(cat ~/.config/ccanywhere/cli-token)
+curl -H "Authorization: Bearer $CLI_TOKEN" http://127.0.0.1:62275/api/internal/devices
 ```
 
-浏览器：`http://<frps>:62275/login`（或 https 域名）→ 登录 → 创建 session →
-xterm 应该立即显示 cc 主界面（已读 user `~/.claude/auth.json`，不要求重登）。
+浏览器配对：`https://<webOrigin host>/login` → 输入设备名 → 申请配对 →
+mac 终端跑 `ccanywhere approve` 选择该 pending → 浏览器自动跳到 workspace。
+后续登入只需点「用本机生物识别登入」。
 
 ## 7. 排错
 
 | 现象 | 可能原因 | 解决 |
 |------|---------|------|
-| 浏览器 401 | token 错或 config tokens 列表缺该 token | 检查 `~/.config/ccanywhere/config.json` |
+| 浏览器 401 / 反复跳回登录 | session cookie 过期或 device 被 revoke | 重新走「申请配对」+ `ccanywhere approve` |
+| 申请配对没看到 pending | webOrigin 配错 / rpID 不匹配（浏览器侧 `navigator.credentials.create` 失败） | config 里 `webOrigin` 必须等于浏览器实际访问的 origin（含 scheme + host） |
+| pending list 一直空 | 浏览器 register-init 收到了，但 register-complete 失败（可能因为 webOrigin 不匹配） | 看 server.log 是否有 `verification_failed` |
 | 创建 session 即 dead | `claudeBin` 找不到（PATH 问题） | 改为绝对路径 |
 | 创建 session 后跳到 cc 登录页 | 你跑的是 M5 旧版（CLAUDE_CONFIG_DIR 注入） | `git pull && pnpm build:all && launchctl kickstart -k …` |
 | 卡顿明显 | 旧版 100ms trailing-flush | 同上，确认在 M-hook-opt-in 之后的版本 |

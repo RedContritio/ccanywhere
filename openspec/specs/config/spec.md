@@ -38,27 +38,25 @@ ccanywhere 启动时读一个 JSON 配置文件，里面包含运行所需的全
 | `bindHost`               | string                                | `"127.0.0.1"` | 绑定地址 |
 | `claudeBin`              | string                                | `"claude"`    | cc 二进制路径或 PATH 内名称 |
 | `scrollbackBytes`        | ≥ 65536 的整数                        | `1048576`     | 单 session scrollback 上限 |
-| `tokens`                 | `{ label, token, ... }` 数组          | （必填，≥1）  | 用户 token 列表 |
-| `projectsRoot`           | string                                | （必填）      | 项目集合根目录的绝对路径；其直接子目录被自动列为可选项目（取代 `projects[]` 静态白名单） |
+| `projectsRoot`           | string                                | （必填）      | 项目集合根目录的绝对路径；其直接子目录被自动列为可选项目 |
+| `webOrigin`              | URL                                   | （必填）      | web SPA 实际服务的 origin（如 `https://ccanywhere.example.com`）。WebAuthn `rpID` 由其 hostname 派生；`expectedOrigin` 校验也用它。改变 `webOrigin` 会让所有已配对设备失效 |
 | `deletedSessionTtlMs`    | ≥ 60000 的整数                        | `600000`      | 软删除 session 在 manager 中保留时长（10 分钟，覆盖弱网络重试窗口） |
 | `wsHeartbeat`            | `{ intervalMs, timeoutMs }`           | 见下          | WS 帧级心跳参数 |
 
 `wsHeartbeat.intervalMs` 默认 `30000`，最小 `1000`。
 `wsHeartbeat.timeoutMs` 默认 `60000`，必须严格大于 `intervalMs`。
 
-每个 `tokens[i].token` MUST 至少 16 字符。`projectsRoot` MUST 非空字符串；
-启动时若该路径不存在 MUST 自动 `mkdir -p` 创建，若不可读 MUST fatal 退出，
-若可读不可写则继续运行但记录 warn（list/select OK，新建项目会失败）。
-project id MUST 等于其在 `projectsRoot` 下的目录 basename，无 kebab-case 限制。
+`projectsRoot` MUST 非空字符串；启动时若该路径不存在 MUST 自动 `mkdir -p`
+创建，若不可读 MUST fatal 退出，若可读不可写则继续运行但记录 warn
+（list/select OK，新建项目会失败）。project id MUST 等于其在
+`projectsRoot` 下的目录 basename。
+
+`webOrigin` MUST 是带 scheme 的 URL；非 https 时 cookie `Secure` 标志关掉
+（仅 `http://localhost` / `http://127.0.0.1` 这类本地 dev 场景）。生产部署
+MUST 使用 https，否则浏览器 WebAuthn API 拒绝调用。
 
 服务端代码 MUST NOT 在运行时承担端口选择、frpc 配置生成、frpc 子进程管理
 等职责。frp 部署相关的资料以 `examples/` 下的模板文件提供，由用户复制配置。
-
-#### Scenario: 空 tokens 数组被拒绝
-
-- GIVEN 配置中 `"tokens": []`
-- WHEN  服务端启动
-- THEN  MUST 退出，错误信息提及 `tokens`，退出码 `2`
 
 #### Scenario: 缺失 projectsRoot 被拒绝
 
@@ -84,11 +82,17 @@ project id MUST 等于其在 `projectsRoot` 下的目录 basename，无 kebab-ca
 - WHEN  服务端启动
 - THEN  服务正常启动，list/select project OK；POST `/api/projects` MUST 返回 403
 
-#### Scenario: 短 token 被拒绝
+#### Scenario: 缺失 webOrigin 被拒绝
 
-- GIVEN token 字符串长度小于 16
+- GIVEN 配置中没有 `webOrigin` 字段
 - WHEN  服务端启动
-- THEN  MUST 退出，退出码 `2`
+- THEN  MUST 退出，错误信息提及 `webOrigin`，退出码 `2`
+
+#### Scenario: webOrigin 非 URL 被拒绝
+
+- GIVEN `"webOrigin": "not-a-url"`
+- WHEN  服务端启动
+- THEN  MUST 退出，错误信息提及 `webOrigin`，退出码 `2`
 
 #### Scenario: deletedSessionTtlMs 太小被拒绝
 
@@ -114,13 +118,3 @@ project id MUST 等于其在 `projectsRoot` 下的目录 basename，无 kebab-ca
 - WHEN  服务端启动并接受 WebSocket 连接
 - THEN  PTY 输出的 trailing-flush 窗口长度 MUST 约为 `Math.round(1000/24) = 42 ms`
 
-### Requirement: 重复检测
-
-加载器 MUST 拒绝包含重复 `tokens[*].token` 的配置。
-`projectsRoot` 下子目录的 id 唯一性由文件系统天然保证（同名 mkdir 失败）。
-
-#### Scenario: 重复 token 值
-
-- GIVEN 两个 token 条目共用同一个 `token` 字符串
-- WHEN  服务端启动
-- THEN  MUST 退出，错误信息含 "duplicate token"，退出码 `2`

@@ -13,32 +13,49 @@ describe('useAuthStore', () => {
 
   it('initial state is fully null', () => {
     const s = useAuthStore.getState();
-    expect(s.token).toBeNull();
+    expect(s.deviceId).toBeNull();
     expect(s.label).toBeNull();
     expect(s.verifiedAt).toBeNull();
   });
 
-  it('login sets token, label, verifiedAt; logout clears all', () => {
+  it('setPaired sets deviceId, label, verifiedAt; logout clears all', () => {
     const before = Date.now() - 1;
-    useAuthStore.getState().login('tok-abc', 'laptop');
+    useAuthStore.getState().setPaired('dev-abc', 'laptop');
     const after = useAuthStore.getState();
-    expect(after.token).toBe('tok-abc');
+    expect(after.deviceId).toBe('dev-abc');
     expect(after.label).toBe('laptop');
     expect(after.verifiedAt).toBeGreaterThan(before);
 
     useAuthStore.getState().logout();
     const cleared = useAuthStore.getState();
-    expect(cleared.token).toBeNull();
+    expect(cleared.deviceId).toBeNull();
     expect(cleared.label).toBeNull();
     expect(cleared.verifiedAt).toBeNull();
   });
 
+  it('markVerified bumps verifiedAt without touching deviceId/label', () => {
+    useAuthStore.getState().setPaired('dev-1', 'laptop');
+    const t1 = useAuthStore.getState().verifiedAt!;
+    // Force a measurable gap so the next bump is strictly greater.
+    const start = Date.now();
+    while (Date.now() === start) {
+      // spin briefly
+    }
+    useAuthStore.getState().markVerified();
+    const after = useAuthStore.getState();
+    expect(after.deviceId).toBe('dev-1');
+    expect(after.label).toBe('laptop');
+    expect(after.verifiedAt).toBeGreaterThan(t1);
+  });
+
   it('persists through localStorage under ccanywhere.auth', () => {
-    useAuthStore.getState().login('tok-1', 'phone');
+    useAuthStore.getState().setPaired('dev-1', 'phone');
     const raw = localStorage.getItem('ccanywhere.auth');
     expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw ?? '{}') as { state?: { token?: string; label?: string } };
-    expect(parsed.state?.token).toBe('tok-1');
+    const parsed = JSON.parse(raw ?? '{}') as {
+      state?: { deviceId?: string; label?: string };
+    };
+    expect(parsed.state?.deviceId).toBe('dev-1');
     expect(parsed.state?.label).toBe('phone');
   });
 });

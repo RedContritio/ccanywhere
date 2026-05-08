@@ -6,13 +6,14 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { Config } from '../config/schema.js';
+import { DeviceStore } from '../devices/store.js';
 import { ProjectStore } from '../projects/store.js';
 import { SessionManager } from '../session/manager.js';
 import { buildServer } from '../server/server.js';
 import type { ServerFrame } from './protocol.js';
 
-const userToken = 'a'.repeat(32);
 const internalHookToken = 'h'.repeat(32);
+const cliToken = 'c'.repeat(32);
 
 const config: Config = {
   port: 0,
@@ -22,8 +23,8 @@ const config: Config = {
   deletedSessionTtlMs: 600_000,
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
-  tokens: [{ label: 'laptop', token: userToken }],
   projectsRoot: '/tmp/ccanywhere-test-placeholder',
+  webOrigin: 'http://localhost:7878',
 };
 
 interface Harness {
@@ -31,6 +32,7 @@ interface Harness {
   manager: SessionManager;
   port: number;
   projectsRoot: string;
+  authCookie: string;
 }
 
 async function startServer(): Promise<Harness> {
@@ -40,24 +42,36 @@ async function startServer(): Promise<Harness> {
     projectsRoot,
     statePath: join(projectsRoot, '.projects-state.json'),
   });
+  const deviceStore = new DeviceStore({
+    statePath: join(projectsRoot, '.devices.json'),
+  });
+  const { sessionId } = deviceStore.__seedActiveDevice('test-device');
   const manager = new SessionManager();
   const app = await buildServer({
     config,
     manager,
     projectStore,
+    deviceStore,
     internalHookToken,
+    cliToken,
     webDistDir: null,
   });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const addr = app.server.address() as AddressInfo;
-  return { app, manager, port: addr.port, projectsRoot };
+  return {
+    app,
+    manager,
+    port: addr.port,
+    projectsRoot,
+    authCookie: `ccanywhere_session=${sessionId}`,
+  };
 }
 
 async function createSession(h: Harness): Promise<string> {
   const res = await h.app.inject({
     method: 'POST',
     url: '/api/sessions',
-    headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+    headers: { cookie: h.authCookie, 'content-type': 'application/json' },
     payload: { projectId: 'demo', mode: 'fresh' },
   });
   return (res.json() as { id: string }).id;
@@ -71,8 +85,10 @@ interface TrackedClient {
   ): Promise<Extract<ServerFrame, { type: T }>>;
 }
 
-function connect(port: number, sessionId: string, token: string): TrackedClient {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/sessions/${sessionId}?token=${token}`);
+function connect(port: number, sessionId: string, cookie: string): TrackedClient {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/sessions/${sessionId}`, {
+    headers: { cookie },
+  });
   const buffered: ServerFrame[] = [];
   const waiters: Array<{
     type: ServerFrame['type'];
@@ -172,22 +188,24 @@ describe('WebSocket /ws/sessions/:id', () => {
     rmSync(h.projectsRoot, { recursive: true, force: true });
   });
 
-  it('rejects connection without token', async () => {
+  it('rejects connection without session cookie', async () => {
     const ws = new WebSocket(`ws://127.0.0.1:${h.port}/ws/sessions/anything`);
     const result = await waitUnexpected(ws);
     expect(result.code).toBe(401);
     ws.terminate();
   });
 
-  it('rejects connection with invalid token', async () => {
-    const ws = new WebSocket(`ws://127.0.0.1:${h.port}/ws/sessions/anything?token=wrong`);
+  it('rejects connection with invalid session cookie', async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${h.port}/ws/sessions/anything`, {
+      headers: { cookie: 'ccanywhere_session=wrong' },
+    });
     const result = await waitUnexpected(ws);
     expect(result.code).toBe(401);
     ws.terminate();
   });
 
   it('closes immediately for unknown session id', async () => {
-    const c = connect(h.port, '00000000-0000-0000-0000-000000000000', userToken);
+    const c = connect(h.port, '00000000-0000-0000-0000-000000000000', h.authCookie);
     await waitOpen(c.ws);
     const err = await c.waitFor('error');
     expect(err.message).toMatch(/session not found/);
@@ -196,7 +214,7 @@ describe('WebSocket /ws/sessions/:id', () => {
 
   it('delivers snapshot then status on connect', async () => {
     const id = await createSession(h);
-    const c = connect(h.port, id, userToken);
+    const c = connect(h.port, id, h.authCookie);
     await waitOpen(c.ws);
     const snap = await c.waitFor('snapshot');
     expect(typeof snap.data).toBe('string');
@@ -207,7 +225,7 @@ describe('WebSocket /ws/sessions/:id', () => {
 
   it('forwards input to the PTY and broadcasts output back', async () => {
     const id = await createSession(h);
-    const c = connect(h.port, id, userToken);
+    const c = connect(h.port, id, h.authCookie);
     await waitOpen(c.ws);
     await c.waitFor('snapshot');
 
@@ -219,7 +237,7 @@ describe('WebSocket /ws/sessions/:id', () => {
 
   it('responds to ping with pong', async () => {
     const id = await createSession(h);
-    const c = connect(h.port, id, userToken);
+    const c = connect(h.port, id, h.authCookie);
     await waitOpen(c.ws);
     await c.waitFor('snapshot');
 
@@ -231,7 +249,7 @@ describe('WebSocket /ws/sessions/:id', () => {
 
   it('rejects invalid frames with an error frame', async () => {
     const id = await createSession(h);
-    const c = connect(h.port, id, userToken);
+    const c = connect(h.port, id, h.authCookie);
     await waitOpen(c.ws);
     await c.waitFor('snapshot');
 
@@ -247,8 +265,8 @@ describe('WebSocket /ws/sessions/:id', () => {
 
   it('broadcasts output to multiple clients on the same session', async () => {
     const id = await createSession(h);
-    const c1 = connect(h.port, id, userToken);
-    const c2 = connect(h.port, id, userToken);
+    const c1 = connect(h.port, id, h.authCookie);
+    const c2 = connect(h.port, id, h.authCookie);
     await Promise.all([waitOpen(c1.ws), waitOpen(c2.ws)]);
     await Promise.all([c1.waitFor('snapshot'), c2.waitFor('snapshot')]);
 
@@ -264,7 +282,7 @@ describe('WebSocket /ws/sessions/:id', () => {
 
   it('closes all clients when the session dies', async () => {
     const id = await createSession(h);
-    const c = connect(h.port, id, userToken);
+    const c = connect(h.port, id, h.authCookie);
     await waitOpen(c.ws);
     await c.waitFor('snapshot');
 
@@ -280,7 +298,7 @@ describe('WebSocket /ws/sessions/:id', () => {
 
   it('accepts resize without throwing', async () => {
     const id = await createSession(h);
-    const c = connect(h.port, id, userToken);
+    const c = connect(h.port, id, h.authCookie);
     await waitOpen(c.ws);
     await c.waitFor('snapshot');
 

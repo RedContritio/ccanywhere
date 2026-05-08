@@ -36,7 +36,6 @@ export class TerminalSocket {
 
   constructor(
     private readonly sessionId: string,
-    private readonly token: string,
     private readonly handlers: SocketHandlers,
     private readonly factory: WebSocketFactory = (url) => new WebSocket(url),
   ) {
@@ -139,8 +138,8 @@ export class TerminalSocket {
 
   private buildUrl(): string {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${location.host}/ws/sessions/${encodeURIComponent(
-      this.sessionId,
-    )}?token=${encodeURIComponent(this.token)}`;
+    // Browser sends the session cookie automatically on same-origin WS
+    // upgrade; no token in the URL.
+    return `${proto}//${location.host}/ws/sessions/${encodeURIComponent(this.sessionId)}`;
   }
 }

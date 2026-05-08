@@ -6,14 +6,14 @@ import { useAuthStore } from './state/auth.js';
 import { useApplyTheme } from './state/use-theme.js';
 
 function RequireAuth({ children }: { children: ReactNode }): JSX.Element {
-  const token = useAuthStore((s) => s.token);
-  if (token === null) return <Navigate to="/login" replace />;
+  const deviceId = useAuthStore((s) => s.deviceId);
+  if (deviceId === null) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function RedirectIfAuth({ children }: { children: ReactNode }): JSX.Element {
-  const token = useAuthStore((s) => s.token);
-  if (token !== null) return <Navigate to="/workspace" replace />;
+  const deviceId = useAuthStore((s) => s.deviceId);
+  if (deviceId !== null) return <Navigate to="/workspace" replace />;
   return <>{children}</>;
 }
 

@@ -10,7 +10,6 @@ import { TerminalSocket } from '../ws.js';
 
 interface Props {
   readonly sessionId: string;
-  readonly token: string;
   readonly onStatus?: (state: SessionState) => void;
   readonly onError?: (msg: string) => void;
   readonly onConnected?: () => void;
@@ -68,7 +67,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     [],
   );
 
-  // Mount / remount when sessionId or token changes.
+  // Mount / remount when sessionId changes; auth comes from the session cookie.
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
@@ -96,7 +95,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       // ignore — fit can fail when container has no size yet
     }
 
-    const sock: TerminalSocket = new TerminalSocket(props.sessionId, props.token, {
+    const sock: TerminalSocket = new TerminalSocket(props.sessionId, {
       onSnapshot: (data) => {
         term.reset();
         term.write(data);
@@ -143,7 +142,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       termRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.sessionId, props.token]);
+  }, [props.sessionId]);
 
   // Theme switching without remount.
   useEffect(() => {

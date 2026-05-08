@@ -22,8 +22,8 @@ describe('loadConfig', () => {
   }
 
   const validBase = {
-    tokens: [{ label: 'laptop', token: 'a'.repeat(32) }],
     projectsRoot: '/tmp/projects-root',
+    webOrigin: 'http://localhost:62275',
   };
 
   it('loads a valid config and applies defaults', () => {
@@ -32,8 +32,8 @@ describe('loadConfig', () => {
     expect(cfg.port).toBe(62275);
     expect(cfg.bindHost).toBe('127.0.0.1');
     expect(cfg.claudeBin).toBe('claude');
-    expect(cfg.tokens).toHaveLength(1);
     expect(cfg.projectsRoot).toBe('/tmp/projects-root');
+    expect(cfg.webOrigin).toBe('http://localhost:62275');
     expect(cfg.deletedSessionTtlMs).toBe(600_000);
     expect(cfg.wsHeartbeat.intervalMs).toBe(30_000);
     expect(cfg.wsHeartbeat.timeoutMs).toBe(60_000);
@@ -93,13 +93,8 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/not valid JSON/);
   });
 
-  it('rejects empty tokens array', () => {
-    write({ ...validBase, tokens: [] });
-    expect(() => loadConfig(path)).toThrow(/at least one token/);
-  });
-
   it('rejects missing projectsRoot', () => {
-    write({ tokens: validBase.tokens });
+    write({ webOrigin: validBase.webOrigin });
     expect(() => loadConfig(path)).toThrow(/projectsRoot/);
   });
 
@@ -108,20 +103,13 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/projectsRoot/);
   });
 
-  it('rejects short token', () => {
-    write({ ...validBase, tokens: [{ label: 'x', token: 'short' }] });
-    expect(() => loadConfig(path)).toThrow(ConfigError);
+  it('rejects missing webOrigin', () => {
+    write({ projectsRoot: validBase.projectsRoot });
+    expect(() => loadConfig(path)).toThrow(/webOrigin/);
   });
 
-  it('rejects duplicate token values', () => {
-    const t = 'a'.repeat(32);
-    write({
-      ...validBase,
-      tokens: [
-        { label: 'one', token: t },
-        { label: 'two', token: t },
-      ],
-    });
-    expect(() => loadConfig(path)).toThrow(/duplicate token/);
+  it('rejects non-URL webOrigin', () => {
+    write({ ...validBase, webOrigin: 'not-a-url' });
+    expect(() => loadConfig(path)).toThrow(/webOrigin/);
   });
 });

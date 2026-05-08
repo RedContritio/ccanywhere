@@ -44,7 +44,8 @@ chmod 600 ~/.config/ccanywhere/config.json
 
 编辑 `~/.config/ccanywhere/config.json`：
 
-- `tokens[0].token` 用 `openssl rand -hex 32` 生成一个新 token
+- `webOrigin` 改成 web 实际访问的 URL（如 `https://ccanywhere.example.com`）。
+  WebAuthn `rpID` 由其 hostname 派生；改 `webOrigin` 后所有已配对设备需重新 pair
 - `claudeBin` 写绝对路径（如 `/Users/<you>/.local/bin/claude`），LaunchAgent
   下的 PATH 不一定含 `~/.local/bin`
 - `projectsRoot` 改成你想作为"项目集合根"的目录（绝对路径，如 `/Users/<you>/Projects`）。其下的直接子目录都会被自动列为可选项目，新建 / 隐藏可在 web 端 NewSessionDialog 里完成
@@ -67,11 +68,17 @@ launchctl print gui/$(id -u)/com.<you>.ccanywhere | head    # 看 state=running
 
 详细配置（含 https2http 拓扑）见 `docs/deployment.md`。
 
-### 5. 浏览器访问
+### 5. 浏览器配对 + 访问
 
-`http://<frps host>:62275/login` → 输入 token → 登录跳到 workspace → 点
-"+ 新建" 创建 session → cc TUI 直接出现（不会要求重新登录，因为我们读 user
-的 `~/.claude/`）。
+第一次访问 `https://<webOrigin host>/login`：
+
+1. 浏览器：输入设备名（如 "iPhone"）→ 点「申请配对」→ 触发平台认证器
+   （Touch ID / Face ID / 指纹）。
+2. mac 终端：跑 `ccanywhere approve`，列出 pending → 选择 → 确认。
+3. 浏览器自动跳到 workspace。
+
+之后再访问只需点「用本机生物识别登入」，不需要再 approve。撤销设备：
+`ccanywhere revoke <device-id>`（先 `ccanywhere devices` 找 id）。
 
 ## 关键文件
 

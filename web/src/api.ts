@@ -14,16 +14,8 @@ interface RequestOptions {
 }
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const token = useAuthStore.getState().token;
-  if (token === null) {
-    throw makeError('not_authenticated', 0, 'no token in auth store');
-  }
-
   const method = opts.method ?? 'GET';
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  const headers: Record<string, string> = { Accept: 'application/json' };
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (method === 'POST' && opts.idempotencyKey !== undefined) {
     headers['Idempotency-Key'] = opts.idempotencyKey;
@@ -34,6 +26,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     res = await fetch(path, {
       method,
       headers,
+      credentials: 'include',
       body: opts.body !== undefined ? JSON.stringify(opts.body) : null,
       ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
     });

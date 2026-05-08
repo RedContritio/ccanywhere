@@ -3,12 +3,6 @@
   "bindHost": "127.0.0.1",
   "claudeBin": "claude",
 
-  "tokens": [
-    {
-      "label": "laptop",
-      "token": "REPLACE-WITH-A-RANDOM-STRING-AT-LEAST-16-CHARS"
-    }
-  ],
-
-  "projectsRoot": "/Users/<you>/Projects"
+  "projectsRoot": "/Users/<you>/Projects",
+  "webOrigin": "https://ccanywhere.example.com"
 }

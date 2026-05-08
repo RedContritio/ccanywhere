@@ -34,7 +34,7 @@ export function WorkspacePage(): JSX.Element {
   const selectSession = useUiStore((s) => s.selectSession);
 
   const label = useAuthStore((s) => s.label);
-  const token = useAuthStore((s) => s.token);
+  const deviceId = useAuthStore((s) => s.deviceId);
   const logout = useAuthStore((s) => s.logout);
 
   const [newDialogOpen, setNewDialogOpen] = useState(false);
@@ -142,7 +142,7 @@ export function WorkspacePage(): JSX.Element {
             <div className="terminal-pane-empty">
               session id 不在列表中（可能已被回收）
             </div>
-          ) : token === null ? (
+          ) : deviceId === null ? (
             <div className="terminal-pane-empty">未登录</div>
           ) : (
             <>
@@ -168,7 +168,6 @@ export function WorkspacePage(): JSX.Element {
                   key={currentSession.id}
                   ref={terminalRef}
                   sessionId={currentSession.id}
-                  token={token}
                   onStatus={onWsStatus}
                   onConnected={onWsConnected}
                   onReconnecting={onWsReconnecting}

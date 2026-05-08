@@ -1,15 +1,19 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import cookiePlugin from '@fastify/cookie';
 import staticPlugin from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from '../config/schema.js';
+import type { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
 import type { ProjectStore } from '../projects/store.js';
 import type { SessionManager } from '../session/manager.js';
 import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
 import { IdempotencyStore } from './idempotency.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerInternalRoutes } from './routes/internal.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerHookRoutes } from './routes/hook.js';
@@ -18,7 +22,9 @@ export interface BuildServerOptions {
   readonly config: Config;
   readonly manager: SessionManager;
   readonly projectStore: ProjectStore;
+  readonly deviceStore: DeviceStore;
   readonly internalHookToken: string;
+  readonly cliToken: string;
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
   /**
@@ -52,7 +58,17 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     forceCloseConnections: true,
   });
 
-  await registerAuth(app, opts.config.tokens, opts.internalHookToken);
+  await app.register(cookiePlugin);
+  await registerAuth(app, {
+    store: opts.deviceStore,
+    internalHookToken: opts.internalHookToken,
+    cliToken: opts.cliToken,
+  });
+  await registerAuthRoutes(app, {
+    store: opts.deviceStore,
+    webOrigin: opts.config.webOrigin,
+  });
+  await registerInternalRoutes(app, { store: opts.deviceStore });
 
   app.get('/healthz', () => ({ ok: true }));
 

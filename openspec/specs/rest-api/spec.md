@@ -20,7 +20,7 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 
 #### Scenario: 未知路由返回标准 envelope
 
-- GIVEN `GET /api/nope` 带合法 token
+- GIVEN `GET /api/nope` 带合法 cookie
 - WHEN  服务端处理
 - THEN  状态 `404`
 - AND   body 等于 `{"error": {"code": "not_found", "message": "route not found"}}`
@@ -191,8 +191,8 @@ MUST 按下表处理：
 key 必须满足 `/^[A-Za-z0-9_-]{1,255}$/`；不满足返回
 `400 invalid_idempotency_key`。
 
-key 的命名空间 MUST 按用户 token 隔离——同一 `Idempotency-Key` 字符串
-在不同用户 token 下视为不同条目。
+key 的命名空间 MUST 按 web device 隔离——同一 `Idempotency-Key` 字符串
+在不同 device 的 cookie 下视为不同条目。
 
 缓存 TTL MUST 至少 1 小时（实现可允许配置，但本规范要求默认 3600 秒）。
 5xx 响应 MUST NOT 入缓存。
@@ -200,7 +200,7 @@ key 的命名空间 MUST 按用户 token 隔离——同一 `Idempotency-Key` �
 #### Scenario: 同 key+body 重放
 
 - GIVEN 第一次 `POST /api/sessions` 带 `Idempotency-Key: ABC` 创建成功（201）
-- WHEN  以完全相同的 body 与 token 再次发送同样的请求
+- WHEN  以完全相同的 body 与 cookie 再次发送同样的请求
 - THEN  状态 `201`
 - AND   body 等于第一次的响应
 - AND   响应头含 `Idempotency-Replayed: true`
@@ -211,10 +211,10 @@ key 的命名空间 MUST 按用户 token 隔离——同一 `Idempotency-Key` �
 - WHEN  以 `Idempotency-Key: ABC` 但 `projectId: other` 发送
 - THEN  状态 `409`，`error.code == "idempotency_conflict"`
 
-#### Scenario: 不同 token 命名空间隔离
+#### Scenario: 不同 device 命名空间隔离
 
-- GIVEN token `T1` 用 key `ABC` 已创建一个 session
-- WHEN  token `T2` 用同样的 key `ABC` 与 body 发送请求
+- GIVEN device `D1` 用 key `ABC` 已创建一个 session
+- WHEN  device `D2` 用同样的 key `ABC` 与 body 发送请求
 - THEN  按"无 key 命中"处理，新建另一个 session
 - AND   两次的 session id 不同
 
@@ -236,12 +236,12 @@ HTTP root（`/`）。
 仍能正常启动，仅 `/`、SPA 路径返回 404 with 标准 envelope。
 
 SPA 静态资源（含 SPA fallback `index.html`）与 `/healthz` MUST 是公开的，
-不强制 token 鉴权——token 鉴权仅约束 `/api/*` 与 `/ws/*` 路由。
+不强制鉴权——cookie 鉴权仅约束 `/api/*` 与 `/ws/*` 路由。
 
 #### Scenario: 构建产物存在时 GET / 返回 index.html
 
 - GIVEN `web/dist/index.html` 存在
-- WHEN  `GET /`（不带 token）
+- WHEN  `GET /`（不带 cookie）
 - THEN  状态 `200`
 - AND   响应 body 是 `index.html` 的内容
 - AND   `Content-Type` 包含 `text/html`
@@ -263,8 +263,21 @@ SPA 静态资源（含 SPA fallback `index.html`）与 `/healthz` MUST 是公开
 #### Scenario: 静态资源不影响 API 优先级
 
 - GIVEN `web/dist/index.html` 存在
-- WHEN  `GET /api/projects` 带合法 token
+- WHEN  `GET /api/projects` 带合法 cookie
 - THEN  状态 `200`，响应 body 是 JSON（不是 index.html）
+
+### Requirement: 内部 RPC 路由 `/api/internal/*`
+
+mac CLI 子命令通过 cliToken 调以下端点：
+
+- `GET /api/internal/devices` — 列出所有 device（含 revoked）
+- `DELETE /api/internal/devices/:id` — 撤销 device
+- `GET /api/internal/pending` — 列出 awaiting-approval 的 pending pair
+- `POST /api/internal/pending/:id/approve` — approve 一个 pending
+- `DELETE /api/internal/pending/:id` — reject
+
+cliToken 在 `~/.config/ccanywhere/cli-token`（mode 0600）；首次 `ccanywhere
+serve` 启动时自动生成，后续重启沿用。
 
 ### Requirement: POST /api/hook/:sessionId/:event
 

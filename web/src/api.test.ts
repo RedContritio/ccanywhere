@@ -14,7 +14,7 @@ describe('api wrapper', () => {
   beforeEach(() => {
     localStorage.clear();
     resetAuthStoreForTest();
-    useAuthStore.getState().login('tok-1', 'laptop');
+    useAuthStore.getState().setPaired('dev-1', 'laptop');
   });
 
   afterEach(() => {
@@ -22,13 +22,15 @@ describe('api wrapper', () => {
     localStorage.clear();
   });
 
-  it('attaches Authorization header', async () => {
+  it('sends credentials: include so the session cookie travels with the request', async () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
     await api('/api/whatever');
     expect(spy).toHaveBeenCalledOnce();
     const init = spy.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.credentials).toBe('include');
+    // No Authorization header — auth lives in the cookie now.
     const headers = init?.headers as Record<string, string> | undefined;
-    expect(headers?.['Authorization']).toBe('Bearer tok-1');
+    expect(headers?.['Authorization']).toBeUndefined();
   });
 
   it('attaches Idempotency-Key on POST when provided', async () => {
@@ -57,7 +59,7 @@ describe('api wrapper', () => {
   it('triggers logout on 401 and throws unauthorized', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
     await expect(api('/api/x')).rejects.toMatchObject({ code: 'unauthorized' });
-    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().deviceId).toBeNull();
   });
 
   it('parses error envelope on 4xx', async () => {
@@ -83,11 +85,6 @@ describe('api wrapper', () => {
   it('wraps fetch network errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
     await expect(api('/api/x')).rejects.toMatchObject({ code: 'network_error', status: 0 });
-  });
-
-  it('throws not_authenticated when no token in store', async () => {
-    resetAuthStoreForTest();
-    await expect(api('/api/x')).rejects.toMatchObject({ code: 'not_authenticated' });
   });
 
   it('newIdempotencyKey returns a UUID string', () => {

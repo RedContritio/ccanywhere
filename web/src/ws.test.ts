@@ -69,12 +69,10 @@ afterEach(() => {
 });
 
 describe('TerminalSocket', () => {
-  it('builds ws URL with sessionId and token, encodes both', () => {
+  it('builds ws URL with sessionId encoded; auth via cookie not query', () => {
     const rig = makeRig();
-    new TerminalSocket('a/b 1', 'tok&x', {}, rig.factory);
-    expect(rig.current?.url).toBe(
-      'ws://localhost:5173/ws/sessions/a%2Fb%201?token=tok%26x',
-    );
+    new TerminalSocket('a/b 1', {}, rig.factory);
+    expect(rig.current?.url).toBe('ws://localhost:5173/ws/sessions/a%2Fb%201');
   });
 
   it('uses wss:// when location.protocol is https', () => {
@@ -83,7 +81,7 @@ describe('TerminalSocket', () => {
       configurable: true,
     });
     const rig = makeRig();
-    new TerminalSocket('s', 't', {}, rig.factory);
+    new TerminalSocket('s', {}, rig.factory);
     expect(rig.current?.url.startsWith('wss://example.com/')).toBe(true);
   });
 
@@ -95,7 +93,7 @@ describe('TerminalSocket', () => {
       onStatus: vi.fn(),
       onError: vi.fn(),
     };
-    new TerminalSocket('s', 't', handlers, rig.factory);
+    new TerminalSocket('s', handlers, rig.factory);
     rig.current!.open();
     rig.current!.receive(JSON.stringify({ type: 'snapshot', data: 'hi' }));
     rig.current!.receive(JSON.stringify({ type: 'output', data: 'world' }));
@@ -111,7 +109,7 @@ describe('TerminalSocket', () => {
   it('ignores malformed JSON without throwing', () => {
     const rig = makeRig();
     const onError = vi.fn();
-    new TerminalSocket('s', 't', { onError }, rig.factory);
+    new TerminalSocket('s', { onError }, rig.factory);
     rig.current!.open();
     expect(() => rig.current!.receive('not json')).not.toThrow();
     rig.current!.receive(JSON.stringify({ type: 'output', data: 'still-fine' }));
@@ -122,7 +120,7 @@ describe('TerminalSocket', () => {
     const rig = makeRig();
     const onConnected = vi.fn();
     const onReconnecting = vi.fn();
-    new TerminalSocket('s', 't', { onConnected, onReconnecting }, rig.factory);
+    new TerminalSocket('s', { onConnected, onReconnecting }, rig.factory);
     rig.current!.open();
     expect(onConnected).toHaveBeenCalledTimes(1);
 
@@ -138,7 +136,7 @@ describe('TerminalSocket', () => {
 
   it('escalates backoff up to 8s and stays there', () => {
     const rig = makeRig();
-    new TerminalSocket('s', 't', {}, rig.factory);
+    new TerminalSocket('s', {}, rig.factory);
     const expectedDelays = [250, 500, 1000, 2000, 4000, 8000, 8000];
     for (const delay of expectedDelays) {
       rig.current!.open();
@@ -153,7 +151,7 @@ describe('TerminalSocket', () => {
     const rig = makeRig();
     const onDead = vi.fn();
     const onReconnecting = vi.fn();
-    new TerminalSocket('s', 't', { onDead, onReconnecting }, rig.factory);
+    new TerminalSocket('s', { onDead, onReconnecting }, rig.factory);
     rig.current!.open();
     rig.current!.receive(JSON.stringify({ type: 'status', state: 'dead' }));
     expect(onDead).toHaveBeenCalledOnce();
@@ -165,7 +163,7 @@ describe('TerminalSocket', () => {
 
   it('send() routes to ws when OPEN', () => {
     const rig = makeRig();
-    const sock = new TerminalSocket('s', 't', {}, rig.factory);
+    const sock = new TerminalSocket('s', {}, rig.factory);
     rig.current!.open();
     sock.send({ type: 'input', data: 'abc' });
     expect(rig.current!.sent).toEqual([JSON.stringify({ type: 'input', data: 'abc' })]);
@@ -173,7 +171,7 @@ describe('TerminalSocket', () => {
 
   it('send() drops when not OPEN', () => {
     const rig = makeRig();
-    const sock = new TerminalSocket('s', 't', {}, rig.factory);
+    const sock = new TerminalSocket('s', {}, rig.factory);
     sock.send({ type: 'input', data: 'abc' });
     expect(rig.current!.sent).toHaveLength(0);
   });
@@ -181,7 +179,7 @@ describe('TerminalSocket', () => {
   it('close() prevents future reconnects', () => {
     const rig = makeRig();
     const onReconnecting = vi.fn();
-    const sock = new TerminalSocket('s', 't', { onReconnecting }, rig.factory);
+    const sock = new TerminalSocket('s', { onReconnecting }, rig.factory);
     rig.current!.open();
     sock.close();
     rig.current!.close();

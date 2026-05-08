@@ -1,16 +1,23 @@
 import type { FastifyInstance } from 'fastify';
-import type { Token } from '../config/schema.js';
+import type { Device } from '../devices/types.js';
+import type { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
+import { SESSION_COOKIE_NAME } from './routes/auth.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
+    /** Set by the cookie session middleware on /api/* and /ws/* requests. */
+    authDevice?: Device;
+    /** Legacy: filled when the request's bearer matches an internalHookToken. */
     authTokenLabel?: string;
   }
 }
 
-// Anything not under /api/ or /ws/ is treated as public (SPA static
-// assets, /healthz, the SPA fallback at /). The /api/hook/* sub-route
-// uses a different token domain handled below.
+export interface RegisterAuthOptions {
+  readonly store: DeviceStore;
+  readonly internalHookToken: string;
+  readonly cliToken: string;
+}
 
 function extractBearer(authHeader: unknown): string | null {
   if (typeof authHeader !== 'string') return null;
@@ -19,23 +26,28 @@ function extractBearer(authHeader: unknown): string | null {
   return v.length > 0 ? v : null;
 }
 
-function extractQueryToken(query: unknown): string | null {
-  if (typeof query !== 'object' || query === null) return null;
-  const q = query as Record<string, unknown>;
-  const t = q['token'];
-  return typeof t === 'string' && t.length > 0 ? t : null;
-}
+/**
+ * URL prefixes that bypass cookie auth — they handle their own challenge/
+ * response flow or are intentionally public.
+ */
+const AUTH_PUBLIC_PREFIXES: ReadonlyArray<string> = [
+  '/api/auth/register-init',
+  '/api/auth/register-complete',
+  '/api/auth/register-status',
+  '/api/auth/login-init',
+  '/api/auth/login-complete',
+];
 
 export async function registerAuth(
   app: FastifyInstance,
-  tokens: ReadonlyArray<Token>,
-  internalHookToken: string,
+  opts: RegisterAuthOptions,
 ): Promise<void> {
-  if (internalHookToken.length < 16) {
+  if (opts.internalHookToken.length < 16) {
     throw new Error('internalHookToken must be at least 16 chars');
   }
-  const userTokens = new Map<string, Token>();
-  for (const t of tokens) userTokens.set(t.token, t);
+  if (opts.cliToken.length < 16) {
+    throw new Error('cliToken must be at least 16 chars');
+  }
 
   app.addHook('onRequest', async (req, reply) => {
     const url = req.url.split('?')[0] ?? '';
@@ -53,14 +65,14 @@ export async function registerAuth(
         // ignore
       }
       socket.destroy();
-      // Suppress fastify reply
       void reply.hijack();
       logger.debug({ url, message }, 'ws upgrade rejected');
     };
 
+    // 1) Hook receiver — its own bearer-token domain.
     if (url.startsWith('/api/hook/')) {
       const token = extractBearer(req.headers.authorization);
-      if (token !== internalHookToken) {
+      if (token !== opts.internalHookToken) {
         await reply
           .code(401)
           .send({ error: { code: 'unauthorized', message: 'invalid hook token' } });
@@ -68,33 +80,51 @@ export async function registerAuth(
       return;
     }
 
-    if (!url.startsWith('/api/') && !url.startsWith('/ws/')) {
-      // SPA static assets, /healthz, and the SPA fallback are all public.
+    // 2) CLI internal RPC — only reachable from local mac CLI with the
+    //    cliToken file (mode 0600 in ~/.config/ccanywhere/).
+    if (url.startsWith('/api/internal/')) {
+      const token = extractBearer(req.headers.authorization);
+      if (token !== opts.cliToken) {
+        await reply
+          .code(401)
+          .send({ error: { code: 'unauthorized', message: 'invalid cli token' } });
+      }
       return;
     }
 
-    const token = extractBearer(req.headers.authorization) ?? extractQueryToken(req.query);
-    if (token === null) {
+    // 3) Public auth flow endpoints.
+    if (AUTH_PUBLIC_PREFIXES.some((p) => url === p || url.startsWith(`${p}?`))) {
+      return;
+    }
+
+    // 4) Non-API routes are public (SPA, /healthz, SPA fallback).
+    if (!url.startsWith('/api/') && !url.startsWith('/ws/')) {
+      return;
+    }
+
+    // 5) Everything else is gated by cookie session.
+    const sessionId = req.cookies[SESSION_COOKIE_NAME];
+    if (typeof sessionId !== 'string' || sessionId.length === 0) {
       if (isUpgrade) {
-        rejectUpgrade(401, 'missing token');
+        rejectUpgrade(401, 'missing session cookie');
       } else {
         await reply
           .code(401)
-          .send({ error: { code: 'unauthorized', message: 'missing token' } });
+          .send({ error: { code: 'unauthorized', message: 'missing session' } });
       }
       return;
     }
-    const found = userTokens.get(token);
-    if (!found) {
+    const device = opts.store.authenticateSession(sessionId);
+    if (!device) {
       if (isUpgrade) {
-        rejectUpgrade(401, 'invalid token');
+        rejectUpgrade(401, 'invalid or expired session');
       } else {
         await reply
           .code(401)
-          .send({ error: { code: 'unauthorized', message: 'invalid token' } });
+          .send({ error: { code: 'unauthorized', message: 'invalid or expired session' } });
       }
       return;
     }
-    req.authTokenLabel = found.label;
+    req.authDevice = device;
   });
 }

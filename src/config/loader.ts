@@ -47,13 +47,5 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
     throw new ConfigError(`config validation failed:\n${issues}`, path);
   }
 
-  const seenTokens = new Set<string>();
-  for (const t of result.data.tokens) {
-    if (seenTokens.has(t.token)) {
-      throw new ConfigError(`duplicate token value for label "${t.label}"`, path);
-    }
-    seenTokens.add(t.token);
-  }
-
   return result.data;
 }

@@ -4,18 +4,24 @@ import { join } from 'node:path';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Config } from '../config/schema.js';
+import { DeviceStore } from '../devices/store.js';
 import { ProjectStore } from '../projects/store.js';
 import { SessionManager } from '../session/manager.js';
 import { encodeProjectCwd } from './history.js';
 import { buildServer } from './server.js';
 
-const userToken = 'a'.repeat(32);
 const internalHookToken = 'h'.repeat(32);
+const cliToken = 'c'.repeat(32);
 
 interface TestProjectsEnv {
   projectsRoot: string;
   projectStore: ProjectStore;
+  deviceStore: DeviceStore;
   demoCwd: string;
+  /** Cookie header value pre-formatted for `headers.cookie`. */
+  authCookie: string;
+  /** sessionId extracted from authCookie. */
+  sessionId: string;
   cleanup: () => void;
 }
 
@@ -24,10 +30,17 @@ function setupProjects(): TestProjectsEnv {
   mkdirSync(join(projectsRoot, 'demo'));
   const statePath = join(projectsRoot, '.projects-state.json');
   const projectStore = new ProjectStore({ projectsRoot, statePath });
+  const deviceStore = new DeviceStore({
+    statePath: join(projectsRoot, '.devices.json'),
+  });
+  const { sessionId } = deviceStore.__seedActiveDevice('test-device');
   return {
     projectsRoot,
     projectStore,
+    deviceStore,
     demoCwd: join(projectsRoot, 'demo'),
+    authCookie: `ccanywhere_session=${sessionId}`,
+    sessionId,
     cleanup: () => rmSync(projectsRoot, { recursive: true, force: true }),
   };
 }
@@ -40,10 +53,10 @@ const baseConfig: Config = {
   deletedSessionTtlMs: 600_000,
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
-  tokens: [{ label: 'laptop', token: userToken }],
   // Placeholder: each describe block creates a real tmp dir + ProjectStore;
   // buildServer reads from projectStore, not config.projectsRoot.
   projectsRoot: '/tmp/ccanywhere-test-placeholder',
+  webOrigin: 'http://localhost:7878',
 };
 
 describe('REST API', () => {
@@ -58,7 +71,9 @@ describe('REST API', () => {
       config: baseConfig,
       manager: mgr,
       projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
       internalHookToken,
+      cliToken,
       webDistDir: null,
     });
   });
@@ -75,25 +90,25 @@ describe('REST API', () => {
     expect(res.json()).toEqual({ ok: true });
   });
 
-  it('rejects requests without a token', async () => {
+  it('rejects requests without a session cookie', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/projects' });
     expect(res.statusCode).toBe(401);
   });
 
-  it('rejects requests with an invalid token', async () => {
+  it('rejects requests with an invalid session cookie', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/projects',
-      headers: { Authorization: 'Bearer notvalid' },
+      headers: { cookie: 'ccanywhere_session=notavalidsession' },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it('lists projects with a valid token', async () => {
+  it('lists projects with a valid session cookie', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { projects: Array<{ id: string; name: string; cwd: string }> };
@@ -101,19 +116,11 @@ describe('REST API', () => {
     expect(body.projects[0]?.id).toBe('demo');
   });
 
-  it('accepts query token as fallback', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: `/api/projects?token=${userToken}`,
-    });
-    expect(res.statusCode).toBe(200);
-  });
-
   it('history endpoint returns array even when no on-disk history', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/projects/demo/history',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { history: unknown[] };
@@ -124,7 +131,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/projects/nope/history',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(404);
   });
@@ -133,7 +140,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { name: 'fresh' },
     });
     expect(res.statusCode).toBe(201);
@@ -144,7 +151,7 @@ describe('REST API', () => {
     const list = await app.inject({
       method: 'GET',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     const ids = (list.json() as { projects: Array<{ id: string }> }).projects.map(
       (p) => p.id,
@@ -156,7 +163,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { name: '' },
     });
     expect(res.statusCode).toBe(400);
@@ -166,7 +173,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { name: '../escape' },
     });
     expect(res.statusCode).toBe(400);
@@ -176,7 +183,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { name: 'demo' },
     });
     expect(res.statusCode).toBe(409);
@@ -186,14 +193,14 @@ describe('REST API', () => {
     const del = await app.inject({
       method: 'DELETE',
       url: '/api/projects/demo',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(del.statusCode).toBe(204);
 
     const list = await app.inject({
       method: 'GET',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     const ids = (list.json() as { projects: Array<{ id: string }> }).projects.map(
       (p) => p.id,
@@ -205,7 +212,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'DELETE',
       url: '/api/projects/ghost',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(404);
   });
@@ -214,7 +221,7 @@ describe('REST API', () => {
     const create = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'fresh' },
     });
     expect(create.statusCode).toBe(201);
@@ -225,7 +232,7 @@ describe('REST API', () => {
     const list = await app.inject({
       method: 'GET',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     const listBody = list.json() as { sessions: Array<{ id: string }> };
     expect(listBody.sessions).toHaveLength(1);
@@ -234,7 +241,7 @@ describe('REST API', () => {
     const del = await app.inject({
       method: 'DELETE',
       url: `/api/sessions/${session.id}`,
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(del.statusCode).toBe(204);
   });
@@ -243,7 +250,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'resume' /* missing sessionId */ },
     });
     expect(res.statusCode).toBe(400);
@@ -253,7 +260,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'ghost', mode: 'fresh' },
     });
     expect(res.statusCode).toBe(404);
@@ -263,7 +270,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'DELETE',
       url: '/api/sessions/00000000-0000-0000-0000-000000000000',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(404);
   });
@@ -272,7 +279,7 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/hook/abc/Stop',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -290,7 +297,7 @@ describe('REST API', () => {
     const create = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'fresh' },
     });
     const sid = (create.json() as { id: string }).id;
@@ -307,7 +314,7 @@ describe('REST API', () => {
     const create = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'fresh' },
     });
     const sid = (create.json() as { id: string }).id;
@@ -324,7 +331,7 @@ describe('REST API', () => {
     const create = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'fresh' },
     });
     const sid = (create.json() as { id: string }).id;
@@ -365,7 +372,7 @@ describe('REST API', () => {
     const create = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'fresh' },
     });
     const sid = (create.json() as { id: string }).id;
@@ -373,14 +380,14 @@ describe('REST API', () => {
     const del1 = await app.inject({
       method: 'DELETE',
       url: `/api/sessions/${sid}`,
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(del1.statusCode).toBe(204);
 
     const list = await app.inject({
       method: 'GET',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     const sessions = (list.json() as { sessions: Array<{ id: string; deletedAt: number | null }> })
       .sessions;
@@ -392,7 +399,7 @@ describe('REST API', () => {
     const del2 = await app.inject({
       method: 'DELETE',
       url: `/api/sessions/${sid}`,
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(del2.statusCode).toBe(204);
 
@@ -400,7 +407,7 @@ describe('REST API', () => {
     const del3 = await app.inject({
       method: 'DELETE',
       url: '/api/sessions/00000000-0000-0000-0000-000000000000',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(del3.statusCode).toBe(404);
   });
@@ -427,7 +434,9 @@ describe('REST API with historyRoot for resume validation', () => {
       config: baseConfig,
       manager: mgr,
       projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
       internalHookToken,
+      cliToken,
       historyRoot,
       webDistDir: null,
     });
@@ -444,7 +453,7 @@ describe('REST API with historyRoot for resume validation', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'resume', sessionId: 'known-session' },
     });
     expect(res.statusCode).toBe(201);
@@ -455,7 +464,7 @@ describe('REST API with historyRoot for resume validation', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
       payload: { projectId: 'demo', mode: 'resume', sessionId: 'never-was' },
     });
     expect(res.statusCode).toBe(400);
@@ -468,23 +477,21 @@ describe('REST API idempotency', () => {
   let app: FastifyInstance;
   let env: TestProjectsEnv;
 
-  const otherToken = 'b'.repeat(32);
-  const cfgWithTwoTokens: Config = {
-    ...baseConfig,
-    tokens: [
-      { label: 'laptop', token: userToken },
-      { label: 'phone', token: otherToken },
-    ],
-  };
+  /** Second device used to exercise per-device idempotency scoping. */
+  let otherCookie: string;
 
   beforeEach(async () => {
     env = setupProjects();
+    const seeded = env.deviceStore.__seedActiveDevice('other-device');
+    otherCookie = `ccanywhere_session=${seeded.sessionId}`;
     mgr = new SessionManager();
     app = await buildServer({
-      config: cfgWithTwoTokens,
+      config: baseConfig,
       manager: mgr,
       projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
       internalHookToken,
+      cliToken,
       idempotencyTtlMs: 60_000,
       webDistDir: null,
     });
@@ -497,12 +504,12 @@ describe('REST API idempotency', () => {
   });
 
   async function post(
-    token: string,
+    cookie: string,
     key: string | null,
     payload: object,
   ): Promise<LightMyRequestResponse> {
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
+      cookie,
       'content-type': 'application/json',
     };
     if (key !== null) headers['idempotency-key'] = key;
@@ -510,26 +517,26 @@ describe('REST API idempotency', () => {
   }
 
   it('without Idempotency-Key behaves like before', async () => {
-    const a = await post(userToken, null, { projectId: 'demo', mode: 'fresh' });
-    const b = await post(userToken, null, { projectId: 'demo', mode: 'fresh' });
+    const a = await post(env.authCookie, null, { projectId: 'demo', mode: 'fresh' });
+    const b = await post(env.authCookie, null, { projectId: 'demo', mode: 'fresh' });
     expect(a.statusCode).toBe(201);
     expect(b.statusCode).toBe(201);
     expect((a.json() as { id: string }).id).not.toBe((b.json() as { id: string }).id);
   });
 
   it('rejects malformed Idempotency-Key', async () => {
-    const res = await post(userToken, 'has space', { projectId: 'demo', mode: 'fresh' });
+    const res = await post(env.authCookie, 'has space', { projectId: 'demo', mode: 'fresh' });
     expect(res.statusCode).toBe(400);
     expect((res.json() as { error: { code: string } }).error.code).toBe('invalid_idempotency_key');
   });
 
   it('replays cached response for same key + body', async () => {
-    const a = await post(userToken, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
+    const a = await post(env.authCookie, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
     expect(a.statusCode).toBe(201);
     expect(a.headers['idempotency-stored']).toBe('true');
     const idA = (a.json() as { id: string }).id;
 
-    const b = await post(userToken, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
+    const b = await post(env.authCookie, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
     expect(b.statusCode).toBe(201);
     expect(b.headers['idempotency-replayed']).toBe('true');
     expect((b.json() as { id: string }).id).toBe(idA);
@@ -538,31 +545,35 @@ describe('REST API idempotency', () => {
     const list = await app.inject({
       method: 'GET',
       url: '/api/sessions',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect((list.json() as { sessions: unknown[] }).sessions).toHaveLength(1);
   });
 
   it('returns 409 on same key with different body', async () => {
-    await post(userToken, 'KEY-2', { projectId: 'demo', mode: 'fresh' });
-    const conflict = await post(userToken, 'KEY-2', { projectId: 'demo', mode: 'fresh', cols: 200 });
+    await post(env.authCookie, 'KEY-2', { projectId: 'demo', mode: 'fresh' });
+    const conflict = await post(env.authCookie, 'KEY-2', {
+      projectId: 'demo',
+      mode: 'fresh',
+      cols: 200,
+    });
     expect(conflict.statusCode).toBe(409);
     expect((conflict.json() as { error: { code: string } }).error.code).toBe(
       'idempotency_conflict',
     );
   });
 
-  it('isolates idempotency-key namespace per token', async () => {
-    const a = await post(userToken, 'SHARED', { projectId: 'demo', mode: 'fresh' });
-    const b = await post(otherToken, 'SHARED', { projectId: 'demo', mode: 'fresh' });
+  it('isolates idempotency-key namespace per device', async () => {
+    const a = await post(env.authCookie, 'SHARED', { projectId: 'demo', mode: 'fresh' });
+    const b = await post(otherCookie, 'SHARED', { projectId: 'demo', mode: 'fresh' });
     expect(a.statusCode).toBe(201);
     expect(b.statusCode).toBe(201);
     expect((a.json() as { id: string }).id).not.toBe((b.json() as { id: string }).id);
   });
 
   it('caches 4xx errors so retried bad requests are stable', async () => {
-    const a = await post(userToken, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
-    const b = await post(userToken, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
+    const a = await post(env.authCookie, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
+    const b = await post(env.authCookie, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
     expect(a.statusCode).toBe(404);
     expect(b.statusCode).toBe(404);
     expect(b.headers['idempotency-replayed']).toBe('true');
@@ -572,7 +583,7 @@ describe('REST API idempotency', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/nope',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({
@@ -599,7 +610,9 @@ describe('REST API SPA fallback', () => {
       config: baseConfig,
       manager: mgr,
       projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
       internalHookToken,
+      cliToken,
       webDistDir,
     });
   });
@@ -628,7 +641,7 @@ describe('REST API SPA fallback', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/projects',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toMatch(/application\/json/);
@@ -653,7 +666,9 @@ describe('REST API without web/dist', () => {
       config: baseConfig,
       manager: mgr,
       projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
       internalHookToken,
+      cliToken,
       webDistDir: null,
     });
   });
@@ -668,7 +683,7 @@ describe('REST API without web/dist', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/somewhere',
-      headers: { Authorization: `Bearer ${userToken}` },
+      headers: { cookie: env.authCookie },
     });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toMatchObject({ error: { code: 'not_found' } });
