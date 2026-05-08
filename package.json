@@ -10,12 +10,17 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsup",
+    "build:web": "pnpm -F ccanywhere-web build",
+    "build:all": "pnpm run build:web && pnpm run build",
     "dev": "tsx watch src/cli.ts",
+    "dev:web": "pnpm -F ccanywhere-web dev",
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",
+    "typecheck:all": "pnpm run typecheck && pnpm -F ccanywhere-web typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:all": "pnpm run test && pnpm -F ccanywhere-web test",
     "test:watch": "vitest"
   },
   "engines": {
