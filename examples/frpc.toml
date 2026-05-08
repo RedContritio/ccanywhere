@@ -1,18 +1,30 @@
 # frpc.toml — copy this to your frpc working dir, fill in authToken,
-# (optional) override customDomains, and run:  frpc -c frpc.toml
+# certificate paths, and (optional) override customDomains, then run:
+#   frpc -c frpc.toml
 #
-# Architecture:
-#   browser (https) ──→ frps @ recoco.xyz (TLS terminator) ──→
-#     frpc on this host ──→ ccanywhere @ 127.0.0.1:62275 (plain HTTP)
+# Architecture (frps does NOT terminate TLS — frpc does, via the
+# https2http plugin):
 #
-# We use frp's built-in `https` proxy type so frps handles the TLS
-# termination at recoco.xyz. ccanywhere itself listens on HTTP at
-# 127.0.0.1 — it never sees the public connection. That keeps the
-# server code out of the certificate / TLS story.
+#   browser (https://ccanywhere.recoco.xyz)
+#     → frps @ recoco.xyz:443 (SNI route only, no TLS termination)
+#       → frpc on this host
+#         → https2http plugin (terminates TLS with cert below)
+#           → ccanywhere @ 127.0.0.1:62275 (plain HTTP)
+#
+# Required on frps (recoco.xyz):
+#   - vhostHTTPSPort = 443 in frps.toml
+#   - matching auth.token
+#
+# Required on THIS host (where frpc runs):
+#   - TLS certificate + private key covering ccanywhere.recoco.xyz
+#     (Let's Encrypt with DNS-01 challenge, or a wildcard *.recoco.xyz cert)
+#     placed at crtPath / keyPath below.
+#
+# Required DNS:
+#   - ccanywhere.recoco.xyz A or CNAME pointing at recoco.xyz's IP.
 #
 # `localPort` MUST match `port` in your ccanywhere config.json (default
-# 62275 — see examples/config.json). Multi-deployment users should
-# pick a different port AND a different customDomain.
+# 62275 — see examples/config.json).
 
 serverAddr = "recoco.xyz"
 serverPort = 7000
@@ -24,5 +36,12 @@ auth.token = "REPLACE-WITH-YOUR-FRPS-TOKEN"
 name = "ccanywhere"
 type = "https"
 customDomains = ["ccanywhere.recoco.xyz"]
-localIP = "127.0.0.1"
-localPort = 62275
+
+[proxies.plugin]
+type = "https2http"
+localAddr = "127.0.0.1:62275"
+# Absolute paths — frp does NOT expand `~`. On macOS expand $HOME yourself,
+# e.g. /Users/<you>/.config/ccanywhere/certs/ccanywhere.recoco.xyz.crt
+crtPath = "/Users/<you>/.config/ccanywhere/certs/ccanywhere.recoco.xyz.crt"
+keyPath = "/Users/<you>/.config/ccanywhere/certs/ccanywhere.recoco.xyz.key"
+hostHeaderRewrite = "ccanywhere.recoco.xyz"
