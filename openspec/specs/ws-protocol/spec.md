@@ -113,12 +113,31 @@ WebSocket 端点 MUST 是 `GET /ws/sessions/:id`，路径参数 `:id` 是 sessio
 收到 `ping` 帧时，服务端 MUST 立即回 `{ "type": "pong" }`。
 此为应用层 ping，与 WebSocket 协议层 ping 独立。
 
-### Requirement: 输出微聚合
+### Requirement: 输出微聚合（leading-edge debounce）
 
-服务端 MUST 把 PTY 数据缓存 100 ms 后再以一帧 `output` 发出（debounce flush）。
-微聚合 buffer 跨多个 PTY 数据事件累积，第一次写入触发定时器，定时器到期时统一
-flush。session 状态变化（status 事件）或 exit 时 MUST 立即触发 flush，
-不留尾巴。
+服务端 MUST 用 **leading-edge** debounce 模式处理 PTY 输出：
+
+- 当 buffer 内**没有**定时器在跑时（即"刚从空闲恢复"），收到第一个 PTY
+  data 事件 MUST **立即** 把 buffer flush 成一帧 `output`。这样用户键盘
+  echo / 单字符回显**不会被微聚合的窗口期延迟**。
+- 立即 flush 之后 MUST 同时启动一个 100 ms 的 trailing 窗口，期间所有 PTY
+  data 累积到 buffer；窗口到期时把累积内容统一 flush 成一帧 `output`。
+  trailing 窗口处理高频重绘（Ink TUI repaint storm），让 frame 速率有上界。
+
+session 状态变化（status 事件）或 exit 时 MUST 立即触发 flush，不留尾巴。
+
+#### Scenario: 单字节立即可见（不被聚合窗口延迟）
+
+- GIVEN 服务端 buffer 已为空、无定时器在跑
+- WHEN  PTY 写入一个字符（例如键盘 echo）
+- THEN  客户端在该字符到达后的极短时间内（远小于 100 ms）收到一帧 `output` 含该字符
+
+#### Scenario: 高频重绘期间帧速率被聚合限制
+
+- GIVEN PTY 在 100 ms 内连续写入多次（Ink TUI 重绘）
+- WHEN  服务端处理这些数据
+- THEN  客户端最多收到 2 帧 `output`：一帧是首字节立即 leading flush，
+        一帧是 trailing 窗口结束时把后续累积内容一次发出
 
 #### Scenario: status 切换前会先 flush
 

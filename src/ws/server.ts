@@ -97,7 +97,13 @@ export async function registerWebSocketRoutes(
     bundle.disposers.push(
       session.on('data', ({ data }) => {
         bundle.pending += data;
+        // Leading-edge debounce: when no timer is armed (this is the
+        // first byte after an idle period), flush immediately so the
+        // user never waits FLUSH_INTERVAL_MS for keyboard echo. Then
+        // arm a window for any rapid-fire follow-up bytes (Ink TUI
+        // repaint storms) to be batched into a single trailing frame.
         if (bundle.flushTimer === null) {
+          flush(bundle);
           const t = setTimeout(() => {
             bundle.flushTimer = null;
             flush(bundle);
