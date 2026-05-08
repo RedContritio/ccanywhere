@@ -7,3 +7,6 @@ dist/
 coverage/
 .vitest-cache/
 *.tsbuildinfo
+test-results/
+playwright-report/
+.playwright/
