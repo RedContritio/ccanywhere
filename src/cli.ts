@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes } from 'node:crypto';
+import type { AddressInfo } from 'node:net';
 import { ConfigError, defaultConfigPath, loadConfig } from './config/loader.js';
 import { logger } from './log.js';
 import { buildServer } from './server/server.js';
@@ -46,10 +47,15 @@ async function main(): Promise<void> {
   process.on('SIGTERM', (s) => void shutdown(s));
 
   await app.listen({ host: config.bindHost, port: config.port });
+  const addr = app.server.address();
+  if (addr === null || typeof addr === 'string') {
+    throw new Error(`unexpected listen address shape: ${String(addr)}`);
+  }
+  actualPort = (addr as AddressInfo).port;
   logger.info(
     {
       configPath,
-      bind: `${config.bindHost}:${config.port}`,
+      bind: `${config.bindHost}:${actualPort}`,
       projects: config.projects.length,
       tokens: config.tokens.length,
     },

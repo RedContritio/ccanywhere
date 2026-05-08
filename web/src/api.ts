@@ -93,6 +93,30 @@ function makeError(
   return err;
 }
 
+/**
+ * Generate a UUID v4 idempotency key.
+ *
+ * `crypto.randomUUID` is gated to "secure context" (HTTPS / localhost), so
+ * it's `undefined` when ccanywhere is reached over plain HTTP via frpc.
+ * `crypto.getRandomValues` works in insecure contexts too, so we build the
+ * UUID by hand from 16 random bytes when randomUUID isn't available.
+ */
 export function newIdempotencyKey(): string {
-  return crypto.randomUUID();
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  // RFC 4122 v4: set version (4) and variant (10xx) bits.
+  const b6 = bytes[6] ?? 0;
+  const b8 = bytes[8] ?? 0;
+  bytes[6] = (b6 & 0x0f) | 0x40;
+  bytes[8] = (b8 & 0x3f) | 0x80;
+  const hex = (n: number): string => n.toString(16).padStart(2, '0');
+  const h = Array.from(bytes, hex);
+  return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h[10]}${h[11]}${h[12]}${h[13]}${h[14]}${h[15]}`;
 }

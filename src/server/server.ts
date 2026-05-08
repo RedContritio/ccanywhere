@@ -29,9 +29,20 @@ export interface BuildServerOptions {
   readonly webDistDir?: string | null;
 }
 
-function defaultWebDistDir(): string {
-  // src/server/server.ts → ../../web/dist
-  return resolve(fileURLToPath(import.meta.url), '../../../web/dist');
+function defaultWebDistDir(): string | null {
+  // Candidates ordered by likelihood:
+  // 1. cwd/web/dist  — production: launchd / systemd sets WorkingDirectory to repo root
+  // 2. <cli.js>/../web/dist  — bundled output: dist/cli.js → repo/web/dist
+  // 3. <server.ts>/../../web/dist  — dev (tsx): src/server/server.ts → repo/web/dist
+  const candidates = [
+    resolve(process.cwd(), 'web/dist'),
+    resolve(fileURLToPath(import.meta.url), '../../web/dist'),
+    resolve(fileURLToPath(import.meta.url), '../../../web/dist'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return null;
 }
 
 export async function buildServer(opts: BuildServerOptions): Promise<FastifyInstance> {
@@ -74,7 +85,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   const webDist =
     opts.webDistDir === null
       ? null
-      : (opts.webDistDir ?? (existsSync(defaultWebDistDir()) ? defaultWebDistDir() : null));
+      : (opts.webDistDir ?? defaultWebDistDir());
   if (webDist !== null) {
     await app.register(staticPlugin, {
       root: webDist,
