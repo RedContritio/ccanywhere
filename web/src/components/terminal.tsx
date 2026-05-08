@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -18,6 +18,13 @@ interface Props {
   readonly onDead?: () => void;
 }
 
+export interface TerminalHandle {
+  /** Send raw bytes to the PTY as if the user typed them. */
+  input(data: string): void;
+  /** Force-focus the underlying xterm. */
+  focus(): void;
+}
+
 const THEMES: Record<'light' | 'dark', ITheme> = {
   dark: {
     background: '#0a0a0a',
@@ -35,14 +42,31 @@ const THEMES: Record<'light' | 'dark', ITheme> = {
 
 const RESIZE_DEBOUNCE_MS = 100;
 
-export function TerminalView(props: Props): JSX.Element {
+export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
+  props,
+  ref,
+): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  const sockRef = useRef<TerminalSocket | null>(null);
   const handlersRef = useRef(props);
   handlersRef.current = props;
   const effective = useEffectiveTheme();
   const effectiveRef = useRef(effective);
   effectiveRef.current = effective;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      input: (data: string) => {
+        sockRef.current?.send({ type: 'input', data });
+      },
+      focus: () => {
+        termRef.current?.focus();
+      },
+    }),
+    [],
+  );
 
   // Mount / remount when sessionId or token changes.
   useEffect(() => {
@@ -72,7 +96,7 @@ export function TerminalView(props: Props): JSX.Element {
       // ignore — fit can fail when container has no size yet
     }
 
-    const sock = new TerminalSocket(props.sessionId, props.token, {
+    const sock: TerminalSocket = new TerminalSocket(props.sessionId, props.token, {
       onSnapshot: (data) => {
         term.reset();
         term.write(data);
@@ -87,6 +111,7 @@ export function TerminalView(props: Props): JSX.Element {
       onReconnecting: () => handlersRef.current.onReconnecting?.(),
       onDead: () => handlersRef.current.onDead?.(),
     });
+    sockRef.current = sock;
 
     const inputDisposer = term.onData((data) => sock.send({ type: 'input', data }));
 
@@ -113,6 +138,7 @@ export function TerminalView(props: Props): JSX.Element {
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       inputDisposer.dispose();
       sock.close();
+      sockRef.current = null;
       term.dispose();
       termRef.current = null;
     };
@@ -126,4 +152,4 @@ export function TerminalView(props: Props): JSX.Element {
   }, [effective]);
 
   return <div ref={containerRef} className="terminal-view" />;
-}
+});

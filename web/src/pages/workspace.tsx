@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { MobileToolbar } from '../components/mobile-toolbar.js';
 import {
   NewSessionDialog,
   type CreateRequest,
 } from '../components/new-session-dialog.js';
 import { SessionList } from '../components/session-list.js';
-import { TerminalView } from '../components/terminal.js';
+import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
 import { newIdempotencyKey } from '../api.js';
 import { useAuthStore } from '../state/auth.js';
@@ -35,6 +36,7 @@ export function WorkspacePage(): JSX.Element {
 
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const idemKeyRef = useRef<string>('');
+  const terminalRef = useRef<TerminalHandle | null>(null);
 
   // Live status from the WS layer; a per-:id key resets it on session switch.
   const [wsConnection, setWsConnection] = useState<WsConnection>('connecting');
@@ -157,6 +159,7 @@ export function WorkspacePage(): JSX.Element {
               <div className="terminal-host">
                 <TerminalView
                   key={currentSession.id}
+                  ref={terminalRef}
                   sessionId={currentSession.id}
                   token={token}
                   onStatus={onWsStatus}
@@ -165,6 +168,9 @@ export function WorkspacePage(): JSX.Element {
                   onDead={onWsDead}
                 />
               </div>
+              <MobileToolbar
+                onKey={(data) => terminalRef.current?.input(data)}
+              />
             </>
           )}
         </section>

@@ -486,13 +486,75 @@
   line-height: 1;
 }
 
-/* ───── responsive (mobile drawer placeholder) ───── */
+/* ───── mobile toolbar ───── */
+
+.mobile-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
+  /* prevent iOS zoom on tap */
+  touch-action: manipulation;
+}
+
+.mt-key {
+  flex: 0 0 auto;
+  min-width: 44px;
+  height: 36px;
+  padding: 0 10px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.mt-key:active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.mt-ctrl.is-active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.mt-shortcut {
+  font-weight: 500;
+}
+
+.mt-arrow {
+  min-width: 36px;
+  font-size: 16px;
+}
+
+.mt-spacer {
+  flex: 1 1 auto;
+  min-width: 6px;
+}
+
+/* Hide on conventional desktop (fine pointer + wide viewport) — keep on
+ * touch screens, narrow viewports, and tablet-sized hybrids. */
+@media (pointer: fine) and (min-width: 769px) {
+  .mobile-toolbar {
+    display: none;
+  }
+}
+
+/* ───── responsive layout ───── */
 
 @media (max-width: 768px) {
   .session-pane {
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border);
+    max-height: 40vh;
   }
   .workspace-body {
     flex-direction: column;
