@@ -1,11 +1,20 @@
-# frpc.toml — copy this to your frpc working dir, fill in serverAddr / authToken,
-# and run:  frpc -c frpc.toml
+# frpc.toml — copy this to your frpc working dir, fill in authToken,
+# (optional) override customDomains, and run:  frpc -c frpc.toml
 #
-# localPort and remotePort are kept identical so the public-facing port matches
-# the one ccanywhere listens on locally. They MUST match `config.port` in your
-# ccanywhere config.json (default 62275 — see examples/config.json).
+# Architecture:
+#   browser (https) ──→ frps @ recoco.xyz (TLS terminator) ──→
+#     frpc on this host ──→ ccanywhere @ 127.0.0.1:62275 (plain HTTP)
+#
+# We use frp's built-in `https` proxy type so frps handles the TLS
+# termination at recoco.xyz. ccanywhere itself listens on HTTP at
+# 127.0.0.1 — it never sees the public connection. That keeps the
+# server code out of the certificate / TLS story.
+#
+# `localPort` MUST match `port` in your ccanywhere config.json (default
+# 62275 — see examples/config.json). Multi-deployment users should
+# pick a different port AND a different customDomain.
 
-serverAddr = "frps.example.com"
+serverAddr = "recoco.xyz"
 serverPort = 7000
 
 auth.method = "token"
@@ -13,7 +22,7 @@ auth.token = "REPLACE-WITH-YOUR-FRPS-TOKEN"
 
 [[proxies]]
 name = "ccanywhere"
-type = "tcp"
+type = "https"
+customDomains = ["ccanywhere.recoco.xyz"]
 localIP = "127.0.0.1"
 localPort = 62275
-remotePort = 62275
