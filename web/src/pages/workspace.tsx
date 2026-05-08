@@ -114,7 +114,7 @@ export function WorkspacePage(): JSX.Element {
   return (
     <div className="workspace">
       <header className="workspace-header">
-        <div className="header-brand">ccanywhere</div>
+        <div className="header-brand">CC anywhere</div>
         <div className="header-spacer" />
         <span className="header-device">{label ?? 'unnamed'}</span>
         <ThemeToggle />

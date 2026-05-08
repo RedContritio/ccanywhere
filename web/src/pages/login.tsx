@@ -46,7 +46,7 @@ export function LoginPage(): JSX.Element {
   return (
     <main className="login-page">
       <div className="login-card">
-        <h1 className="login-title">ccanywhere</h1>
+        <h1 className="login-title">CC anywhere</h1>
         <p className="login-subtitle">把本地 cc 映射到 web 的远程入口</p>
         <form onSubmit={(e) => void onSubmit(e)} className="login-form">
           <label className="login-field">

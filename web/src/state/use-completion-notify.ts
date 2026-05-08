@@ -33,7 +33,7 @@ export function useCompletionNotify(navigate: NavigateFunction): void {
       if (becameIdle && notSelected && inBackground) {
         const proj = projects.find((p) => p.id === s.projectId);
         const body = `${proj?.name ?? s.projectId} 的对话已就绪`;
-        const n = new Notification('cc 完成响应', {
+        const n = new Notification('CC anywhere', {
           body,
           tag: `ccanywhere-${s.id}`,
         });
