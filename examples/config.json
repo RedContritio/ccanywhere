@@ -1,0 +1,20 @@
+{
+  "port": 62275,
+  "bindHost": "127.0.0.1",
+  "claudeBin": "claude",
+
+  "tokens": [
+    {
+      "label": "laptop",
+      "token": "REPLACE-WITH-A-RANDOM-STRING-AT-LEAST-16-CHARS"
+    }
+  ],
+
+  "projects": [
+    {
+      "id": "demo",
+      "name": "Demo Project",
+      "cwd": "/absolute/path/to/your/project"
+    }
+  ]
+}

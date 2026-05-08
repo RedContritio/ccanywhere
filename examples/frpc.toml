@@ -1,0 +1,19 @@
+# frpc.toml — copy this to your frpc working dir, fill in serverAddr / authToken,
+# and run:  frpc -c frpc.toml
+#
+# localPort and remotePort are kept identical so the public-facing port matches
+# the one ccanywhere listens on locally. They MUST match `config.port` in your
+# ccanywhere config.json (default 62275 — see examples/config.json).
+
+serverAddr = "frps.example.com"
+serverPort = 7000
+
+auth.method = "token"
+auth.token = "REPLACE-WITH-YOUR-FRPS-TOKEN"
+
+[[proxies]]
+name = "ccanywhere"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 62275
+remotePort = 62275

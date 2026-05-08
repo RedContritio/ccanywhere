@@ -30,7 +30,7 @@ export const WsHeartbeatSchema = z
 export type WsHeartbeat = z.infer<typeof WsHeartbeatSchema>;
 
 export const ConfigSchema = z.object({
-  port: z.number().int().min(1).max(65535).default(7878),
+  port: z.number().int().min(1).max(65535).default(62275),
   bindHost: z.string().default('127.0.0.1'),
   claudeBin: z.string().default('claude'),
   scrollbackBytes: z.number().int().min(64 * 1024).default(1024 * 1024),

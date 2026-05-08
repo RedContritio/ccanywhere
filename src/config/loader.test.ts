@@ -29,7 +29,7 @@ describe('loadConfig', () => {
   it('loads a valid config and applies defaults', () => {
     write(validBase);
     const cfg = loadConfig(path);
-    expect(cfg.port).toBe(7878);
+    expect(cfg.port).toBe(62275);
     expect(cfg.bindHost).toBe('127.0.0.1');
     expect(cfg.claudeBin).toBe('claude');
     expect(cfg.tokens).toHaveLength(1);
