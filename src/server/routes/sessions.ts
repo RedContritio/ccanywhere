@@ -1,7 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
+import type { HookEndpoint } from '../../session/hooks.js';
 import type { SessionManager, SpawnOptions } from '../../session/manager.js';
+import { listHistory } from '../history.js';
+
+export interface SessionRoutesOptions {
+  readonly hookEndpoint?: () => HookEndpoint;
+  readonly historyRoot?: string;
+}
 
 const CreateBodySchema = z.discriminatedUnion('mode', [
   z.object({
@@ -23,6 +30,7 @@ export async function registerSessionRoutes(
   app: FastifyInstance,
   config: Config,
   manager: SessionManager,
+  options: SessionRoutesOptions = {},
 ): Promise<void> {
   app.get('/api/sessions', () => ({
     sessions: manager.list().map((s) => ({
@@ -32,6 +40,7 @@ export async function registerSessionRoutes(
       resumeSessionId: s.info.resumeSessionId ?? null,
       state: s.state,
       createdAt: s.info.createdAt,
+      deletedAt: s.deletedAt,
     })),
   }));
 
@@ -58,6 +67,20 @@ export async function registerSessionRoutes(
 
     const args: string[] = [];
     if (body.mode === 'resume') {
+      const history =
+        options.historyRoot === undefined
+          ? await listHistory(project.cwd)
+          : await listHistory(project.cwd, options.historyRoot);
+      const known = history.some((h) => h.sessionId === body.sessionId);
+      if (!known) {
+        await reply.code(400).send({
+          error: {
+            code: 'invalid_resume',
+            message: `unknown sessionId for project ${project.id}: ${body.sessionId}`,
+          },
+        });
+        return;
+      }
       args.push('--resume', body.sessionId);
     }
 
@@ -75,8 +98,11 @@ export async function registerSessionRoutes(
     };
     const withResume =
       body.mode === 'resume' ? { resumeSessionId: body.sessionId } : {};
+    const withHook = options.hookEndpoint
+      ? { hookEndpoint: options.hookEndpoint() }
+      : {};
 
-    const session = manager.spawn({ ...baseSpawn, ...withSize, ...withResume });
+    const session = manager.spawn({ ...baseSpawn, ...withSize, ...withResume, ...withHook });
 
     await reply.code(201).send({
       id: session.info.id,
@@ -85,6 +111,7 @@ export async function registerSessionRoutes(
       resumeSessionId: session.info.resumeSessionId ?? null,
       state: session.state,
       createdAt: session.info.createdAt,
+      deletedAt: session.deletedAt,
     });
   });
 
@@ -96,7 +123,9 @@ export async function registerSessionRoutes(
         .send({ error: { code: 'not_found', message: 'session not found' } });
       return;
     }
-    await session.kill();
+    // markDeleted is idempotent: re-DELETE on the same id returns 204 too,
+    // and the session row is preserved with deletedAt set.
+    session.markDeleted();
     await reply.code(204).send();
   });
 }

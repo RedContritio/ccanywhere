@@ -21,7 +21,18 @@ async function main(): Promise<void> {
   const manager = new SessionManager();
   const internalHookToken = randomBytes(32).toString('hex');
 
-  const app = await buildServer({ config, manager, internalHookToken });
+  let actualPort: number | null = null;
+  const app = await buildServer({
+    config,
+    manager,
+    internalHookToken,
+    hookEndpoint: () => {
+      if (actualPort === null) {
+        throw new Error('hook endpoint requested before server started listening');
+      }
+      return { host: config.bindHost, port: actualPort };
+    },
+  });
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     logger.info({ signal }, 'shutting down');

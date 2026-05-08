@@ -1,15 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import type { SessionManager } from '../../session/manager.js';
+import type { SessionState } from '../../session/types.js';
 
-const KNOWN_EVENTS = new Set([
-  'Stop',
-  'SubagentStop',
-  'Notification',
-  'PreToolUse',
-  'PostToolUse',
-  'UserPromptSubmit',
-  'SessionStart',
-]);
+const STATE_TRANSITIONS: Readonly<Record<string, SessionState | null>> = {
+  SessionStart: 'idle',
+  UserPromptSubmit: 'busy',
+  PreToolUse: 'busy',
+  PostToolUse: null,
+  Notification: null,
+  Stop: 'idle',
+  SubagentStop: 'idle',
+};
 
 export async function registerHookRoutes(
   app: FastifyInstance,
@@ -19,7 +20,7 @@ export async function registerHookRoutes(
     '/api/hook/:sessionId/:event',
     async (req, reply) => {
       const { sessionId, event } = req.params;
-      if (!KNOWN_EVENTS.has(event)) {
+      if (!Object.hasOwn(STATE_TRANSITIONS, event)) {
         await reply
           .code(400)
           .send({ error: { code: 'invalid_event', message: `unknown hook event: ${event}` } });
@@ -32,8 +33,11 @@ export async function registerHookRoutes(
           .send({ error: { code: 'not_found', message: 'session not found' } });
         return;
       }
-      // Full state-machine wiring lands in M5; M3 only acknowledges receipt.
-      app.log.info({ sessionId, event }, 'hook received');
+      const next = STATE_TRANSITIONS[event];
+      if (next !== null && next !== undefined) {
+        session.setState(next);
+      }
+      app.log.info({ sessionId, event, state: session.state }, 'hook applied');
       await reply.code(204).send();
     },
   );

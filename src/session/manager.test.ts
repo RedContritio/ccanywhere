@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SessionManager, type SpawnOptions } from './manager.js';
 
 const baseSpawn: Omit<SpawnOptions, 'command' | 'args'> = {
@@ -9,7 +9,11 @@ const baseSpawn: Omit<SpawnOptions, 'command' | 'args'> = {
 };
 
 describe('SessionManager', () => {
-  const mgr = new SessionManager();
+  let mgr: SessionManager;
+
+  beforeEach(() => {
+    mgr = new SessionManager();
+  });
 
   afterEach(async () => {
     await mgr.killAll();
@@ -49,7 +53,7 @@ describe('SessionManager', () => {
     expect(b.info.mode).toBe('resume');
   });
 
-  it('kills a process and emits exit + status=dead', async () => {
+  it('kills a process and emits exit + status=dead, but stays in manager', async () => {
     const session = mgr.spawn({
       ...baseSpawn,
       command: 'sh',
@@ -66,7 +70,40 @@ describe('SessionManager', () => {
     await session.kill();
     await Promise.all([exited, statusDead]);
     expect(session.state).toBe('dead');
-    expect(mgr.get(session.info.id)).toBeUndefined();
+    // Session is preserved (not removed) so DELETE is idempotent.
+    expect(mgr.get(session.info.id)?.state).toBe('dead');
+    expect(session.deletedAt).toBeNull();
+  });
+
+  it('markDeleted sets deletedAt, kills the PTY, and is idempotent', async () => {
+    const session = mgr.spawn({
+      ...baseSpawn,
+      command: 'sh',
+      args: ['-c', 'sleep 60'],
+    });
+    expect(session.deletedAt).toBeNull();
+
+    session.markDeleted();
+    const t1 = session.deletedAt;
+    expect(t1).not.toBeNull();
+
+    // Second call is a no-op (timestamp does not move).
+    session.markDeleted();
+    expect(session.deletedAt).toBe(t1);
+
+    // PTY is being torn down.
+    await new Promise<void>((resolve) => session.on('exit', () => resolve()));
+    expect(session.state).toBe('dead');
+  });
+
+  it('listActive excludes deleted sessions; list includes all', async () => {
+    const a = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+    const b = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+    a.markDeleted();
+    expect(mgr.listActive().map((s) => s.info.id)).toEqual([b.info.id]);
+    expect(mgr.list().map((s) => s.info.id).sort()).toEqual(
+      [a.info.id, b.info.id].sort(),
+    );
   });
 
   it('resize accepts valid sizes and rejects non-positive', () => {
@@ -119,11 +156,13 @@ describe('SessionManager', () => {
     expect(states).toEqual([]);
   });
 
-  it('list returns active sessions only', async () => {
+  it('list keeps dead sessions (so DELETE stays idempotent)', async () => {
     const a = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
     const b = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
     expect(mgr.list().map((s) => s.info.id).sort()).toEqual([a.info.id, b.info.id].sort());
     await a.kill();
-    expect(mgr.list().map((s) => s.info.id)).toEqual([b.info.id]);
+    expect(mgr.list().map((s) => s.info.id).sort()).toEqual([a.info.id, b.info.id].sort());
+    expect(a.state).toBe('dead');
+    expect(a.deletedAt).toBeNull();
   });
 });

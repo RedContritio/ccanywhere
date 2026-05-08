@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import { logger } from '../log.js';
+import { cleanupHookConfigDir, createHookConfigDir, type HookEndpoint } from './hooks.js';
 import { Scrollback } from './scrollback.js';
 import type {
   SessionEventMap,
@@ -22,16 +23,20 @@ export interface SpawnOptions {
   readonly scrollbackBytes: number;
   readonly mode: SessionMode;
   readonly resumeSessionId?: string;
+  readonly hookEndpoint?: HookEndpoint;
 }
 
 export interface Session {
   readonly info: SessionInfo;
   readonly state: SessionState;
   readonly scrollback: Scrollback;
+  readonly hookConfigDir: string | null;
+  readonly deletedAt: number | null;
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(): Promise<void>;
   setState(next: SessionState): void;
+  markDeleted(): void;
   on<E extends SessionEventName>(event: E, fn: SessionListener<E>): () => void;
 }
 
@@ -40,6 +45,7 @@ const KILL_FORCE_AFTER_MS = 7_000;
 
 class SessionImpl implements Session {
   state: SessionState = 'starting';
+  deletedAt: number | null = null;
 
   private readonly listeners: {
     [E in SessionEventName]: Set<SessionListener<E>>;
@@ -56,6 +62,7 @@ class SessionImpl implements Session {
     public readonly info: SessionInfo,
     private readonly pty: IPty,
     public readonly scrollback: Scrollback,
+    public readonly hookConfigDir: string | null = null,
   ) {
     this.pty.onData((data) => {
       this.scrollback.append(data);
@@ -93,6 +100,14 @@ class SessionImpl implements Session {
     if (this.state === 'dead') return;
     this.state = next;
     this.emit('status', { sessionId: this.info.id, state: next });
+  }
+
+  markDeleted(): void {
+    if (this.deletedAt !== null) return;
+    this.deletedAt = Date.now();
+    if (this.state !== 'dead') {
+      void this.kill();
+    }
   }
 
   kill(): Promise<void> {
@@ -162,11 +177,18 @@ export class SessionManager {
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
 
+    let hookConfigDir: string | null = null;
+    let env = buildEnv(opts.env);
+    if (opts.hookEndpoint) {
+      hookConfigDir = createHookConfigDir(id, opts.hookEndpoint);
+      env = { ...env, CLAUDE_CONFIG_DIR: hookConfigDir };
+    }
+
     const pty = ptySpawn(opts.command, [...opts.args], {
       cwd: opts.cwd,
       cols,
       rows,
-      env: buildEnv(opts.env),
+      env,
       name: 'xterm-256color',
     });
 
@@ -188,16 +210,28 @@ export class SessionManager {
             createdAt: Date.now(),
           };
 
-    const session = new SessionImpl(info, pty, new Scrollback(opts.scrollbackBytes));
+    const session = new SessionImpl(
+      info,
+      pty,
+      new Scrollback(opts.scrollbackBytes),
+      hookConfigDir,
+    );
     this.sessions.set(id, session);
 
     session.setState('idle');
 
     session.on('exit', () => {
-      this.sessions.delete(id);
+      if (hookConfigDir !== null) {
+        cleanupHookConfigDir(hookConfigDir);
+      }
     });
 
     return session;
+  }
+
+  hookConfigDirOf(sessionId: string): string | null {
+    const s = this.sessions.get(sessionId);
+    return s ? s.hookConfigDir : null;
   }
 
   get(id: string): Session | undefined {
@@ -206,6 +240,10 @@ export class SessionManager {
 
   list(): Session[] {
     return [...this.sessions.values()];
+  }
+
+  listActive(): Session[] {
+    return [...this.sessions.values()].filter((s) => s.deletedAt === null);
   }
 
   async killAll(): Promise<void> {
