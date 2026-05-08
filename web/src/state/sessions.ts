@@ -25,6 +25,12 @@ export interface HistorySummary {
   preview: string;
 }
 
+export interface CreateSessionRequest {
+  projectId: string;
+  mode: 'fresh' | 'resume';
+  sessionId?: string;
+}
+
 interface SessionsStore {
   projects: Project[];
   sessions: Session[];
@@ -33,6 +39,8 @@ interface SessionsStore {
   fetchProjects: () => Promise<void>;
   fetchSessions: () => Promise<void>;
   fetchHistory: (projectId: string) => Promise<HistorySummary[]>;
+  createSession: (req: CreateSessionRequest, idempotencyKey: string) => Promise<Session>;
+  deleteSession: (id: string) => Promise<void>;
   /** Optimistic local mark — server is source of truth. */
   markSessionDeletedLocal: (id: string) => void;
 }
@@ -69,6 +77,31 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
       `/api/projects/${encodeURIComponent(projectId)}/history`,
     );
     return history;
+  },
+  createSession: async (req, idempotencyKey) => {
+    const body =
+      req.mode === 'resume'
+        ? { projectId: req.projectId, mode: req.mode, sessionId: req.sessionId }
+        : { projectId: req.projectId, mode: req.mode };
+    const created = await api<Session>('/api/sessions', {
+      method: 'POST',
+      body,
+      idempotencyKey,
+    });
+    set((s) => ({
+      sessions: s.sessions.some((x) => x.id === created.id)
+        ? s.sessions.map((x) => (x.id === created.id ? created : x))
+        : [...s.sessions, created],
+    }));
+    return created;
+  },
+  deleteSession: async (id) => {
+    await api<void>(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === id ? { ...x, deletedAt: x.deletedAt ?? Date.now() } : x,
+      ),
+    }));
   },
   markSessionDeletedLocal: (id) =>
     set((s) => ({
