@@ -83,7 +83,9 @@ launchctl print gui/$(id -u)/com.<you>.ccanywhere | head    # 看 state=running
 | `src/ws/server.ts` | WebSocket 协议、leading-edge debounce、心跳 |
 | `web/src/` | React 前端：登录、workspace、xterm 集成 |
 | `examples/config.json` | ccanywhere 配置模板 |
-| `examples/frpc.toml` | frpc 配置模板（默认 plain TCP + 端口 62275） |
+| `examples/frpc.toml` | frpc 配置模板（https + https2http plugin，注释里附 plain TCP fallback） |
+| `examples/launchd/` | LaunchAgent / LaunchDaemon plist 模板（含证书自动续签 timer） |
+| `scripts/cert-issue.sh` | 一键 Let's Encrypt 申请脚本（DNS-01 via 腾讯云 / 可改其他 DNS） |
 | `openspec/specs/` | 行为契约（人读真相） |
 | `openspec/archive/` | 已应用的变更提案历史 |
 

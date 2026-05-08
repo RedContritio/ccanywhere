@@ -180,36 +180,124 @@ remotePort = 62275
 
 ### B. https + frpc 端持证书（推荐生产）
 
-frpc 的 `https2http` plugin 在本机终结 TLS：
+frpc 的 `https2http` plugin 在本机终结 TLS。整套流程分五步，**严格按序**：
+
+#### B.1 DNS 加 A 记录
+
+域名注册商控制台加 `cc.<your-domain> A <frps 公网 IP>`。`dig +short cc.<your-domain>`
+能返回 frps IP 才进下一步——DNS 没生效跑 acme 一定失败。
+
+#### B.2 frps 端开 vhost
+
+`frps.toml` 加：
+
+```toml
+vhostHTTPSPort = 443
+```
+
+重启 frps，**确认公网防火墙 / 云厂商安全组放行 443**。`transport.tls.force = true`
+是控制通道（frpc ↔ frps）的 TLS，与 vhost https 完全独立，无冲突。
+
+#### B.3 申请证书（一次性）
+
+仓库里 `scripts/cert-issue.sh` 封装了 acme.sh 安装 + Let's Encrypt 申请 + 安装到固定路径：
+
+```bash
+export Tencent_SecretId='<腾讯云 SecretId>'
+export Tencent_SecretKey='<腾讯云 SecretKey>'
+CCANYWHERE_DOMAIN=cc.<your-domain> ./scripts/cert-issue.sh
+```
+
+脚本做的事：
+
+- 没装 acme.sh 的话用官方一行 installer 装到 `~/.acme.sh/`
+- `--set-default-ca --server letsencrypt`（acme.sh 默认 ZeroSSL 需要 EAB，绕开）
+- `--issue --dns dns_tencent -d cc.<your-domain>`（DNS-01 challenge）
+- `--install-cert` 安装到 `~/.config/ccanywhere/certs/`
+- `--reloadcmd "sudo /bin/launchctl kickstart -k system/com.fatedier.frpc"`（写进 acme.sh
+  config，续签时自动跑）
+- `chmod 600` 收紧 `account.conf` 和 `.key` 文件
+
+DNS 提供商不是腾讯云的话，参考 [acme.sh DNS API 列表](https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
+找对应的 plugin（`dns_cf` Cloudflare、`dns_aliyun` 阿里云、`dns_dp` DNSPod 老 API、…），
+脚本里把 `dns_tencent` 替换即可。
+
+#### B.4 sudoers NOPASSWD（让续签后能 reload frpc）
+
+frpc 是 LaunchDaemon（system 级），重启需要 sudo。续签 launchd timer 是 LaunchAgent
+（用户级）跑，没法弹密码框。一次性给特定命令免密：
+
+```bash
+sudo visudo -f /etc/sudoers.d/ccanywhere-cert
+```
+
+写一行（替换 `<you>` 为你的 mac 用户名）：
+
+```
+<you> ALL=(root) NOPASSWD: /bin/launchctl kickstart -k system/com.fatedier.frpc
+```
+
+保存后 macOS 自动 `chmod 0440`。**作用域只有这一个 launchctl 命令**，没有放大权限。
+
+立刻验证免密：
+
+```bash
+sudo -n /bin/launchctl kickstart -k system/com.fatedier.frpc
+# 不应该提示输密码
+```
+
+#### B.5 改 frpc.toml + 重启 frpc
+
+`~/.config/frp/frpc.toml` 里把 ccanywhere 那段从 `type = "tcp"` 换成：
 
 ```toml
 [[proxies]]
 name = "ccanywhere"
 type = "https"
-customDomains = ["ccanywhere.example.com"]
+customDomains = ["cc.<your-domain>"]
 
 [proxies.plugin]
 type = "https2http"
 localAddr = "127.0.0.1:62275"
-crtPath = "/Users/<you>/.config/ccanywhere/certs/ccanywhere.example.com.crt"
-keyPath = "/Users/<you>/.config/ccanywhere/certs/ccanywhere.example.com.key"
-hostHeaderRewrite = "ccanywhere.example.com"
+crtPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.crt"
+keyPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.key"
+hostHeaderRewrite = "cc.<your-domain>"
 ```
 
-`crtPath` / `keyPath` 用绝对路径（frp **不**展开 `~`）。
-
-frps 端必需：`vhostHTTPSPort = 443`（frps.toml）。证书申请用 acme.sh +
-DNS-01 challenge（HTTP-01 不行，因为 ccanywhere 不在公网 80 上）：
+`crtPath` / `keyPath` 用**绝对路径**（frp 不展开 `~`）。同 frpc.toml 里的其他 tcp proxy
+（ssh、其它服务）不受影响。
 
 ```bash
-acme.sh --issue --dns dns_cf -d ccanywhere.example.com
-acme.sh --install-cert -d ccanywhere.example.com \
-  --key-file ~/.config/ccanywhere/certs/ccanywhere.example.com.key \
-  --fullchain-file ~/.config/ccanywhere/certs/ccanywhere.example.com.crt \
-  --reloadcmd "sudo launchctl kickstart -k system/com.fatedier.frpc"
+sudo launchctl kickstart -k system/com.fatedier.frpc
+tail -20 ~/.config/frp/frpc.log    # 看启动是否成功
 ```
 
-公网入口：`https://ccanywhere.example.com/`。
+公网入口：`https://cc.<your-domain>/`。
+
+#### B.6 装自动续签 LaunchAgent（每天 04:00 检查）
+
+模板在 `examples/launchd/com.example.cc-cert-renew.plist`。把 `<you>` 替换成你的用户名，
+拷到 `~/Library/LaunchAgents/`：
+
+```bash
+DST=~/Library/LaunchAgents/com.$(whoami).cc-cert-renew.plist
+cp examples/launchd/com.example.cc-cert-renew.plist "$DST"
+sed -i '' "s/__YOU__/$(whoami)/g" "$DST"
+launchctl bootstrap gui/$(id -u) "$DST"
+```
+
+模板里用 `__YOU__` 占位是因为 `<you>` 在 XML 里非法（被当成标签开头），会让 plist 解析失败。
+
+立即试跑一次确认能跑通：
+
+```bash
+launchctl kickstart gui/$(id -u)/com.<you>.cc-cert-renew
+sleep 3
+tail -20 ~/.config/ccanywhere/cert-renew.log
+```
+
+第一次跑通常会输出 "Skip, Next renewal time is …"——证书还远没到期不需要续。
+正常。`acme.sh --cron` 检查到期前 30 天才会真触发续签 + reload。
 
 ## 6. 验证
 
@@ -239,6 +327,10 @@ xterm 应该立即显示 cc 主界面（已读 user `~/.claude/auth.json`，不�
 | 卡顿明显 | 旧版 100ms trailing-flush | 同上，确认在 M-hook-opt-in 之后的版本 |
 | 公网 / 返回 404 envelope | `web/dist/` 不存在 / 路径解析错 | `pnpm build:all` 后重启 |
 | frpc 重启后 proxy already exists 一直在 retry | frps 旧 connection 还没超时清理 | 等 60 秒，或在 frps 端踢旧 client |
+| 浏览器 `ERR_SSL_PROTOCOL_ERROR` / 连不上 443 | frps `vhostHTTPSPort` 没配，或公网 443 被防火墙挡 | `frps.toml` 加 `vhostHTTPSPort = 443` 重启 frps；云厂商安全组放行 443 |
+| `acme.sh --issue` 卡在 "Verifying" | DNS 没生效或 TXT 记录写错 | `dig +short TXT _acme-challenge.cc.<domain>` 验证；DNS-01 凭证（Tencent_SecretId/Key）有没有 export |
+| 续签 timer 跑了但 frpc 没拿到新证书 | sudoers NOPASSWD 没配，reloadcmd 静默失败 | `tail ~/.config/ccanywhere/cert-renew.log` 看错误；按 5.B.4 配 sudoers |
+| 浏览器证书 valid 但 `502 Bad Gateway` | frpc 拿到流量后回源 `127.0.0.1:62275` 不通 | `curl http://127.0.0.1:62275/healthz` 确认 ccanywhere 在跑 |
 
 ## 8. 升级流程
 
