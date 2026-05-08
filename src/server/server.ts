@@ -4,6 +4,7 @@ import type { HookEndpoint } from '../session/hooks.js';
 import type { SessionManager } from '../session/manager.js';
 import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
+import { IdempotencyStore } from './idempotency.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerHookRoutes } from './routes/hook.js';
@@ -14,6 +15,7 @@ export interface BuildServerOptions {
   readonly internalHookToken: string;
   readonly hookEndpoint?: () => { readonly host: string; readonly port: number };
   readonly historyRoot?: string;
+  readonly idempotencyTtlMs?: number;
 }
 
 export async function buildServer(opts: BuildServerOptions): Promise<FastifyInstance> {
@@ -32,7 +34,16 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   } else {
     await registerProjectRoutes(app, opts.config.projects, opts.historyRoot);
   }
-  const sessionOpts: { hookEndpoint?: () => HookEndpoint; historyRoot?: string } = {};
+  const idempotencyStore = new IdempotencyStore(opts.idempotencyTtlMs ?? 60 * 60 * 1000);
+  app.addHook('onClose', () => {
+    idempotencyStore.close();
+  });
+
+  const sessionOpts: {
+    hookEndpoint?: () => HookEndpoint;
+    historyRoot?: string;
+    idempotencyStore: IdempotencyStore;
+  } = { idempotencyStore };
   if (opts.hookEndpoint !== undefined) {
     const factory = opts.hookEndpoint;
     sessionOpts.hookEndpoint = () => ({ ...factory(), internalToken: opts.internalHookToken });
@@ -40,7 +51,9 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
   await registerSessionRoutes(app, opts.config, opts.manager, sessionOpts);
   await registerHookRoutes(app, opts.manager);
-  await registerWebSocketRoutes(app, opts.manager);
+  await registerWebSocketRoutes(app, opts.manager, {
+    heartbeat: opts.config.wsHeartbeat,
+  });
 
   app.setErrorHandler((err, _req, reply) => {
     if (reply.statusCode < 400) reply.code(500);

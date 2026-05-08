@@ -3,7 +3,12 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { logger } from '../log.js';
 import type { Session, SessionManager } from '../session/manager.js';
+import { attachHeartbeatToWs, type HeartbeatConfig } from './heartbeat.js';
 import { ClientFrameSchema, type ServerFrame } from './protocol.js';
+
+export interface WebSocketRoutesOptions {
+  readonly heartbeat?: HeartbeatConfig;
+}
 
 const FLUSH_INTERVAL_MS = 100;
 const MAX_BUFFERED_BYTES = 1 << 20; // 1 MB
@@ -40,6 +45,7 @@ interface SessionBundle {
 export async function registerWebSocketRoutes(
   app: FastifyInstance,
   manager: SessionManager,
+  options: WebSocketRoutesOptions = {},
 ): Promise<void> {
   await app.register(websocketPlugin);
 
@@ -133,6 +139,10 @@ export async function registerWebSocketRoutes(
       const bundle = attach(session);
       bundle.clients.add(sock);
 
+      const detachHeartbeat = options.heartbeat
+        ? attachHeartbeatToWs(sock, options.heartbeat)
+        : null;
+
       sendFrame(sock, { type: 'snapshot', data: session.scrollback.snapshot() });
       sendFrame(sock, { type: 'status', state: session.state });
 
@@ -172,6 +182,7 @@ export async function registerWebSocketRoutes(
 
       sock.on('close', () => {
         bundle.clients.delete(sock);
+        detachHeartbeat?.();
       });
 
       sock.on('error', (err: Error) => {

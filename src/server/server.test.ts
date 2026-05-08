@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Config } from '../config/schema.js';
 import { SessionManager } from '../session/manager.js';
@@ -16,6 +16,8 @@ const baseConfig: Config = {
   bindHost: '127.0.0.1',
   claudeBin: 'sh',
   scrollbackBytes: 4096,
+  deletedSessionTtlMs: 600_000,
+  wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   tokens: [{ label: 'laptop', token: userToken }],
   projects: [{ id: 'demo', name: 'Demo', cwd: process.cwd() }],
 };
@@ -344,6 +346,107 @@ describe('REST API with historyRoot for resume validation', () => {
     });
     expect(res.statusCode).toBe(400);
     expect((res.json() as { error: { code: string } }).error.code).toBe('invalid_resume');
+  });
+});
+
+describe('REST API idempotency', () => {
+  let mgr: SessionManager;
+  let app: FastifyInstance;
+
+  const otherToken = 'b'.repeat(32);
+  const cfgWithTwoTokens: Config = {
+    ...baseConfig,
+    tokens: [
+      { label: 'laptop', token: userToken },
+      { label: 'phone', token: otherToken },
+    ],
+  };
+
+  beforeEach(async () => {
+    mgr = new SessionManager();
+    app = await buildServer({
+      config: cfgWithTwoTokens,
+      manager: mgr,
+      internalHookToken,
+      idempotencyTtlMs: 60_000,
+    });
+  });
+
+  afterEach(async () => {
+    await mgr.killAll();
+    await app.close();
+  });
+
+  async function post(
+    token: string,
+    key: string | null,
+    payload: object,
+  ): Promise<LightMyRequestResponse> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    };
+    if (key !== null) headers['idempotency-key'] = key;
+    return await app.inject({ method: 'POST', url: '/api/sessions', headers, payload });
+  }
+
+  it('without Idempotency-Key behaves like before', async () => {
+    const a = await post(userToken, null, { projectId: 'demo', mode: 'fresh' });
+    const b = await post(userToken, null, { projectId: 'demo', mode: 'fresh' });
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(201);
+    expect((a.json() as { id: string }).id).not.toBe((b.json() as { id: string }).id);
+  });
+
+  it('rejects malformed Idempotency-Key', async () => {
+    const res = await post(userToken, 'has space', { projectId: 'demo', mode: 'fresh' });
+    expect(res.statusCode).toBe(400);
+    expect((res.json() as { error: { code: string } }).error.code).toBe('invalid_idempotency_key');
+  });
+
+  it('replays cached response for same key + body', async () => {
+    const a = await post(userToken, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
+    expect(a.statusCode).toBe(201);
+    expect(a.headers['idempotency-stored']).toBe('true');
+    const idA = (a.json() as { id: string }).id;
+
+    const b = await post(userToken, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
+    expect(b.statusCode).toBe(201);
+    expect(b.headers['idempotency-replayed']).toBe('true');
+    expect((b.json() as { id: string }).id).toBe(idA);
+
+    // Only ONE actual session was spawned.
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/sessions',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    expect((list.json() as { sessions: unknown[] }).sessions).toHaveLength(1);
+  });
+
+  it('returns 409 on same key with different body', async () => {
+    await post(userToken, 'KEY-2', { projectId: 'demo', mode: 'fresh' });
+    const conflict = await post(userToken, 'KEY-2', { projectId: 'demo', mode: 'fresh', cols: 200 });
+    expect(conflict.statusCode).toBe(409);
+    expect((conflict.json() as { error: { code: string } }).error.code).toBe(
+      'idempotency_conflict',
+    );
+  });
+
+  it('isolates idempotency-key namespace per token', async () => {
+    const a = await post(userToken, 'SHARED', { projectId: 'demo', mode: 'fresh' });
+    const b = await post(otherToken, 'SHARED', { projectId: 'demo', mode: 'fresh' });
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(201);
+    expect((a.json() as { id: string }).id).not.toBe((b.json() as { id: string }).id);
+  });
+
+  it('caches 4xx errors so retried bad requests are stable', async () => {
+    const a = await post(userToken, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
+    const b = await post(userToken, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
+    expect(a.statusCode).toBe(404);
+    expect(b.statusCode).toBe(404);
+    expect(b.headers['idempotency-replayed']).toBe('true');
   });
 
   it('404 for unknown route returns standard error envelope', async () => {

@@ -18,7 +18,9 @@ async function main(): Promise<void> {
     throw err;
   }
 
-  const manager = new SessionManager();
+  const manager = new SessionManager({
+    deletedSessionTtlMs: config.deletedSessionTtlMs,
+  });
   const internalHookToken = randomBytes(32).toString('hex');
 
   let actualPort: number | null = null;

@@ -4,10 +4,12 @@ import type { Config } from '../../config/schema.js';
 import type { HookEndpoint } from '../../session/hooks.js';
 import type { SessionManager, SpawnOptions } from '../../session/manager.js';
 import { listHistory } from '../history.js';
+import { hashBody, IdempotencyStore, isValidIdempotencyKey } from '../idempotency.js';
 
 export interface SessionRoutesOptions {
   readonly hookEndpoint?: () => HookEndpoint;
   readonly historyRoot?: string;
+  readonly idempotencyStore?: IdempotencyStore;
 }
 
 const CreateBodySchema = z.discriminatedUnion('mode', [
@@ -45,23 +47,80 @@ export async function registerSessionRoutes(
   }));
 
   app.post('/api/sessions', async (req, reply) => {
+    const idempotencyKey = (() => {
+      const h = req.headers['idempotency-key'];
+      if (typeof h === 'string') return h;
+      if (Array.isArray(h) && typeof h[0] === 'string') return h[0];
+      return null;
+    })();
+
+    if (idempotencyKey !== null && !isValidIdempotencyKey(idempotencyKey)) {
+      await reply.code(400).send({
+        error: {
+          code: 'invalid_idempotency_key',
+          message: 'Idempotency-Key must match /^[A-Za-z0-9_-]{1,255}$/',
+        },
+      });
+      return;
+    }
+
+    const store = options.idempotencyStore;
+    const scope = req.authTokenLabel ?? '';
+    const bodyHash = idempotencyKey !== null ? hashBody(req.body) : '';
+
+    if (idempotencyKey !== null && store) {
+      const result = store.lookup(scope, idempotencyKey, bodyHash);
+      if (result.kind === 'replay') {
+        void reply
+          .code(result.status)
+          .header('idempotency-replayed', 'true')
+          .send(result.body);
+        return;
+      }
+      if (result.kind === 'conflict') {
+        await reply.code(409).send({
+          error: {
+            code: 'idempotency_conflict',
+            message: 'Idempotency-Key reused with a different request body',
+          },
+        });
+        return;
+      }
+    }
+
     const parsed = CreateBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      await reply.code(400).send({
+      const errBody = {
         error: {
           code: 'invalid_request',
           message: 'body validation failed',
           issues: parsed.error.issues,
         },
-      });
+      };
+      if (idempotencyKey !== null && store) {
+        store.store(scope, idempotencyKey, bodyHash, 400, errBody);
+        void reply
+          .code(400)
+          .header('idempotency-stored', 'true')
+          .send(errBody);
+      } else {
+        await reply.code(400).send(errBody);
+      }
       return;
     }
     const body = parsed.data;
     const project = config.projects.find((p) => p.id === body.projectId);
     if (!project) {
-      await reply
-        .code(404)
-        .send({ error: { code: 'not_found', message: 'project not found' } });
+      const errBody = { error: { code: 'not_found', message: 'project not found' } };
+      if (idempotencyKey !== null && store) {
+        store.store(scope, idempotencyKey, bodyHash, 404, errBody);
+        void reply
+          .code(404)
+          .header('idempotency-stored', 'true')
+          .send(errBody);
+      } else {
+        await reply.code(404).send(errBody);
+      }
       return;
     }
 
@@ -73,12 +132,21 @@ export async function registerSessionRoutes(
           : await listHistory(project.cwd, options.historyRoot);
       const known = history.some((h) => h.sessionId === body.sessionId);
       if (!known) {
-        await reply.code(400).send({
+        const errBody = {
           error: {
             code: 'invalid_resume',
             message: `unknown sessionId for project ${project.id}: ${body.sessionId}`,
           },
-        });
+        };
+        if (idempotencyKey !== null && store) {
+          store.store(scope, idempotencyKey, bodyHash, 400, errBody);
+          void reply
+            .code(400)
+            .header('idempotency-stored', 'true')
+            .send(errBody);
+        } else {
+          await reply.code(400).send(errBody);
+        }
         return;
       }
       args.push('--resume', body.sessionId);
@@ -104,7 +172,7 @@ export async function registerSessionRoutes(
 
     const session = manager.spawn({ ...baseSpawn, ...withSize, ...withResume, ...withHook });
 
-    await reply.code(201).send({
+    const responseBody = {
       id: session.info.id,
       projectId: session.info.projectId,
       mode: session.info.mode,
@@ -112,7 +180,17 @@ export async function registerSessionRoutes(
       state: session.state,
       createdAt: session.info.createdAt,
       deletedAt: session.deletedAt,
-    });
+    };
+
+    if (idempotencyKey !== null && store) {
+      store.store(scope, idempotencyKey, bodyHash, 201, responseBody);
+      void reply
+        .code(201)
+        .header('idempotency-stored', 'true')
+        .send(responseBody);
+    } else {
+      await reply.code(201).send(responseBody);
+    }
   });
 
   app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {

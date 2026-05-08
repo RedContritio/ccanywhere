@@ -106,6 +106,51 @@ describe('SessionManager', () => {
     );
   });
 
+  describe('GC of soft-deleted sessions', () => {
+    it('keeps deleted sessions before ttl elapses', () => {
+      const tiny = new SessionManager({ deletedSessionTtlMs: 60_000 });
+      const a = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      a.markDeleted();
+      const deletedAt = a.deletedAt;
+      expect(deletedAt).not.toBeNull();
+      tiny.gc(deletedAt! + 30_000);
+      expect(tiny.get(a.info.id)?.info.id).toBe(a.info.id);
+    });
+
+    it('removes deleted sessions once ttl elapses', () => {
+      const tiny = new SessionManager({ deletedSessionTtlMs: 60_000 });
+      const a = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      a.markDeleted();
+      const deletedAt = a.deletedAt;
+      tiny.gc(deletedAt! + 60_001);
+      expect(tiny.get(a.info.id)).toBeUndefined();
+      expect(tiny.list().map((s) => s.info.id)).not.toContain(a.info.id);
+    });
+
+    it('never collects sessions that were not deleted', () => {
+      const tiny = new SessionManager({ deletedSessionTtlMs: 60_000 });
+      const live = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      tiny.gc(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      expect(tiny.get(live.info.id)?.info.id).toBe(live.info.id);
+    });
+
+    it('list() opportunistically triggers gc', () => {
+      const tiny = new SessionManager({ deletedSessionTtlMs: 1 });
+      const a = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      a.markDeleted();
+      // wait beyond ttl, then list should trigger gc internally.
+      const before = a.deletedAt!;
+      // Force the perceived "now" to be far in the future by directly mutating deletedAt
+      // is not possible (readonly via interface); instead we drive via a small ttl + busy wait.
+      const start = Date.now();
+      // eslint-disable-next-line no-empty
+      while (Date.now() - start < 5) {}
+      void before;
+      const ids = tiny.list().map((s) => s.info.id);
+      expect(ids).not.toContain(a.info.id);
+    });
+  });
+
   it('resize accepts valid sizes and rejects non-positive', () => {
     const session = mgr.spawn({
       ...baseSpawn,

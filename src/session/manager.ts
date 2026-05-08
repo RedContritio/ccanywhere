@@ -169,10 +169,31 @@ function buildEnv(extra: Readonly<Record<string, string>> | undefined): Record<s
   return out;
 }
 
+export interface SessionManagerOptions {
+  /**
+   * Time after `deletedAt` a soft-deleted session is physically removed from the
+   * manager's map. Defaults to 10 minutes. GC runs opportunistically on spawn / list calls.
+   */
+  readonly deletedSessionTtlMs?: number;
+}
+
+const DEFAULT_DELETED_TTL_MS = 10 * 60 * 1000;
+
 export class SessionManager {
   private readonly sessions = new Map<string, SessionImpl>();
+  private readonly deletedSessionTtlMs: number;
+
+  constructor(options: SessionManagerOptions = {}) {
+    this.deletedSessionTtlMs = options.deletedSessionTtlMs ?? DEFAULT_DELETED_TTL_MS;
+    if (this.deletedSessionTtlMs <= 0) {
+      throw new RangeError(
+        `deletedSessionTtlMs must be positive, got ${this.deletedSessionTtlMs}`,
+      );
+    }
+  }
 
   spawn(opts: SpawnOptions): Session {
+    this.gc(Date.now());
     const id = randomUUID();
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
@@ -239,11 +260,26 @@ export class SessionManager {
   }
 
   list(): Session[] {
+    this.gc(Date.now());
     return [...this.sessions.values()];
   }
 
   listActive(): Session[] {
+    this.gc(Date.now());
     return [...this.sessions.values()].filter((s) => s.deletedAt === null);
+  }
+
+  /**
+   * Remove soft-deleted sessions whose deletedAt + ttl has elapsed.
+   * `now` is injectable for tests; production callers pass Date.now().
+   */
+  gc(now: number): void {
+    const ttl = this.deletedSessionTtlMs;
+    for (const [id, s] of this.sessions) {
+      if (s.deletedAt !== null && s.deletedAt + ttl < now) {
+        this.sessions.delete(id);
+      }
+    }
   }
 
   async killAll(): Promise<void> {

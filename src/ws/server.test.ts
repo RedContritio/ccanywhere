@@ -15,6 +15,8 @@ const config: Config = {
   bindHost: '127.0.0.1',
   claudeBin: 'sh',
   scrollbackBytes: 4096,
+  deletedSessionTtlMs: 600_000,
+  wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   tokens: [{ label: 'laptop', token: userToken }],
   projects: [{ id: 'demo', name: 'Demo', cwd: process.cwd() }],
 };

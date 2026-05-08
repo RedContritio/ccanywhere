@@ -34,6 +34,32 @@ describe('loadConfig', () => {
     expect(cfg.claudeBin).toBe('claude');
     expect(cfg.tokens).toHaveLength(1);
     expect(cfg.projects[0]?.id).toBe('demo');
+    expect(cfg.deletedSessionTtlMs).toBe(600_000);
+    expect(cfg.wsHeartbeat.intervalMs).toBe(30_000);
+    expect(cfg.wsHeartbeat.timeoutMs).toBe(60_000);
+  });
+
+  it('rejects deletedSessionTtlMs below minimum', () => {
+    write({ ...validBase, deletedSessionTtlMs: 30_000 });
+    expect(() => loadConfig(path)).toThrow(/deletedSessionTtlMs/);
+  });
+
+  it('rejects wsHeartbeat with timeoutMs <= intervalMs', () => {
+    write({
+      ...validBase,
+      wsHeartbeat: { intervalMs: 60_000, timeoutMs: 30_000 },
+    });
+    expect(() => loadConfig(path)).toThrow(/timeoutMs must be strictly greater/);
+  });
+
+  it('accepts custom wsHeartbeat values', () => {
+    write({
+      ...validBase,
+      wsHeartbeat: { intervalMs: 5_000, timeoutMs: 12_000 },
+    });
+    const cfg = loadConfig(path);
+    expect(cfg.wsHeartbeat.intervalMs).toBe(5_000);
+    expect(cfg.wsHeartbeat.timeoutMs).toBe(12_000);
   });
 
   it('throws ConfigError when file is missing', () => {
