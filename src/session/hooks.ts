@@ -1,7 +1,3 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
 export interface HookEndpoint {
   readonly host: string;
   readonly port: number;
@@ -35,18 +31,3 @@ export function buildHookSettings(sessionId: string, ep: HookEndpoint): {
   return { hooks };
 }
 
-export function createHookConfigDir(sessionId: string, ep: HookEndpoint): string {
-  const idTag = sessionId.slice(0, 8) || 'sess';
-  const dir = mkdtempSync(join(tmpdir(), `ccanywhere-hook-${idTag}-`));
-  const settings = buildHookSettings(sessionId, ep);
-  writeFileSync(join(dir, 'settings.json'), JSON.stringify(settings, null, 2));
-  return dir;
-}
-
-export function cleanupHookConfigDir(dir: string): void {
-  try {
-    rmSync(dir, { recursive: true, force: true });
-  } catch {
-    // best-effort cleanup; never throw on shutdown path
-  }
-}

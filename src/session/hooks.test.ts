@@ -1,16 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  buildHookSettings,
-  cleanupHookConfigDir,
-  createHookConfigDir,
-  type HookEndpoint,
-} from './hooks.js';
+import { buildHookSettings, type HookEndpoint } from './hooks.js';
 
 const ep: HookEndpoint = {
   host: '127.0.0.1',
-  port: 7878,
+  port: 62275,
   internalToken: 'h'.repeat(32),
 };
 
@@ -52,25 +45,5 @@ describe('buildHookSettings', () => {
     const settings = buildHookSettings('a/b c', ep);
     const cmd = settings.hooks['Stop']?.[0]?.hooks[0]?.command ?? '';
     expect(cmd).toContain('a%2Fb%20c');
-  });
-});
-
-describe('createHookConfigDir / cleanupHookConfigDir', () => {
-  it('creates a tmp dir with settings.json and removes it on cleanup', () => {
-    const dir = createHookConfigDir('s1', ep);
-    try {
-      expect(existsSync(dir)).toBe(true);
-      const settings = JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')) as {
-        hooks: Record<string, unknown>;
-      };
-      expect(Object.keys(settings.hooks)).toContain('Stop');
-    } finally {
-      cleanupHookConfigDir(dir);
-    }
-    expect(existsSync(dir)).toBe(false);
-  });
-
-  it('cleanup on a non-existent dir does not throw', () => {
-    expect(() => cleanupHookConfigDir('/tmp/__never_existed_ccanywhere__')).not.toThrow();
   });
 });

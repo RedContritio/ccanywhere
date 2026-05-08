@@ -1,13 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
-import type { HookEndpoint } from '../../session/hooks.js';
 import type { SessionManager, SpawnOptions } from '../../session/manager.js';
 import { listHistory } from '../history.js';
 import { hashBody, IdempotencyStore, isValidIdempotencyKey } from '../idempotency.js';
 
 export interface SessionRoutesOptions {
-  readonly hookEndpoint?: () => HookEndpoint;
   readonly historyRoot?: string;
   readonly idempotencyStore?: IdempotencyStore;
 }
@@ -166,11 +164,8 @@ export async function registerSessionRoutes(
     };
     const withResume =
       body.mode === 'resume' ? { resumeSessionId: body.sessionId } : {};
-    const withHook = options.hookEndpoint
-      ? { hookEndpoint: options.hookEndpoint() }
-      : {};
 
-    const session = manager.spawn({ ...baseSpawn, ...withSize, ...withResume, ...withHook });
+    const session = manager.spawn({ ...baseSpawn, ...withSize, ...withResume });
 
     const responseBody = {
       id: session.info.id,

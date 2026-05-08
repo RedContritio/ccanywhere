@@ -8,9 +8,17 @@ import { ClientFrameSchema, type ServerFrame } from './protocol.js';
 
 export interface WebSocketRoutesOptions {
   readonly heartbeat?: HeartbeatConfig;
+  /**
+   * Trailing-flush window in ms. Effective frame rate = 1000 / value.
+   * Defaults to ~60fps (17ms) when omitted.
+   */
+  readonly outputFlushIntervalMs?: number;
 }
 
-const FLUSH_INTERVAL_MS = 100;
+// Default frame-aligned with 60Hz displays so the trailing flush lands
+// on the next paintable tick. Override via config.outputFps (passed
+// through WebSocketRoutesOptions.outputFlushIntervalMs).
+const DEFAULT_FLUSH_INTERVAL_MS = 17;
 const MAX_BUFFERED_BYTES = 1 << 20; // 1 MB
 
 function sendFrame(ws: WebSocket, frame: ServerFrame): void {
@@ -49,6 +57,7 @@ export async function registerWebSocketRoutes(
 ): Promise<void> {
   await app.register(websocketPlugin);
 
+  const flushIntervalMs = options.outputFlushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const bundles = new Map<string, SessionBundle>();
 
   function flush(bundle: SessionBundle): void {
@@ -107,7 +116,7 @@ export async function registerWebSocketRoutes(
           const t = setTimeout(() => {
             bundle.flushTimer = null;
             flush(bundle);
-          }, FLUSH_INTERVAL_MS);
+          }, flushIntervalMs);
           t.unref();
           bundle.flushTimer = t;
         }

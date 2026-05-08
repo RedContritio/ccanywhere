@@ -22,19 +22,16 @@ async function main(): Promise<void> {
   const manager = new SessionManager({
     deletedSessionTtlMs: config.deletedSessionTtlMs,
   });
+  // Internal token for the /api/hook/* receiver. cc subprocesses do NOT
+  // receive this automatically (M-hook-opt-in); users opt in by pasting
+  // a hook block into ~/.claude/settings.json — see buildHookSettings()
+  // and docs/deployment.md.
   const internalHookToken = randomBytes(32).toString('hex');
 
-  let actualPort: number | null = null;
   const app = await buildServer({
     config,
     manager,
     internalHookToken,
-    hookEndpoint: () => {
-      if (actualPort === null) {
-        throw new Error('hook endpoint requested before server started listening');
-      }
-      return { host: config.bindHost, port: actualPort };
-    },
   });
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
@@ -48,18 +45,17 @@ async function main(): Promise<void> {
 
   await app.listen({ host: config.bindHost, port: config.port });
   const addr = app.server.address();
-  if (addr === null || typeof addr === 'string') {
-    throw new Error(`unexpected listen address shape: ${String(addr)}`);
-  }
-  actualPort = (addr as AddressInfo).port;
+  const actualPort =
+    addr !== null && typeof addr !== 'string' ? (addr as AddressInfo).port : config.port;
   logger.info(
     {
       configPath,
       bind: `${config.bindHost}:${actualPort}`,
       projects: config.projects.length,
       tokens: config.tokens.length,
+      internalHookToken,
     },
-    'ccanywhere listening',
+    'ccanywhere listening (paste internalHookToken into ~/.claude/settings.json hooks)',
   );
 }
 

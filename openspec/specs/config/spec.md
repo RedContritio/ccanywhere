@@ -88,6 +88,18 @@ ccanywhere 启动时读一个 JSON 配置文件，里面包含运行所需的全
 - WHEN  服务端启动
 - THEN  MUST 退出，错误信息说明 `timeoutMs` 必须大于 `intervalMs`，退出码 `2`
 
+#### Scenario: outputFps 越界被拒绝
+
+- GIVEN 配置中 `outputFps: 0` 或 `outputFps: 999`
+- WHEN  服务端启动
+- THEN  MUST 退出，错误信息提及 `outputFps`，退出码 `2`
+
+#### Scenario: outputFps 影响 ws 输出节奏
+
+- GIVEN 配置中 `outputFps: 24`
+- WHEN  服务端启动并接受 WebSocket 连接
+- THEN  PTY 输出的 trailing-flush 窗口长度 MUST 约为 `Math.round(1000/24) = 42 ms`
+
 ### Requirement: 重复检测
 
 加载器 MUST 拒绝包含重复 `projects[*].id` 或重复 `tokens[*].token` 的配置。

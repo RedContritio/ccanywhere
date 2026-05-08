@@ -62,6 +62,28 @@ describe('loadConfig', () => {
     expect(cfg.wsHeartbeat.timeoutMs).toBe(12_000);
   });
 
+  it('default outputFps is 60', () => {
+    write(validBase);
+    const cfg = loadConfig(path);
+    expect(cfg.outputFps).toBe(60);
+  });
+
+  it('accepts custom outputFps', () => {
+    write({ ...validBase, outputFps: 24 });
+    const cfg = loadConfig(path);
+    expect(cfg.outputFps).toBe(24);
+  });
+
+  it('rejects outputFps below 1', () => {
+    write({ ...validBase, outputFps: 0 });
+    expect(() => loadConfig(path)).toThrow(/outputFps/);
+  });
+
+  it('rejects outputFps above 240', () => {
+    write({ ...validBase, outputFps: 999 });
+    expect(() => loadConfig(path)).toThrow(/outputFps/);
+  });
+
   it('throws ConfigError when file is missing', () => {
     expect(() => loadConfig(join(dir, 'missing.json'))).toThrow(ConfigError);
   });

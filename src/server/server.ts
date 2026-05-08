@@ -5,7 +5,6 @@ import staticPlugin from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from '../config/schema.js';
 import { logger } from '../log.js';
-import type { HookEndpoint } from '../session/hooks.js';
 import type { SessionManager } from '../session/manager.js';
 import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
@@ -18,7 +17,6 @@ export interface BuildServerOptions {
   readonly config: Config;
   readonly manager: SessionManager;
   readonly internalHookToken: string;
-  readonly hookEndpoint?: () => { readonly host: string; readonly port: number };
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
   /**
@@ -67,19 +65,15 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   });
 
   const sessionOpts: {
-    hookEndpoint?: () => HookEndpoint;
     historyRoot?: string;
     idempotencyStore: IdempotencyStore;
   } = { idempotencyStore };
-  if (opts.hookEndpoint !== undefined) {
-    const factory = opts.hookEndpoint;
-    sessionOpts.hookEndpoint = () => ({ ...factory(), internalToken: opts.internalHookToken });
-  }
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
   await registerSessionRoutes(app, opts.config, opts.manager, sessionOpts);
   await registerHookRoutes(app, opts.manager);
   await registerWebSocketRoutes(app, opts.manager, {
     heartbeat: opts.config.wsHeartbeat,
+    outputFlushIntervalMs: Math.max(1, Math.round(1000 / opts.config.outputFps)),
   });
 
   const webDist =

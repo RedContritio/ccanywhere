@@ -113,16 +113,21 @@ WebSocket 端点 MUST 是 `GET /ws/sessions/:id`，路径参数 `:id` 是 sessio
 收到 `ping` 帧时，服务端 MUST 立即回 `{ "type": "pong" }`。
 此为应用层 ping，与 WebSocket 协议层 ping 独立。
 
-### Requirement: 输出微聚合（leading-edge debounce）
+### Requirement: 输出微聚合（leading-edge + 可配 trailing fps）
 
-服务端 MUST 用 **leading-edge** debounce 模式处理 PTY 输出：
+服务端 MUST 用 **leading-edge** debounce 模式处理 PTY 输出。trailing 窗口
+长度由 `config.outputFps` 决定（窗口 ms = `Math.round(1000 / outputFps)`），
+默认 60 fps（约 17 ms）：
 
 - 当 buffer 内**没有**定时器在跑时（即"刚从空闲恢复"），收到第一个 PTY
   data 事件 MUST **立即** 把 buffer flush 成一帧 `output`。这样用户键盘
   echo / 单字符回显**不会被微聚合的窗口期延迟**。
-- 立即 flush 之后 MUST 同时启动一个 100 ms 的 trailing 窗口，期间所有 PTY
-  data 累积到 buffer；窗口到期时把累积内容统一 flush 成一帧 `output`。
-  trailing 窗口处理高频重绘（Ink TUI repaint storm），让 frame 速率有上界。
+- 立即 flush 之后 MUST 同时启动一个 `1000 / outputFps` 毫秒的 trailing
+  窗口，期间所有 PTY data 累积到 buffer；窗口到期时把累积内容统一 flush
+  成一帧 `output`。trailing 窗口让 frame 速率不超过 `outputFps`，避免
+  Ink TUI 高频重绘把 WebSocket 帧炸掉。
+- 不论 `outputFps` 配多少，leading-edge 字节 MUST 立即可见（不等
+  trailing 完成）。
 
 session 状态变化（status 事件）或 exit 时 MUST 立即触发 flush，不留尾巴。
 
@@ -130,14 +135,20 @@ session 状态变化（status 事件）或 exit 时 MUST 立即触发 flush，�
 
 - GIVEN 服务端 buffer 已为空、无定时器在跑
 - WHEN  PTY 写入一个字符（例如键盘 echo）
-- THEN  客户端在该字符到达后的极短时间内（远小于 100 ms）收到一帧 `output` 含该字符
+- THEN  客户端在该字符到达后的极短时间内（毫秒级）收到一帧 `output` 含该字符
 
-#### Scenario: 高频重绘期间帧速率被聚合限制
+#### Scenario: 高频重绘期间帧速率被 outputFps 上限限制
 
-- GIVEN PTY 在 100 ms 内连续写入多次（Ink TUI 重绘）
+- GIVEN `config.outputFps = 60`，PTY 在一帧时间（约 17 ms）内连续写入多次
 - WHEN  服务端处理这些数据
 - THEN  客户端最多收到 2 帧 `output`：一帧是首字节立即 leading flush，
-        一帧是 trailing 窗口结束时把后续累积内容一次发出
+        一帧是 trailing 窗口（约 17 ms 后）结束时把后续累积内容一次发出
+
+#### Scenario: outputFps 调小让窗口变长
+
+- GIVEN `config.outputFps = 24`
+- WHEN  PTY 持续写入数据（超过 trailing 窗口长度）
+- THEN  服务端的 trailing 窗口 MUST 约为 `Math.round(1000/24) = 42 ms`
 
 #### Scenario: status 切换前会先 flush
 

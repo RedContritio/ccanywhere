@@ -37,8 +37,9 @@ session MUST 以下列方式 spawn：PTY 列数（默认 100）、行数（默�
 session MUST 有 `state` 字段，取值 `starting | idle | busy | dead`：
 
 - `starting`：从构造到第一次 `setState('idle')` 之间。
-- `idle`：cc 等待用户输入。
-- `busy`：cc 正在执行一个 turn（由 hook 事件设置）。
+- `idle`：cc 等待用户输入，**或**没有 hook 反馈源时的默认非死状态。
+- `busy`：cc 正在执行一个 turn——**仅在 user 自行配置了 cc hook**（见
+  `hooks/spec.md`）的情况下才会出现。无 hook 配置时 state 不进入 busy。
 - `dead`：PTY 已退出，终态——不再有出向转换。
 
 session 还 MUST 有 `deletedAt: number | null` 字段，与 `state` 独立。
