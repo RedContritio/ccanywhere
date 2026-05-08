@@ -1,0 +1,129 @@
+import { useEffect, useRef } from 'react';
+import { FitAddon } from '@xterm/addon-fit';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Terminal, type ITheme } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
+import type { SessionState } from '../state/sessions.js';
+import { useEffectiveTheme } from '../state/use-theme.js';
+import { TerminalSocket } from '../ws.js';
+
+interface Props {
+  readonly sessionId: string;
+  readonly token: string;
+  readonly onStatus?: (state: SessionState) => void;
+  readonly onError?: (msg: string) => void;
+  readonly onConnected?: () => void;
+  readonly onReconnecting?: () => void;
+  readonly onDead?: () => void;
+}
+
+const THEMES: Record<'light' | 'dark', ITheme> = {
+  dark: {
+    background: '#0a0a0a',
+    foreground: '#e6e6e6',
+    cursor: '#e6e6e6',
+    selectionBackground: '#3a3a3a',
+  },
+  light: {
+    background: '#ffffff',
+    foreground: '#1a1a1a',
+    cursor: '#1a1a1a',
+    selectionBackground: '#cfd8e3',
+  },
+};
+
+const RESIZE_DEBOUNCE_MS = 100;
+
+export function TerminalView(props: Props): JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const handlersRef = useRef(props);
+  handlersRef.current = props;
+  const effective = useEffectiveTheme();
+  const effectiveRef = useRef(effective);
+  effectiveRef.current = effective;
+
+  // Mount / remount when sessionId or token changes.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return;
+
+    const term = new Terminal({
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      fontSize: 13,
+      theme: THEMES[effectiveRef.current],
+      convertEol: false,
+      allowProposedApi: true,
+      cursorBlink: true,
+      scrollback: 5_000,
+    });
+    termRef.current = term;
+
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.loadAddon(new Unicode11Addon());
+    term.loadAddon(new WebLinksAddon());
+    term.unicode.activeVersion = '11';
+    term.open(container);
+    try {
+      fit.fit();
+    } catch {
+      // ignore — fit can fail when container has no size yet
+    }
+
+    const sock = new TerminalSocket(props.sessionId, props.token, {
+      onSnapshot: (data) => {
+        term.reset();
+        term.write(data);
+      },
+      onOutput: (data) => term.write(data),
+      onStatus: (state) => handlersRef.current.onStatus?.(state),
+      onError: (msg) => {
+        term.write(`\r\n\x1b[31m[ws error: ${msg}]\x1b[0m\r\n`);
+        handlersRef.current.onError?.(msg);
+      },
+      onConnected: () => handlersRef.current.onConnected?.(),
+      onReconnecting: () => handlersRef.current.onReconnecting?.(),
+      onDead: () => handlersRef.current.onDead?.(),
+    });
+
+    const inputDisposer = term.onData((data) => sock.send({ type: 'input', data }));
+
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushResize = (): void => {
+      try {
+        fit.fit();
+      } catch {
+        return;
+      }
+      sock.send({ type: 'resize', cols: term.cols, rows: term.rows });
+    };
+    const observer = new ResizeObserver(() => {
+      if (resizeTimer !== null) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(flushResize, RESIZE_DEBOUNCE_MS);
+    });
+    observer.observe(container);
+
+    // initial resize once mounted
+    flushResize();
+
+    return () => {
+      observer.disconnect();
+      if (resizeTimer !== null) clearTimeout(resizeTimer);
+      inputDisposer.dispose();
+      sock.close();
+      term.dispose();
+      termRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.sessionId, props.token]);
+
+  // Theme switching without remount.
+  useEffect(() => {
+    const term = termRef.current;
+    if (term !== null) term.options.theme = THEMES[effective];
+  }, [effective]);
+
+  return <div ref={containerRef} className="terminal-view" />;
+}
