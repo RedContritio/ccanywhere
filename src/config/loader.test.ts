@@ -23,7 +23,7 @@ describe('loadConfig', () => {
 
   const validBase = {
     tokens: [{ label: 'laptop', token: 'a'.repeat(32) }],
-    projects: [{ id: 'demo', name: 'Demo', cwd: '/tmp/demo' }],
+    projectsRoot: '/tmp/projects-root',
   };
 
   it('loads a valid config and applies defaults', () => {
@@ -33,7 +33,7 @@ describe('loadConfig', () => {
     expect(cfg.bindHost).toBe('127.0.0.1');
     expect(cfg.claudeBin).toBe('claude');
     expect(cfg.tokens).toHaveLength(1);
-    expect(cfg.projects[0]?.id).toBe('demo');
+    expect(cfg.projectsRoot).toBe('/tmp/projects-root');
     expect(cfg.deletedSessionTtlMs).toBe(600_000);
     expect(cfg.wsHeartbeat.intervalMs).toBe(30_000);
     expect(cfg.wsHeartbeat.timeoutMs).toBe(60_000);
@@ -98,33 +98,19 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/at least one token/);
   });
 
-  it('rejects empty projects array', () => {
-    write({ ...validBase, projects: [] });
-    expect(() => loadConfig(path)).toThrow(/at least one project/);
+  it('rejects missing projectsRoot', () => {
+    write({ tokens: validBase.tokens });
+    expect(() => loadConfig(path)).toThrow(/projectsRoot/);
+  });
+
+  it('rejects empty projectsRoot', () => {
+    write({ ...validBase, projectsRoot: '' });
+    expect(() => loadConfig(path)).toThrow(/projectsRoot/);
   });
 
   it('rejects short token', () => {
     write({ ...validBase, tokens: [{ label: 'x', token: 'short' }] });
     expect(() => loadConfig(path)).toThrow(ConfigError);
-  });
-
-  it('rejects non-kebab project id', () => {
-    write({
-      ...validBase,
-      projects: [{ id: 'BadId', name: 'X', cwd: '/tmp' }],
-    });
-    expect(() => loadConfig(path)).toThrow(/kebab-case/);
-  });
-
-  it('rejects duplicate project ids', () => {
-    write({
-      ...validBase,
-      projects: [
-        { id: 'dup', name: 'A', cwd: '/tmp/a' },
-        { id: 'dup', name: 'B', cwd: '/tmp/b' },
-      ],
-    });
-    expect(() => loadConfig(path)).toThrow(/duplicate project id/);
   });
 
   it('rejects duplicate token values', () => {

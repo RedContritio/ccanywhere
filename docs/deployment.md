@@ -37,7 +37,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 | `port` | 默认 `62275`（一次性随机选定）。多机部署改成别的 |
 | `claudeBin` | 写**绝对路径**。LaunchAgent 的 PATH 不含 `~/.local/bin`，相对名 `claude` 会找不到导致 spawn 立即 dead |
 | `tokens[].token` | 用 `openssl rand -hex 32` 生成新值，至少 16 字符 |
-| `projects[].cwd` | 暴露给 cc 的项目根，绝对路径 |
+| `projectsRoot` | 项目集合根目录（绝对路径），其直接子目录被自动列为可选项目；启动时不存在会自动 mkdir，不可读直接 fatal，不可写则只能列/选不能新建 |
 | `outputFps` | WS 输出最大帧率，1..240 默认 60。带宽紧张可调到 24 |
 | `deletedSessionTtlMs` | 软删除保留时长，默认 600_000（10 分钟）|
 | `wsHeartbeat.timeoutMs` | 必须严格大于 `intervalMs`，默认 60000/30000 |

@@ -47,14 +47,6 @@ export function loadConfig(path: string = defaultConfigPath()): Config {
     throw new ConfigError(`config validation failed:\n${issues}`, path);
   }
 
-  const seenIds = new Set<string>();
-  for (const p of result.data.projects) {
-    if (seenIds.has(p.id)) {
-      throw new ConfigError(`duplicate project id: ${p.id}`, path);
-    }
-    seenIds.add(p.id);
-  }
-
   const seenTokens = new Set<string>();
   for (const t of result.data.tokens) {
     if (seenTokens.has(t.token)) {

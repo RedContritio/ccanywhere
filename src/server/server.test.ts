@@ -4,12 +4,33 @@ import { join } from 'node:path';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Config } from '../config/schema.js';
+import { ProjectStore } from '../projects/store.js';
 import { SessionManager } from '../session/manager.js';
 import { encodeProjectCwd } from './history.js';
 import { buildServer } from './server.js';
 
 const userToken = 'a'.repeat(32);
 const internalHookToken = 'h'.repeat(32);
+
+interface TestProjectsEnv {
+  projectsRoot: string;
+  projectStore: ProjectStore;
+  demoCwd: string;
+  cleanup: () => void;
+}
+
+function setupProjects(): TestProjectsEnv {
+  const projectsRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-projects-'));
+  mkdirSync(join(projectsRoot, 'demo'));
+  const statePath = join(projectsRoot, '.projects-state.json');
+  const projectStore = new ProjectStore({ projectsRoot, statePath });
+  return {
+    projectsRoot,
+    projectStore,
+    demoCwd: join(projectsRoot, 'demo'),
+    cleanup: () => rmSync(projectsRoot, { recursive: true, force: true }),
+  };
+}
 
 const baseConfig: Config = {
   port: 7878,
@@ -20,18 +41,23 @@ const baseConfig: Config = {
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
   tokens: [{ label: 'laptop', token: userToken }],
-  projects: [{ id: 'demo', name: 'Demo', cwd: process.cwd() }],
+  // Placeholder: each describe block creates a real tmp dir + ProjectStore;
+  // buildServer reads from projectStore, not config.projectsRoot.
+  projectsRoot: '/tmp/ccanywhere-test-placeholder',
 };
 
 describe('REST API', () => {
   let mgr: SessionManager;
   let app: FastifyInstance;
+  let env: TestProjectsEnv;
 
   beforeEach(async () => {
+    env = setupProjects();
     mgr = new SessionManager();
     app = await buildServer({
       config: baseConfig,
       manager: mgr,
+      projectStore: env.projectStore,
       internalHookToken,
       webDistDir: null,
     });
@@ -40,6 +66,7 @@ describe('REST API', () => {
   afterEach(async () => {
     await mgr.killAll();
     await app.close();
+    env.cleanup();
   });
 
   it('healthz is public', async () => {
@@ -97,6 +124,87 @@ describe('REST API', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/projects/nope/history',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('POST /api/projects creates a new subdir under projectsRoot', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      payload: { name: 'fresh' },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json() as { id: string; name: string; cwd: string };
+    expect(body.id).toBe('fresh');
+    expect(body.cwd).toBe(join(env.projectsRoot, 'fresh'));
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    const ids = (list.json() as { projects: Array<{ id: string }> }).projects.map(
+      (p) => p.id,
+    );
+    expect(ids).toContain('fresh');
+  });
+
+  it('POST /api/projects 400 on invalid body', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      payload: { name: '' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /api/projects 400 on path traversal attempt', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      payload: { name: '../escape' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /api/projects 409 when name already exists', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: { Authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
+      payload: { name: 'demo' },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('DELETE /api/projects/:id hides the project (does not delete on disk)', async () => {
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/api/projects/demo',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    expect(del.statusCode).toBe(204);
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    const ids = (list.json() as { projects: Array<{ id: string }> }).projects.map(
+      (p) => p.id,
+    );
+    expect(ids).not.toContain('demo');
+  });
+
+  it('DELETE /api/projects/:id 404 for unknown id', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/projects/ghost',
       headers: { Authorization: `Bearer ${userToken}` },
     });
     expect(res.statusCode).toBe(404);
@@ -302,11 +410,12 @@ describe('REST API with historyRoot for resume validation', () => {
   let mgr: SessionManager;
   let app: FastifyInstance;
   let historyRoot: string;
-  const cwd = process.cwd();
+  let env: TestProjectsEnv;
 
   beforeEach(async () => {
+    env = setupProjects();
     historyRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-srv-hist-'));
-    const projDir = join(historyRoot, encodeProjectCwd(cwd));
+    const projDir = join(historyRoot, encodeProjectCwd(env.demoCwd));
     mkdirSync(projDir, { recursive: true });
     writeFileSync(
       join(projDir, 'known-session.jsonl'),
@@ -317,6 +426,7 @@ describe('REST API with historyRoot for resume validation', () => {
     app = await buildServer({
       config: baseConfig,
       manager: mgr,
+      projectStore: env.projectStore,
       internalHookToken,
       historyRoot,
       webDistDir: null,
@@ -327,6 +437,7 @@ describe('REST API with historyRoot for resume validation', () => {
     await mgr.killAll();
     await app.close();
     rmSync(historyRoot, { recursive: true, force: true });
+    env.cleanup();
   });
 
   it('accepts resume when sessionId exists in history', async () => {
@@ -355,6 +466,7 @@ describe('REST API with historyRoot for resume validation', () => {
 describe('REST API idempotency', () => {
   let mgr: SessionManager;
   let app: FastifyInstance;
+  let env: TestProjectsEnv;
 
   const otherToken = 'b'.repeat(32);
   const cfgWithTwoTokens: Config = {
@@ -366,10 +478,12 @@ describe('REST API idempotency', () => {
   };
 
   beforeEach(async () => {
+    env = setupProjects();
     mgr = new SessionManager();
     app = await buildServer({
       config: cfgWithTwoTokens,
       manager: mgr,
+      projectStore: env.projectStore,
       internalHookToken,
       idempotencyTtlMs: 60_000,
       webDistDir: null,
@@ -379,6 +493,7 @@ describe('REST API idempotency', () => {
   afterEach(async () => {
     await mgr.killAll();
     await app.close();
+    env.cleanup();
   });
 
   async function post(
@@ -470,8 +585,10 @@ describe('REST API SPA fallback', () => {
   let mgr: SessionManager;
   let app: FastifyInstance;
   let webDistDir: string;
+  let env: TestProjectsEnv;
 
   beforeEach(async () => {
+    env = setupProjects();
     webDistDir = mkdtempSync(join(tmpdir(), 'ccanywhere-web-'));
     writeFileSync(
       join(webDistDir, 'index.html'),
@@ -481,6 +598,7 @@ describe('REST API SPA fallback', () => {
     app = await buildServer({
       config: baseConfig,
       manager: mgr,
+      projectStore: env.projectStore,
       internalHookToken,
       webDistDir,
     });
@@ -490,6 +608,7 @@ describe('REST API SPA fallback', () => {
     await mgr.killAll();
     await app.close();
     rmSync(webDistDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   it('GET / serves index.html when web/dist exists', async () => {
@@ -525,12 +644,15 @@ describe('REST API SPA fallback', () => {
 describe('REST API without web/dist', () => {
   let mgr: SessionManager;
   let app: FastifyInstance;
+  let env: TestProjectsEnv;
 
   beforeEach(async () => {
+    env = setupProjects();
     mgr = new SessionManager();
     app = await buildServer({
       config: baseConfig,
       manager: mgr,
+      projectStore: env.projectStore,
       internalHookToken,
       webDistDir: null,
     });
@@ -539,6 +661,7 @@ describe('REST API without web/dist', () => {
   afterEach(async () => {
     await mgr.killAll();
     await app.close();
+    env.cleanup();
   });
 
   it('unknown route still returns envelope when SPA disabled', async () => {

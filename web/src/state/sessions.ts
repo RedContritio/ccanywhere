@@ -43,6 +43,10 @@ interface SessionsStore {
   deleteSession: (id: string) => Promise<void>;
   /** Optimistic local mark — server is source of truth. */
   markSessionDeletedLocal: (id: string) => void;
+  /** Create a new project subdir under the server's projectsRoot. */
+  createProject: (name: string) => Promise<Project>;
+  /** Hide a project (server-side soft-delete; directory remains on disk). */
+  hideProject: (id: string) => Promise<void>;
 }
 
 const initial = {
@@ -109,6 +113,22 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
         x.id === id ? { ...x, deletedAt: x.deletedAt ?? Date.now() } : x,
       ),
     })),
+  createProject: async (name) => {
+    const created = await api<Project>('/api/projects', {
+      method: 'POST',
+      body: { name },
+    });
+    set((s) => ({
+      projects: s.projects.some((p) => p.id === created.id)
+        ? s.projects
+        : [...s.projects, created].sort((a, b) => a.id.localeCompare(b.id)),
+    }));
+    return created;
+  },
+  hideProject: async (id) => {
+    await api<void>(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
+  },
 }));
 
 /** Tests only. */

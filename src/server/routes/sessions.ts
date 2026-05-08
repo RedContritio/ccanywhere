@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
+import type { ProjectStore } from '../../projects/store.js';
 import type { SessionManager, SpawnOptions } from '../../session/manager.js';
 import { listHistory } from '../history.js';
 import { hashBody, IdempotencyStore, isValidIdempotencyKey } from '../idempotency.js';
@@ -30,6 +31,7 @@ export async function registerSessionRoutes(
   app: FastifyInstance,
   config: Config,
   manager: SessionManager,
+  projectStore: ProjectStore,
   options: SessionRoutesOptions = {},
 ): Promise<void> {
   app.get('/api/sessions', () => ({
@@ -107,7 +109,7 @@ export async function registerSessionRoutes(
       return;
     }
     const body = parsed.data;
-    const project = config.projects.find((p) => p.id === body.projectId);
+    const project = projectStore.get(body.projectId);
     if (!project) {
       const errBody = { error: { code: 'not_found', message: 'project not found' } };
       if (idempotencyKey !== null && store) {

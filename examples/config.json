@@ -10,11 +10,5 @@
     }
   ],
 
-  "projects": [
-    {
-      "id": "demo",
-      "name": "Demo Project",
-      "cwd": "/absolute/path/to/your/project"
-    }
-  ]
+  "projectsRoot": "/Users/<you>/Projects"
 }

@@ -342,6 +342,55 @@
   border-color: var(--accent);
 }
 
+.dialog-project-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: -6px;
+  font-size: 12px;
+  min-height: 28px;
+}
+
+.dialog-link {
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  padding: 4px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dialog-link.is-danger {
+  color: var(--danger);
+}
+
+.dialog-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-new-project {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  align-items: center;
+}
+
+.dialog-new-project input {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+
+.dialog-new-project input:focus {
+  border-color: var(--accent);
+}
+
 .dialog-mode {
   border: 1px solid var(--border);
   border-radius: 6px;

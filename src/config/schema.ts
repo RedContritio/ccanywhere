@@ -8,16 +8,6 @@ export const TokenSchema = z.object({
 });
 export type Token = z.infer<typeof TokenSchema>;
 
-export const ProjectSchema = z.object({
-  id: z
-    .string()
-    .min(1)
-    .regex(/^[a-z0-9][a-z0-9-]*$/, 'project id must be kebab-case'),
-  name: z.string().min(1),
-  cwd: z.string().min(1),
-});
-export type Project = z.infer<typeof ProjectSchema>;
-
 export const WsHeartbeatSchema = z
   .object({
     intervalMs: z.number().int().min(1_000).default(30_000),
@@ -45,6 +35,11 @@ export const ConfigSchema = z.object({
    */
   outputFps: z.number().int().min(1).max(240).default(60),
   tokens: z.array(TokenSchema).min(1, 'at least one token must be configured'),
-  projects: z.array(ProjectSchema).min(1, 'at least one project must be configured'),
+  /**
+   * Absolute path to a directory whose direct subdirectories are exposed
+   * as projects. Created at startup if missing; readable and (preferably)
+   * writable. Replaces the old `projects[]` array config.
+   */
+  projectsRoot: z.string().min(1, 'projectsRoot must be set'),
 });
 export type Config = z.infer<typeof ConfigSchema>;

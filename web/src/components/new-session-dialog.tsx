@@ -22,6 +22,9 @@ export function NewSessionDialog({
   onCreate,
 }: Props): JSX.Element | null {
   const fetchHistory = useSessionsStore((s) => s.fetchHistory);
+  const createProject = useSessionsStore((s) => s.createProject);
+  const hideProject = useSessionsStore((s) => s.hideProject);
+
   const [projectId, setProjectId] = useState<string>(projects[0]?.id ?? '');
   const [mode, setMode] = useState<'fresh' | 'resume'>('fresh');
   const [history, setHistory] = useState<HistorySummary[]>([]);
@@ -30,7 +33,11 @@ export function NewSessionDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset state when dialog opens.
+  // Inline new-project form state.
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectBusy, setNewProjectBusy] = useState(false);
+
   useEffect(() => {
     if (open) {
       setProjectId(projects[0]?.id ?? '');
@@ -39,10 +46,24 @@ export function NewSessionDialog({
       setResumeId('');
       setSubmitting(false);
       setError(null);
+      setNewProjectOpen(false);
+      setNewProjectName('');
+      setNewProjectBusy(false);
     }
   }, [open, projects]);
 
-  // Fetch history when switching to resume mode or changing project.
+  // Keep projectId valid as the projects list mutates (create / hide).
+  useEffect(() => {
+    if (!open) return;
+    if (projectId === '') {
+      if (projects.length > 0) setProjectId(projects[0]!.id);
+      return;
+    }
+    if (!projects.some((p) => p.id === projectId)) {
+      setProjectId(projects[0]?.id ?? '');
+    }
+  }, [open, projects, projectId]);
+
   useEffect(() => {
     if (!open || mode !== 'resume' || projectId === '') return;
     let cancelled = false;
@@ -88,6 +109,37 @@ export function NewSessionDialog({
     }
   };
 
+  const submitNewProject = async (): Promise<void> => {
+    const name = newProjectName.trim();
+    if (name.length === 0) return;
+    setNewProjectBusy(true);
+    setError(null);
+    try {
+      const created = await createProject(name);
+      setProjectId(created.id);
+      setNewProjectOpen(false);
+      setNewProjectName('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建项目失败');
+    } finally {
+      setNewProjectBusy(false);
+    }
+  };
+
+  const onHideClick = async (): Promise<void> => {
+    if (projectId === '') return;
+    const confirmed = window.confirm(
+      `隐藏项目 "${projectId}"？目录会保留在磁盘上；恢复时可在 ~/.config/ccanywhere/projects-state.json 里手动删除该 id。`,
+    );
+    if (!confirmed) return;
+    setError(null);
+    try {
+      await hideProject(projectId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '隐藏项目失败');
+    }
+  };
+
   return (
     <div className="dialog-backdrop" onClick={onClose} role="presentation">
       <div
@@ -103,14 +155,80 @@ export function NewSessionDialog({
 
         <label className="dialog-field">
           <span>项目</span>
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.cwd})
-              </option>
-            ))}
-          </select>
+          {projects.length > 0 ? (
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="dialog-hint">
+              还没有项目。点击"+ 新建项目"，或在你 mac 的 Projects/ 下手动 mkdir 一个子目录。
+            </p>
+          )}
         </label>
+
+        <div className="dialog-project-actions">
+          {newProjectOpen ? (
+            <div className="dialog-new-project">
+              <input
+                type="text"
+                placeholder="目录名（直接落在 Projects/ 下）"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                disabled={newProjectBusy}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submitNewProject();
+                  if (e.key === 'Escape') {
+                    setNewProjectOpen(false);
+                    setNewProjectName('');
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="dialog-link"
+                onClick={() => void submitNewProject()}
+                disabled={newProjectBusy || newProjectName.trim() === ''}
+              >
+                {newProjectBusy ? '创建中…' : '创建'}
+              </button>
+              <button
+                type="button"
+                className="dialog-link"
+                onClick={() => {
+                  setNewProjectOpen(false);
+                  setNewProjectName('');
+                }}
+                disabled={newProjectBusy}
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="dialog-link"
+                onClick={() => setNewProjectOpen(true)}
+              >
+                + 新建项目
+              </button>
+              {projectId.length > 0 && projects.length > 0 && (
+                <button
+                  type="button"
+                  className="dialog-link is-danger"
+                  onClick={() => void onHideClick()}
+                >
+                  隐藏选中
+                </button>
+              )}
+            </>
+          )}
+        </div>
 
         <fieldset className="dialog-mode">
           <legend>模式</legend>

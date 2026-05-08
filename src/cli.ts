@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { ConfigError, defaultConfigPath, loadConfig } from './config/loader.js';
 import { logger } from './log.js';
+import {
+  ProjectStore,
+  ProjectStoreError,
+  ensureProjectsRoot,
+} from './projects/store.js';
 import { buildServer } from './server/server.js';
 import { SessionManager } from './session/manager.js';
 
@@ -19,6 +26,28 @@ async function main(): Promise<void> {
     throw err;
   }
 
+  const projectsRoot = resolve(config.projectsRoot);
+  let writable = false;
+  try {
+    ({ writable } = ensureProjectsRoot(projectsRoot));
+  } catch (err) {
+    if (err instanceof ProjectStoreError) {
+      logger.fatal(err.message);
+      process.exit(2);
+    }
+    throw err;
+  }
+  if (!writable) {
+    logger.warn(
+      { projectsRoot },
+      'projectsRoot is read-only — list/select projects work, but creating new projects will fail',
+    );
+  }
+  const projectStore = new ProjectStore({
+    projectsRoot,
+    statePath: join(homedir(), '.config', 'ccanywhere', 'projects-state.json'),
+  });
+
   const manager = new SessionManager({
     deletedSessionTtlMs: config.deletedSessionTtlMs,
   });
@@ -31,6 +60,7 @@ async function main(): Promise<void> {
   const app = await buildServer({
     config,
     manager,
+    projectStore,
     internalHookToken,
   });
 
@@ -51,7 +81,8 @@ async function main(): Promise<void> {
     {
       configPath,
       bind: `${config.bindHost}:${actualPort}`,
-      projects: config.projects.length,
+      projectsRoot,
+      projects: projectStore.list().length,
       tokens: config.tokens.length,
       internalHookToken,
     },

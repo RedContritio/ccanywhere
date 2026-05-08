@@ -1,18 +1,70 @@
 import type { FastifyInstance } from 'fastify';
-import type { Project } from '../../config/schema.js';
+import { z } from 'zod';
+import { ProjectStore, ProjectStoreError } from '../../projects/store.js';
 import { listHistory } from '../history.js';
+
+const CreateBodySchema = z.object({
+  name: z.string().min(1).max(255),
+});
 
 export async function registerProjectRoutes(
   app: FastifyInstance,
-  projects: ReadonlyArray<Project>,
+  store: ProjectStore,
   historyRoot?: string,
 ): Promise<void> {
   app.get('/api/projects', () => ({
-    projects: projects.map((p) => ({ id: p.id, name: p.name, cwd: p.cwd })),
+    projects: store.list().map((p) => ({ id: p.id, name: p.name, cwd: p.cwd })),
   }));
 
+  app.post('/api/projects', async (req, reply) => {
+    const parsed = CreateBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      await reply.code(400).send({
+        error: {
+          code: 'invalid_request',
+          message: 'body validation failed',
+          issues: parsed.error.issues,
+        },
+      });
+      return;
+    }
+    let project;
+    try {
+      project = store.create(parsed.data.name);
+    } catch (err) {
+      if (err instanceof ProjectStoreError) {
+        const code = err.message.includes('already exists')
+          ? 'already_exists'
+          : err.message.includes('no write permission')
+            ? 'forbidden'
+            : 'invalid_request';
+        const status = code === 'already_exists' ? 409 : code === 'forbidden' ? 403 : 400;
+        await reply.code(status).send({
+          error: { code, message: err.message },
+        });
+        return;
+      }
+      throw err;
+    }
+    await reply.code(201).send({ id: project.id, name: project.name, cwd: project.cwd });
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
+    const id = req.params.id;
+    if (store.get(id) === null) {
+      await reply
+        .code(404)
+        .send({ error: { code: 'not_found', message: 'project not found' } });
+      return;
+    }
+    // hide() is idempotent: re-DELETE returns 204 too. Hidden = soft-delete,
+    // directory stays on disk; restore by removing id from projects-state.json.
+    store.hide(id);
+    await reply.code(204).send();
+  });
+
   app.get<{ Params: { id: string } }>('/api/projects/:id/history', async (req, reply) => {
-    const proj = projects.find((p) => p.id === req.params.id);
+    const proj = store.get(req.params.id);
     if (!proj) {
       await reply
         .code(404)
@@ -20,7 +72,9 @@ export async function registerProjectRoutes(
       return;
     }
     const history =
-      historyRoot === undefined ? await listHistory(proj.cwd) : await listHistory(proj.cwd, historyRoot);
+      historyRoot === undefined
+        ? await listHistory(proj.cwd)
+        : await listHistory(proj.cwd, historyRoot);
     return { history };
   });
 }

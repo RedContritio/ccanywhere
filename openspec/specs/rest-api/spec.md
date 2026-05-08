@@ -27,13 +27,42 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 
 ### Requirement: GET /api/projects
 
-返回配置的项目白名单。
+返回 `projectsRoot` 下当前可见的项目（每次请求实时扫盘 + 过滤隐藏列表）。
 
 ```
 200 { "projects": [ { "id", "name", "cwd" }, ... ] }
 ```
 
-响应 MUST 按配置顺序列出**所有**项目。系统是单用户的，不做用户级过滤。
+响应 MUST 按 `id` 字典序列出**所有**未被隐藏的子目录。系统是单用户的，不做
+用户级过滤。`id` MUST 等于子目录 basename，`cwd` MUST 等于该 basename 在
+`projectsRoot` 下的完整绝对路径。
+
+### Requirement: POST /api/projects
+
+在 `projectsRoot` 下创建一个新的项目子目录。
+
+```
+请求: { "name": "<basename>" }
+201 { "id": "<basename>", "name": "<basename>", "cwd": "<projectsRoot>/<basename>" }
+400 invalid_request   非空、≤255 字符、不含 `/` 和 0x00-0x1f、非 `.`/`..`
+403 forbidden         projectsRoot 不可写（启动时 `writable=false`）
+409 already_exists    同名目录已存在
+```
+
+若该 name 之前被 hide 过，create 成功后 MUST 自动从 hidden 列表移除（恢复
+可见）。
+
+### Requirement: DELETE /api/projects/:id
+
+将项目从可见列表中移除（**软删除**：磁盘目录保留）。
+
+```
+204             成功（首次或重复 DELETE 同 id 都返回 204，幂等）
+404 not_found   :id 不在当前可见列表
+```
+
+恢复一个被 hide 的项目：手动编辑 `~/.config/ccanywhere/projects-state.json`
+删掉 `hidden` 数组中的 id；或重新 POST 创建（若磁盘目录已被删，会重建）。
 
 ### Requirement: GET /api/projects/:id/history
 

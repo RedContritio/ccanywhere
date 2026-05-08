@@ -39,15 +39,17 @@ ccanywhere 启动时读一个 JSON 配置文件，里面包含运行所需的全
 | `claudeBin`              | string                                | `"claude"`    | cc 二进制路径或 PATH 内名称 |
 | `scrollbackBytes`        | ≥ 65536 的整数                        | `1048576`     | 单 session scrollback 上限 |
 | `tokens`                 | `{ label, token, ... }` 数组          | （必填，≥1）  | 用户 token 列表 |
-| `projects`               | `{ id, name, cwd }` 数组              | （必填，≥1）  | cc cwd 白名单 |
+| `projectsRoot`           | string                                | （必填）      | 项目集合根目录的绝对路径；其直接子目录被自动列为可选项目（取代 `projects[]` 静态白名单） |
 | `deletedSessionTtlMs`    | ≥ 60000 的整数                        | `600000`      | 软删除 session 在 manager 中保留时长（10 分钟，覆盖弱网络重试窗口） |
 | `wsHeartbeat`            | `{ intervalMs, timeoutMs }`           | 见下          | WS 帧级心跳参数 |
 
 `wsHeartbeat.intervalMs` 默认 `30000`，最小 `1000`。
 `wsHeartbeat.timeoutMs` 默认 `60000`，必须严格大于 `intervalMs`。
 
-每个 `tokens[i].token` MUST 至少 16 字符。每个 `projects[i].id` MUST 匹配
-`/^[a-z0-9][a-z0-9-]*$/`。
+每个 `tokens[i].token` MUST 至少 16 字符。`projectsRoot` MUST 非空字符串；
+启动时若该路径不存在 MUST 自动 `mkdir -p` 创建，若不可读 MUST fatal 退出，
+若可读不可写则继续运行但记录 warn（list/select OK，新建项目会失败）。
+project id MUST 等于其在 `projectsRoot` 下的目录 basename，无 kebab-case 限制。
 
 服务端代码 MUST NOT 在运行时承担端口选择、frpc 配置生成、frpc 子进程管理
 等职责。frp 部署相关的资料以 `examples/` 下的模板文件提供，由用户复制配置。
@@ -58,23 +60,35 @@ ccanywhere 启动时读一个 JSON 配置文件，里面包含运行所需的全
 - WHEN  服务端启动
 - THEN  MUST 退出，错误信息提及 `tokens`，退出码 `2`
 
-#### Scenario: 空 projects 数组被拒绝
+#### Scenario: 缺失 projectsRoot 被拒绝
 
-- GIVEN 配置中 `"projects": []`
+- GIVEN 配置中没有 `projectsRoot` 字段
 - WHEN  服务端启动
-- THEN  MUST 退出，错误信息提及 `projects`，退出码 `2`
+- THEN  MUST 退出，错误信息提及 `projectsRoot`，退出码 `2`
+
+#### Scenario: projectsRoot 不存在时自动创建
+
+- GIVEN 配置 `"projectsRoot": "/path/that/does/not/exist"`
+- WHEN  服务端启动
+- THEN  MUST 自动 `mkdir -p` 创建该路径，启动成功
+
+#### Scenario: projectsRoot 不可读 fatal
+
+- GIVEN `projectsRoot` 指向一个 chmod 0o000 的目录
+- WHEN  服务端启动
+- THEN  MUST 退出，错误信息含 "not readable"，退出码 `2`
+
+#### Scenario: projectsRoot 不可写仅 warn
+
+- GIVEN `projectsRoot` 指向一个 chmod 0o555 的目录
+- WHEN  服务端启动
+- THEN  服务正常启动，list/select project OK；POST `/api/projects` MUST 返回 403
 
 #### Scenario: 短 token 被拒绝
 
 - GIVEN token 字符串长度小于 16
 - WHEN  服务端启动
 - THEN  MUST 退出，退出码 `2`
-
-#### Scenario: 非 kebab-case 项目 id 被拒绝
-
-- GIVEN `projects[0].id = "BadId"`
-- WHEN  服务端启动
-- THEN  MUST 退出，错误信息提及 "kebab-case"，退出码 `2`
 
 #### Scenario: deletedSessionTtlMs 太小被拒绝
 
@@ -102,13 +116,8 @@ ccanywhere 启动时读一个 JSON 配置文件，里面包含运行所需的全
 
 ### Requirement: 重复检测
 
-加载器 MUST 拒绝包含重复 `projects[*].id` 或重复 `tokens[*].token` 的配置。
-
-#### Scenario: 重复项目 id
-
-- GIVEN 两个 project 条目共用 `id: "demo"`
-- WHEN  服务端启动
-- THEN  MUST 退出，错误信息含 "duplicate project id"，退出码 `2`
+加载器 MUST 拒绝包含重复 `tokens[*].token` 的配置。
+`projectsRoot` 下子目录的 id 唯一性由文件系统天然保证（同名 mkdir 失败）。
 
 #### Scenario: 重复 token 值
 

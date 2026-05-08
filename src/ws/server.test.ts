@@ -1,8 +1,12 @@
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { Config } from '../config/schema.js';
+import { ProjectStore } from '../projects/store.js';
 import { SessionManager } from '../session/manager.js';
 import { buildServer } from '../server/server.js';
 import type { ServerFrame } from './protocol.js';
@@ -19,21 +23,34 @@ const config: Config = {
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
   tokens: [{ label: 'laptop', token: userToken }],
-  projects: [{ id: 'demo', name: 'Demo', cwd: process.cwd() }],
+  projectsRoot: '/tmp/ccanywhere-test-placeholder',
 };
 
 interface Harness {
   app: FastifyInstance;
   manager: SessionManager;
   port: number;
+  projectsRoot: string;
 }
 
 async function startServer(): Promise<Harness> {
+  const projectsRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-ws-projects-'));
+  mkdirSync(join(projectsRoot, 'demo'));
+  const projectStore = new ProjectStore({
+    projectsRoot,
+    statePath: join(projectsRoot, '.projects-state.json'),
+  });
   const manager = new SessionManager();
-  const app = await buildServer({ config, manager, internalHookToken, webDistDir: null });
+  const app = await buildServer({
+    config,
+    manager,
+    projectStore,
+    internalHookToken,
+    webDistDir: null,
+  });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const addr = app.server.address() as AddressInfo;
-  return { app, manager, port: addr.port };
+  return { app, manager, port: addr.port, projectsRoot };
 }
 
 async function createSession(h: Harness): Promise<string> {
@@ -152,6 +169,7 @@ describe('WebSocket /ws/sessions/:id', () => {
     await h.manager.killAll();
     h.app.server.closeAllConnections();
     await h.app.close();
+    rmSync(h.projectsRoot, { recursive: true, force: true });
   });
 
   it('rejects connection without token', async () => {

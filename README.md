@@ -47,7 +47,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 - `tokens[0].token` 用 `openssl rand -hex 32` 生成一个新 token
 - `claudeBin` 写绝对路径（如 `/Users/<you>/.local/bin/claude`），LaunchAgent
   下的 PATH 不一定含 `~/.local/bin`
-- `projects` 改成你想暴露的项目目录列表
+- `projectsRoot` 改成你想作为"项目集合根"的目录（绝对路径，如 `/Users/<you>/Projects`）。其下的直接子目录都会被自动列为可选项目，新建 / 隐藏可在 web 端 NewSessionDialog 里完成
 
 ### 3. 跑起 ccanywhere（LaunchAgent）
 

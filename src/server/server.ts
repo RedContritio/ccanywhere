@@ -5,6 +5,7 @@ import staticPlugin from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from '../config/schema.js';
 import { logger } from '../log.js';
+import type { ProjectStore } from '../projects/store.js';
 import type { SessionManager } from '../session/manager.js';
 import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
@@ -16,6 +17,7 @@ import { registerHookRoutes } from './routes/hook.js';
 export interface BuildServerOptions {
   readonly config: Config;
   readonly manager: SessionManager;
+  readonly projectStore: ProjectStore;
   readonly internalHookToken: string;
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
@@ -55,9 +57,9 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   app.get('/healthz', () => ({ ok: true }));
 
   if (opts.historyRoot === undefined) {
-    await registerProjectRoutes(app, opts.config.projects);
+    await registerProjectRoutes(app, opts.projectStore);
   } else {
-    await registerProjectRoutes(app, opts.config.projects, opts.historyRoot);
+    await registerProjectRoutes(app, opts.projectStore, opts.historyRoot);
   }
   const idempotencyStore = new IdempotencyStore(opts.idempotencyTtlMs ?? 60 * 60 * 1000);
   app.addHook('onClose', () => {
@@ -69,7 +71,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     idempotencyStore: IdempotencyStore;
   } = { idempotencyStore };
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
-  await registerSessionRoutes(app, opts.config, opts.manager, sessionOpts);
+  await registerSessionRoutes(app, opts.config, opts.manager, opts.projectStore, sessionOpts);
   await registerHookRoutes(app, opts.manager);
   await registerWebSocketRoutes(app, opts.manager, {
     heartbeat: opts.config.wsHeartbeat,
