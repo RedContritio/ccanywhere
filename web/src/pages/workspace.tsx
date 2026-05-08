@@ -5,9 +5,12 @@ import {
   NewSessionDialog,
   type CreateRequest,
 } from '../components/new-session-dialog.js';
+import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
+import { useBackgroundPoll } from '../state/use-background-poll.js';
+import { useCompletionNotify } from '../state/use-completion-notify.js';
 import { newIdempotencyKey } from '../api.js';
 import { useAuthStore } from '../state/auth.js';
 import { useSessionsStore, type SessionState } from '../state/sessions.js';
@@ -37,6 +40,9 @@ export function WorkspacePage(): JSX.Element {
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
+
+  useBackgroundPoll();
+  useCompletionNotify(navigate);
 
   // Live status from the WS layer; a per-:id key resets it on session switch.
   const [wsConnection, setWsConnection] = useState<WsConnection>('connecting');
@@ -116,6 +122,7 @@ export function WorkspacePage(): JSX.Element {
           登出
         </button>
       </header>
+      <NotificationBanner />
       <div className="workspace-body">
         <SessionList
           sessions={sessions}
