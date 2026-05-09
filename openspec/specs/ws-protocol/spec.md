@@ -10,19 +10,24 @@ WebSocket 是数据面：把 PTY 的字节流双向送给 xterm.js，并在多 c
 ### Requirement: 连接路径与鉴权
 
 WebSocket 端点 MUST 是 `GET /ws/sessions/:id`，路径参数 `:id` 是 session UUID。
-鉴权按 `openspec/specs/auth/spec.md`——用户 token 通过 `?token=` 传入
-（移动端浏览器 WS API 不能自定义 header，query 串是实际选择）。
+鉴权按 `openspec/specs/auth/spec.md`——浏览器 WS upgrade 自动带 same-origin
+HttpOnly cookie `ccanywhere_session=<id>`，服务端从 cookie 解析 device 身份。
+MUST NOT 接受 `?token=` query 参数。
 
-#### Scenario: 缺 token 的 upgrade 失败
+WS upgrade MAY 携带 `?lastSeq=N` query 参数（N 为非负整数）。N 是 cumulative
+byte counter，重连时客户端反馈"上一次接收过的输出截止位置"，用于 incremental
+delta 协商（详见"连接初始化序列"）。N 缺失、非整数、负数时按 0 处理。
 
-- GIVEN `GET /ws/sessions/anything`，无 token
+#### Scenario: 缺 cookie 的 upgrade 失败
+
+- GIVEN `GET /ws/sessions/anything`，请求不带 `Cookie`
 - WHEN  服务端处理 upgrade
 - THEN  返回 HTTP `401`
 - AND   底层 socket 立即关闭
 
 #### Scenario: 未知 sessionId 关闭
 
-- GIVEN 合法 token，但 `:id` 不在 manager 中
+- GIVEN 合法 cookie，但 `:id` 不在 manager 中
 - WHEN  WebSocket 完成升级后服务端处理
 - THEN  服务端 MUST 发送 `error` 帧 `{ "type": "error", "message": "session not found" }`
 - AND   随即用 close code `1008` 关闭连接
@@ -61,29 +66,84 @@ WebSocket 端点 MUST 是 `GET /ws/sessions/:id`，路径参数 `:id` 是 sessio
 服务端发往客户端的帧 MUST 是以下之一：
 
 ```json
-{ "type": "snapshot", "data": "<UTF-8 scrollback>" }
-{ "type": "output",   "data": "<UTF-8 since last flush>" }
+{ "type": "snapshot", "upToSeq": <int>, "data": "<UTF-8 minimal-ANSI screen>" }
+{ "type": "output",   "seq": <int>,     "data": "<UTF-8 since last flush>" }
 { "type": "status",   "state": "starting|idle|busy|dead" }
 { "type": "error",    "message": "<人类可读>" }
 { "type": "pong" }
 ```
 
+`upToSeq` / `seq` 字段是服务端 PTY 输出的 cumulative byte counter——session
+生命周期内单调递增，不因 reconnect / scrollback eviction 而重置。客户端收到
+任一帧 MUST 把 `upToSeq` 或 `seq` 记为 `lastSeq`，下次 reconnect 时通过
+`?lastSeq=N` 反馈给服务端。
+
+`snapshot.data` 是当前可见 grid 的 minimal-ANSI 序列化（来自 server-side
+xterm-headless + SerializeAddon，详见 `openspec/specs/sessions/spec.md` 的
+"server-side 屏幕镜像"），含 cursor 位置、alt-screen 切换、当前 cell 内容；
+**不是** scrollback 的 raw bytes。`output.data` 是 PTY 增量字节。
+
 ### Requirement: 连接初始化序列
 
-升级成功后，服务端 MUST 在 handler 入口同步发送：
+升级成功后，服务端 MUST NOT 立即发 initial state——而是等待客户端的第一个
+`resize` 帧。理由：服务端的 screenState (xterm-headless) 与客户端 xterm 必须
+先对齐 cols/rows，再 serialize 才能让客户端按其实际显示尺寸渲染。
 
-1. `snapshot` 帧，data 为当前 `session.scrollback.snapshot()`。
-2. `status` 帧，state 为 `session.state`。
+收到第一个 `resize` 帧后：
 
-这两帧 MUST 在客户端接收任何 `output` 之前到达。客户端因此可以通过 snapshot
-全量重建 xterm.js 状态，无需依赖增量回放。
+1. 服务端 MUST 把该 resize 同步透传到 PTY（与"resize 与多 client"一致）。
+2. 服务端 MUST 等待约 200 ms（让 cc 收到 SIGWINCH 后的重画 bytes 流到
+   screenState），然后按 `?lastSeq=N` 协商：
+   - `lastSeq == 0`（缺失、无效或显式为 0）：发 `snapshot` 帧（data 来自
+     `screenState.snapshot()`，upToSeq 取 `scrollback.headSeq`），再发
+     `status` 帧。客户端 MUST 在收到 snapshot 后 reset xterm buffer 再写入。
+   - `lastSeq > 0` 且 `scrollback.tailSeq < lastSeq <= scrollback.headSeq`：
+     发 `output { seq: headSeq, data: scrollback.since(lastSeq) }` + `status`
+     帧。客户端 MUST NOT reset xterm buffer，直接 append。
+   - `lastSeq > 0` 但 `lastSeq <= scrollback.tailSeq`（数据已被 ring buffer
+     FIFO 丢弃）：fallback 走 `lastSeq == 0` 路径——发 snapshot + status。
+   - `since(lastSeq)` 长度为 0 时（客户端没漏任何字节）：MUST NOT 发 `output`
+     帧，仅发 `status`。
 
-#### Scenario: 重连后立即收到 snapshot
+若客户端 1.5 秒内未发 `resize`（兜底），服务端 MUST 用 session 当前 cols/rows
+直接 serialize 并按上述 lastSeq 路径发 initial state。
 
-- GIVEN 一个进行中的 session 已积累若干 PTY 输出
-- WHEN  新客户端通过 `/ws/sessions/:id` 连入
-- THEN  客户端按顺序收到一个 `snapshot` 帧、一个 `status` 帧
-- AND   `snapshot.data` 至少包含目前的 scrollback 内容
+#### Scenario: 新连接（无 lastSeq）首次 resize 后收 snapshot
+
+- GIVEN session 已积累若干 PTY 输出
+- WHEN  客户端通过 `/ws/sessions/:id`（不带 lastSeq）连入并发首个 resize
+- THEN  在 resize 后约 200 ms，客户端按顺序收到 `snapshot { upToSeq, data }` 与 `status`
+- AND   `snapshot.data` 是 minimal-ANSI（含 cursor、alt-screen、cell 内容），不是 scrollback raw bytes
+- AND   `snapshot.upToSeq` 等于服务端当前 `scrollback.headSeq`
+
+#### Scenario: 重连（lastSeq 在 ring 内）收增量 output
+
+- GIVEN 客户端之前已 attach 过该 session，记得 `lastSeq = L > 0`
+- AND   服务端 `scrollback.tailSeq < L <= scrollback.headSeq`
+- WHEN  客户端用 `?lastSeq=L` 重连并发首个 resize
+- THEN  客户端收到 `output { seq, data }` 帧，`data` 等于 `scrollback.since(L)`，`seq` 等于 `scrollback.headSeq`
+- AND   不收 `snapshot` 帧（客户端 xterm buffer 不 reset）
+- AND   随后收到 `status` 帧
+
+#### Scenario: 重连（lastSeq 已 evict）回退 snapshot
+
+- GIVEN 客户端用 `?lastSeq=L` 重连
+- AND   服务端 `L <= scrollback.tailSeq`（数据已被 FIFO 丢弃）
+- WHEN  客户端发首个 resize
+- THEN  客户端收到 `snapshot` 帧（data 来自 `screenState.snapshot()`）+ `status`
+
+#### Scenario: 重连且无字节漏失只发 status
+
+- GIVEN 客户端用 `?lastSeq=L` 重连
+- AND   服务端 `L == scrollback.headSeq`（客户端无漏失）
+- WHEN  客户端发首个 resize
+- THEN  客户端只收到 `status` 帧（不发 snapshot 也不发 output）
+
+#### Scenario: 客户端不发 resize 时 1.5 秒兜底
+
+- GIVEN 客户端连入但未发任何 resize 帧
+- WHEN  超过 1.5 秒
+- THEN  服务端 MUST 用当前 session cols/rows 触发 initial state（按 lastSeq 路径）
 
 ### Requirement: 客户端→PTY 输入
 
@@ -186,8 +246,14 @@ session 触发 exit 事件时，服务端 MUST 用 close code `1000` 关闭该 s
 
 ### Requirement: 重连语义
 
-客户端可以多次连接同一 `:id`。每次连接都 MUST 收到完整的 `snapshot` + `status`
-初始化序列；服务端不做"已连接过此 client"之类的去重，因为没有稳定的客户端身份。
+客户端可以多次连接同一 `:id`。每次连接 MUST 通过 `?lastSeq=N` 协商初始状态：
+
+- `lastSeq == 0`（首次连接 / 主动 reset）→ fallback snapshot 路径。
+- `lastSeq` 在 ring 内 → incremental delta 路径，客户端 xterm buffer 不 reset。
+- `lastSeq` 已 evict → fallback snapshot 路径。
+
+完整规则与 scenarios 见"连接初始化序列"。服务端不做"已连接过此 client"之类
+的去重，因为没有稳定的客户端身份——`lastSeq` 不是身份，而是数据流断点。
 
 deleted（`deletedAt !== null`）但仍存在的 session：是否允许 attach 由本规范
 **不约定**，留给 M5b 决定。当前实现允许 attach（看 scrollback 历史），但

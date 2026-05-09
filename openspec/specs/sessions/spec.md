@@ -134,7 +134,24 @@ session 已死时 resize MUST 是 no-op。
 溢出时 MUST 按 FIFO 丢弃最旧 chunk。单个超过容量的 chunk MUST 从尾部截断到
 正好等于容量。
 
-`scrollback.snapshot()` MUST 返回当前缓冲区的 UTF-8 字符串。
+scrollback MUST 暴露两个 cumulative byte counter（session 生命周期内单调
+递增，**不**因 ring 滑动而重置）：
+
+- `headSeq`：自创建以来 PTY 写入到 scrollback 的总字节数（"已写入"边界）。
+- `tailSeq`：被 FIFO 丢弃的累积字节数（"已 evict"边界）。
+
+不变量：`tailSeq <= headSeq`，且 `bytes == headSeq - tailSeq`（buffer 内的字节数）。
+
+scrollback MUST 暴露：
+
+- `snapshot(): string` — 返回当前缓冲区的 UTF-8 字符串（buffer 内全部内容）。
+- `since(seq: number): string | null` — 返回字节序列 `[seq, headSeq)` 的内容；
+  当 `seq < tailSeq`（数据已 evict）时 MUST 返回 `null`；当 `seq >= headSeq`
+  时 MUST 返回 `''`；当 `tailSeq <= seq < headSeq` 时 MUST 返回对应子串。
+
+`clear()` MUST 清空 buffer 内字节但 **不** 重置 `headSeq`（保持 session-wide
+单调递增，让残留的客户端 `lastSeq` 自然降级到 fallback 而不会"穿越"reset）。
+`tailSeq` 在 clear 后 MUST 等于 `headSeq`（buffer 为空）。
 
 #### Scenario: FIFO 丢弃保留最近数据
 
@@ -148,6 +165,59 @@ session 已死时 resize MUST 是 no-op。
 - WHEN  以一个 chunk 写入 5,000 个 `'a'`
 - THEN  `bytes` 等于 1024
 - AND   `snapshot()` 是恰好 1024 个 `'a'` 字符
+
+#### Scenario: since 命中 ring 内
+
+- GIVEN scrollback 写入 `"ABC"` 后 `"DEF"`（`headSeq == 6`，`tailSeq == 0`）
+- WHEN  调用 `since(3)`
+- THEN  返回 `"DEF"`
+
+#### Scenario: since 越过 evict 边界返 null
+
+- GIVEN scrollback 已发生 FIFO 丢弃，`tailSeq == 100`
+- WHEN  调用 `since(50)`
+- THEN  返回 `null`
+
+#### Scenario: clear 不重置 headSeq
+
+- GIVEN scrollback 当前 `headSeq == 1000`
+- WHEN  调用 `clear()`
+- THEN  `bytes == 0` 且 `tailSeq == 1000` 且 `headSeq == 1000`
+- AND   后续写入字节会让 `headSeq` 继续增长
+
+### Requirement: server-side 屏幕镜像（screenState）
+
+每个 session MUST 维护一个 server-side 屏幕镜像，用于在 WebSocket 重连且
+`lastSeq == 0` 或 `lastSeq <= scrollback.tailSeq` 时给客户端返回一份正确的
+snapshot 帧。
+
+实现 MUST 用 `@xterm/headless` 的 `Terminal` + `@xterm/addon-serialize` 的
+`SerializeAddon`：
+
+- session spawn 时构造 headless terminal（cols/rows 取 spawn 入参）。
+- 每次 PTY data MUST 同步 `term.write(data)`。
+- session.resize MUST 同步 `term.resize(cols, rows)`。
+- session exit 时 MUST `term.dispose()` 释放 heap。
+
+`screenState.snapshot(): string` MUST 返回 SerializeAddon 序列化的 minimal-ANSI
+（含 cursor 位置、alt-screen 切换、当前 grid 单元的 SGR 与字符），客户端
+xterm `term.write(snapshot)` 后 MUST 渲染出与服务端等效的可见屏幕。
+
+不直接发 raw scrollback bytes 作 snapshot 的原因：(a) ring 截断在 ANSI escape
+中间会让客户端 parser 错乱；(b) 历史 cursor moves 在新 cols/rows 下重放会错位。
+
+#### Scenario: PTY 数据同步进 screenState
+
+- GIVEN session 已 spawn
+- WHEN  PTY 写入 `"hello"`
+- THEN  `screenState.snapshot()` 含 `"hello"` 在 cursor 之前
+
+#### Scenario: resize 同步到 screenState
+
+- GIVEN session 当前 80×24
+- WHEN  调用 `session.resize(120, 30)`
+- THEN  `screenState` 的 cols/rows 为 120×30
+- AND   后续 `screenState.snapshot()` 反映新尺寸下的布局
 
 ### Requirement: deleted session 的 GC
 

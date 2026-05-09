@@ -27,32 +27,37 @@ ccanywhere 仓库 MUST 在 `web/` 子目录下提供一个独立的 React + Vite
 - THEN  登录页正常加载
 - AND   页面对 `/api/projects` 的请求被 Vite proxy 到 62275
 
-### Requirement: 登录与持久化
+### Requirement: 设备配对与登录
 
-前端 MUST 在用户首次访问时显示登录页，要求输入：
+前端 MUST 不让用户输入 token——身份通过 WebAuthn pair / login 流程建立。
+完整流程见 `openspec/specs/auth/spec.md` "设备配对（Pair）"与"设备登入
+（Login）"。
 
-- `token`（必填）：服务端配置中的某个用户 token 字面值。
-- `label`（可选）：本设备的人类可读标签，仅本地用，不上传服务端。
+UI 层面 MUST：
 
-提交后 MUST 调用 `GET /api/projects` 验证：
+- 首次访问（无 cookie）显示设备配对页：用户填一个 `label`（设备人类标签），
+  点击"开始配对"触发 `POST /api/auth/register-init` →
+  `navigator.credentials.create()` → `POST /api/auth/register-complete` →
+  long-poll `GET /api/auth/register-status?pendingId=…` 直到 mac 端 approve。
+- 已配对设备的浏览器（cookie 在但已 expire）显示登录页：选择 deviceId →
+  `POST /api/auth/login-init` → `navigator.credentials.get()` →
+  `POST /api/auth/login-complete`。
+- 鉴权 MUST 完全依赖浏览器自动随请求带的 same-origin
+  `ccanywhere_session=<id>` HttpOnly cookie。前端 MUST NOT 在
+  `Authorization: Bearer ...` 中带 token，MUST NOT 把鉴权类凭证写入
+  localStorage。
 
-- 200 → 把 `{ token, label, verifiedAt }` 写入 `localStorage["ccanywhere.auth"]`，
-  跳转 `/workspace`。
-- 401 → 显示"token 无效"，不写 localStorage。
-- 网络错误或 5xx → 显示"服务不可达"。
+收到 `401` 响应时 MUST 跳回登录页（让用户重新走 WebAuthn login）。
+localStorage 仍 MAY 保存 UI prefs（theme、上次 sessionId 等），但 MUST NOT
+保存任何鉴权凭证。
 
-后续会话内 MUST 在所有 `/api/*` 请求中自动加 `Authorization: Bearer <token>`，
-在所有 `/ws/sessions/:id` 连接中加 `?token=<token>`。
+#### Scenario: 401 触发跳回登录
 
-收到 `401` 响应时 MUST 立即清 `localStorage["ccanywhere.auth"]` 并跳回登录页。
-
-#### Scenario: 401 触发登出
-
-- GIVEN 用户已登录，token 在配置中被移除
+- GIVEN 用户的 cookie 已在服务端 revoke
 - WHEN  前端发出任何 `/api/*` 请求
 - THEN  收到 401
-- AND   localStorage 被清空
-- AND   页面跳到 `/login`
+- AND   页面跳到 `/login`（或配对页，依本地是否有已记的 deviceId）
+- AND   localStorage 中的 UI prefs MAY 保留
 
 ### Requirement: Idempotency-Key 客户端策略
 
@@ -94,25 +99,120 @@ key 在该操作完成（成功或 fatal 错误）后失效，下次操作生成
 主界面 MUST 在右侧渲染一个 xterm.js 终端，绑定到当前选中的 session。组件
 挂载时 MUST：
 
-1. 通过 `/ws/sessions/:id?token=<token>` 建立 WebSocket。
-2. 收到 `snapshot` 帧 → `term.reset(); term.write(data)`。
-3. 收到 `output` 帧 → `term.write(data)`。
-4. 收到 `status` 帧 → 更新顶部状态徽标。
-5. 收到 `error` 帧 → 在终端最下方显示一条提示，连接保持。
-6. 用户键盘输入 → 发 `{ type: "input", data }`。
-7. `ResizeObserver` debounce 100ms 触发 `fit()` + 发 `{ type: "resize", cols, rows }`。
+1. 通过 `/ws/sessions/:id` 建立 WebSocket（cookie 自动随 same-origin upgrade
+   带；不带 `?token=`；重连时 MAY 带 `?lastSeq=N`，见"WebSocket 重连协议"）。
+2. WebSocket open 之后 MUST 立即 `fit()` 并发首个 `{ type: "resize", cols, rows }`，
+   让服务端协商初始状态时拿到对齐的尺寸（见
+   `openspec/specs/ws-protocol/spec.md` "连接初始化序列"）。
+3. 收到 `snapshot { upToSeq, data }` → `term.reset(); chunkedWrite(term, data)`。
+4. 收到 `output { seq, data }` → `chunkedWrite(term, data)`，**不** reset
+   buffer（incremental delta 路径）。
+5. 收到 `status` 帧 → 更新顶部状态徽标。
+6. 收到 `error` 帧 → 在终端最下方显示一条提示，连接保持。
+7. 用户键盘输入 → 发 `{ type: "input", data }`。
+8. `ResizeObserver` debounce 100ms 触发 `fit()` + 发 `{ type: "resize", cols, rows }`。
+
+`chunkedWrite(term, data)` MUST 把超过约 4 KiB 的 write 分片到多个
+`requestAnimationFrame` tick 喂给 `term.write`，避免大 snapshot 引起单帧阻塞。
 
 addons MUST 包含 fit、unicode11（中文/emoji 宽度）、web-links（URL 可点）。
 
 WebSocket 断开时 MUST 自动重连，指数退避：250ms → 500ms → 1s → 2s → 4s →
-8s 然后保持 8s 间隔。session `state == 'dead'` 后 MUST 停止重连并提示用户。
+8s 然后保持 8s 间隔。`window` 的 `online` 事件与 `document.visibilitychange`
+变为 `visible` MUST 立即触发 force reconnect（跳过当前退避窗口）。
+session `state == 'dead'` 后 MUST 停止重连并提示用户。
 
-#### Scenario: 重连后视图恢复
+#### Scenario: 重连后视图通过 incremental 恢复
 
-- GIVEN 用户在终端中执行命令 producing 多行输出
-- WHEN  网络短暂断开后恢复
-- THEN  WebSocket 自动重连
-- AND   终端通过新到的 `snapshot` 帧恢复完整内容（无残留旧数据）
+- GIVEN 用户在终端中执行命令 producing 多行输出，客户端记得 `lastSeq = L > 0`
+- WHEN  网络短暂断开后恢复，WebSocket 用 `?lastSeq=L` 重连
+- AND   服务端 `scrollback.tailSeq < L`
+- THEN  客户端只收到 `output` 帧并 append（**不** 触发 `term.reset`）
+- AND   终端视觉上无重影、无重写，content 与断开前一致
+
+### Requirement: 终端 renderer 选择策略
+
+xterm.js 提供 dom / canvas / webgl 三种渲染器。前端 MUST 默认用 dom 渲染器
+（避免 canvas 的 atlas 内部状态 race 与 webgl 的 `_isDisposed` race，二者
+在快速切换 session / 重连时已知会崩）。
+
+URL `?renderer=dom|canvas|webgl` query 参数 MAY 覆盖默认选择，但本次覆盖
+MUST NOT 持久化到 localStorage——刷新或新开标签后回到 dom 默认。理由：
+不能让一次"试一下 webgl"留下 localStorage 残留导致后续访问继续走有 bug
+的渲染器（"用户期待打开 devtools 清 localStorage"是不合理假设）。
+
+session 切换或销毁时 MUST `term.dispose()` 但 MUST NOT 手动 dispose 单独的
+addon——AddonManager 会在 `term.dispose()` 内部链式 dispose，重复 dispose
+会触发 webgl 的 `_isDisposed` undef 崩溃。`term.dispose()` 调用 MUST 包
+try/catch，失败时记 ops-log 但不让异常向上传播。
+
+#### Scenario: 默认 renderer 是 dom
+
+- GIVEN 全新浏览器、URL 不带 `?renderer`
+- WHEN  打开 workspace
+- THEN  实际渲染器 kind 为 `dom`
+
+#### Scenario: ?renderer=webgl 不写 localStorage
+
+- GIVEN URL `?renderer=webgl`
+- WHEN  打开 workspace 然后关闭页面、重开（无 query）
+- THEN  实际渲染器 kind 仍是 `dom`（不被上一次会话污染）
+
+### Requirement: 新建 session 携带当前主题
+
+`POST /api/sessions` 的请求 body MUST 含 `webTheme`，取值为
+`useEffectiveTheme()` 当前 hook 返回（`'dark'` 或 `'light'`）。这让服务端
+按当前 effective theme 给 cc 子进程注入 `COLORFGBG`（见
+`openspec/specs/rest-api/spec.md` "POST /api/sessions"）。
+
+UI 层面 effective theme 变化（包括 auto 模式时间触发）后 MUST NOT 重发已存在
+session 的 `webTheme`——env 注入仅作用于新 spawn。已存在 session 的主题
+切换由后续 reload 机制覆盖（暂未实现）。
+
+#### Scenario: 新建会话带 webTheme
+
+- GIVEN useEffectiveTheme 返回 `'light'`
+- WHEN  用户点击"新建会话"提交
+- THEN  `POST /api/sessions` body 含 `"webTheme": "light"`
+
+### Requirement: WebSocket 重连协议（lastSeq）
+
+客户端 TerminalSocket MUST 维护 `lastSeq: number`，初始 `0`。每次收到
+`snapshot { upToSeq, data }` 或 `output { seq, data }` 帧 MUST 把对应字段
+赋给 `lastSeq`。每次 reconnect MUST 在 ws URL 拼 `?lastSeq=<lastSeq>`
+（仅当 `lastSeq > 0`；为 0 时省略）。
+
+服务端按 `?lastSeq=N` 协商 incremental 或 fallback snapshot 的逻辑见
+`openspec/specs/ws-protocol/spec.md`。客户端无需关心服务端选哪条路径——
+按帧类型反应即可（snapshot 帧 reset+write、output 帧 append-write）。
+
+### Requirement: 用户反馈渠道
+
+前端 MUST 提供两条反馈路径，均通过 `POST /api/feedback`（见
+`openspec/specs/rest-api/spec.md`）落盘：
+
+1. **手动反馈**：drawer 底部"反馈"按钮 → 反馈 dialog（标题必填、正文可选、
+   ops 自动附）→ 用户提交。
+2. **崩溃自动反馈**：React `ErrorBoundary` `componentDidCatch` 时 MUST
+   fire-and-forget 调用 `POST /api/feedback`，title 为错误 message、body 为
+   stack、ops 附 ErrorBoundary 捕获瞬间的 ops-log snapshot。失败时 UI 显示
+   "重试反馈"按钮；不阻塞 fallback UI 渲染。
+
+ops-log MUST 是 module-scoped 环形缓冲区（最近 N 条，N MAY 取 50）。
+`recordOp(kind, payload?)` MUST 在以下时机被调用：
+
+- session 生命周期事件（`session.create`、`session.delete`）
+- terminal renderer 切换（`terminal.renderer`）
+- React `componentDidCatch`（`react.error`）
+- `window.onerror`（`window.error`）
+- `window.onunhandledrejection`（`window.unhandledrejection`）
+
+#### Scenario: 崩溃自动上报
+
+- GIVEN React 渲染中抛错
+- WHEN  ErrorBoundary 捕获
+- THEN  自动 `POST /api/feedback` 含错误 message/stack 与最近 ops 快照
+- AND   UI 渲染 fallback（不白屏），不阻塞用户继续操作其它 session
 
 ### Requirement: 移动端虚拟工具栏
 

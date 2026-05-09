@@ -81,13 +81,19 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 创建一个新 session。body MUST 是以下之一：
 
 ```json
-{ "projectId": "<id>", "mode": "create", "cols"?, "rows"? }
+{ "projectId": "<id>", "mode": "create", "cols"?, "rows"?, "webTheme"? }
 ```
 ```json
-{ "projectId": "<id>", "mode": "resume", "sessionId": "<uuid>", "cols"?, "rows"? }
+{ "projectId": "<id>", "mode": "resume", "sessionId": "<uuid>", "cols"?, "rows"?, "webTheme"? }
 ```
 
-`cols` 与 `rows` 为可选正整数（1..1000）。
+`cols` 与 `rows` 为可选正整数（1..1000）。`webTheme` 为可选枚举
+`'dark' | 'light'`，缺失时 MUST NOT 注入主题相关 env。
+
+`webTheme` 处理：服务端 MUST 在 spawn cc 子进程的 env 中按值注入 `COLORFGBG`：
+`'dark'` → `COLORFGBG=15;0`、`'light'` → `COLORFGBG=0;15`。该 env 让 cc 在
+`theme: 'auto'` 配置下选择匹配的内置配色。注：env 注入仅对新 spawn 生效，
+对 cc `--resume` 的子进程是否 honor 由 cc 决定，不在本规范保证范围。
 
 服务端 MUST：
 
@@ -278,6 +284,51 @@ mac CLI 子命令通过 cliToken 调以下端点：
 
 cliToken 在 `~/.config/ccanywhere/cli-token`（mode 0600）；首次 `ccanywhere
 serve` 启动时自动生成，后续重启沿用。
+
+### Requirement: POST /api/feedback
+
+接收 web 客户端的用户反馈，落盘到 `~/.config/ccanywhere/feedback/<id>.json`
+（mode `0600`），不入数据库。仅 cookie 鉴权可达。
+
+```
+请求: {
+  "title": "<1..200 chars>",
+  "body":  "<0..10000 chars, optional>",
+  "ops":   [ { "ts": <int>, "kind": "<1..80 chars>", "payload"?: {...} }, ... ]  // optional, 最多 100 项
+}
+201 { "id": "<id>" }
+400 invalid_request   body 校验失败（附 issues）
+500 internal          落盘失败
+```
+
+`id` MUST 形如 `<ISO-时间戳>-<4 字节 hex>`（时间戳里的 `:` 与 `.` 替换为 `-`，
+让 `ls` 输出按时间字典序）。
+
+服务端落盘的 record MUST 包含请求 body 的 `title`/`body`/`ops`，并 MUST 附加：
+
+| 字段 | 来源 |
+|---|---|
+| `id` | 服务端生成 |
+| `submittedAt` | epoch-ms |
+| `deviceId` | 解析自 cookie 的 device，未鉴权时为 `null` |
+| `deviceLabel` | 同上 |
+| `userAgent` | 请求头 `User-Agent`，缺失为 `null` |
+| `remoteAddr` | 客户端 IP |
+
+服务端 MUST 在 `~/.config/ccanywhere/feedback/` 目录不存在时递归创建。
+
+#### Scenario: 缺 title 返 400
+
+- GIVEN body `{ "body": "x" }`（无 title）
+- WHEN  发送 `POST /api/feedback`
+- THEN  状态 `400`，`error.code == "invalid_request"`，`error.issues` 含 title 字段错误
+
+#### Scenario: 落盘后返回 id
+
+- GIVEN body `{ "title": "渲染崩溃" }`
+- WHEN  发送 `POST /api/feedback`
+- THEN  状态 `201`，body `{ "id": "<id>" }`
+- AND   `~/.config/ccanywhere/feedback/<id>.json` 存在且 mode 为 `0600`
 
 ### Requirement: POST /api/hook/:sessionId/:event
 
