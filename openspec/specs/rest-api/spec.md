@@ -294,13 +294,21 @@ serve` 启动时自动生成，后续重启沿用。
 请求: {
   "title": "<1..200 chars>",
   "body":  "<0..10000 chars, optional>",
-  "ops":   [ { "ts": <int>, "kind": "<1..80 chars>", "payload"?: {...} }, ... ]  // optional, 最多 100 项
+  "ops":   [ { "ts": <int>, "kind": "<1..80 chars>", "payload"?: {...} }, ... ]  // optional
   "diag":  { ... }  // optional, 客户端自动收集的诊断信息（结构见下）
 }
 201 { "id": "<id>" }
 400 invalid_request   body 校验失败（附 issues）
 500 internal          落盘失败
 ```
+
+`ops` 数组上限 MUST 由客户端 `MAX_OPS` 决定（见
+`openspec/specs/web-frontend/spec.md` "用户反馈渠道"中的 `N` 推导，
+当前基线 ~6500）。服务端 MUST NOT 强约束等于客户端值——客户端调整
+保留窗口或峰值密度时，服务端不应同步升级才不阻塞反馈。服务端
+MUST 设一个 runaway guard（基线 `20000`，比客户端常态值高一个数量级），
+仅防御明显 abuse（恶意客户端绕推导直接灌大数组）。超 guard 返
+`400 invalid_request`。
 
 `id` MUST 形如 `<ISO-时间戳>-<4 字节 hex>`（时间戳里的 `:` 与 `.` 替换为 `-`，
 让 `ls` 输出按时间字典序）。
@@ -327,11 +335,20 @@ MUST 附加：
   headSeq: number;
   tailSeq: number;
   scrollbackBytes: number;
-  lastDataAt: number | null;   // 最近一次 PTY data 的 epoch-ms
-  exitCode: number | null;     // PTY 退出码（state=='dead' 才有）
+  lastDataAt: number | null;            // 最近一次 PTY data 的 epoch-ms
+  exitCode: number | null;              // PTY 退出码（state=='dead' 才有）
   deletedAt: number | null;
+  recentDataChunks: PtyDataChunkRecord[]; // session 生命周期内 append-only
+                                            // 全量 PTY chunk 时序，定义见
+                                            // openspec/specs/sessions/spec.md
+                                            // "PTY data 分片追踪"
 }
 ```
+
+`recentDataChunks` 注入是 server side 唯一的反馈数据源——客户端无法
+观察到这级时序。该字段尺寸随 session 寿命增长（参考 sessions spec
+中的内存估算），有需要时服务端可在反馈落盘前按 byte cap 截断尾部 N 条，
+**不破坏 schema**。
 
 `diag.activeSessionId` 不命中（id 不存在 / 已 GC）时 `serverSession` MUST
 缺失（不写 null 占位）；反馈 record 仍正常落盘，反馈不因 server inject
@@ -400,12 +417,14 @@ manager 查询）。其它字段 MUST 用宽松 schema（passthrough），允许
 - THEN  状态 `201`，body `{ "id": "<id>" }`
 - AND   `~/.config/ccanywhere/feedback/<id>.json` 存在且 mode 为 `0600`
 
-#### Scenario: diag.activeSessionId 命中时注入 serverSession
+#### Scenario: diag.activeSessionId 命中时注入 serverSession + recentDataChunks
 
-- GIVEN manager 中存在 sessionId `S` 处于 `idle`，scrollback `headSeq=1000`
+- GIVEN manager 中存在 sessionId `S` 处于 `idle`，scrollback `headSeq=1000`，
+        且 `S.recentDataChunks` 含 N 条 PTY chunk record
 - WHEN  `POST /api/feedback` body 含 `diag.activeSessionId == "S"`
 - THEN  状态 `201`
 - AND   落盘 JSON 含 `serverSession.state == "idle"` 且 `serverSession.headSeq == 1000`
+- AND   落盘 JSON 含 `serverSession.recentDataChunks` 数组长度 == N
 - AND   落盘 JSON 含 `serverInfo.commitSha` 与 `serverInfo.uptimeMs`
 
 #### Scenario: diag.activeSessionId 不命中时 serverSession 缺失
@@ -413,8 +432,15 @@ manager 查询）。其它字段 MUST 用宽松 schema（passthrough），允许
 - GIVEN manager 中无 sessionId `X`
 - WHEN  `POST /api/feedback` body 含 `diag.activeSessionId == "X"`
 - THEN  状态 `201`（反馈仍落盘）
-- AND   落盘 JSON 中 `serverSession` 字段不存在
+- AND   落盘 JSON 中 `serverSession` 字段不存在（含 `recentDataChunks` 也不存在）
 - AND   落盘 JSON 仍含 `diag` 与 `serverInfo`
+
+#### Scenario: ops 超 runaway guard 拒收
+
+- GIVEN body `{ "title": "x", "ops": <长度 30000 的合法数组> }`
+- WHEN  发送 `POST /api/feedback`
+- THEN  状态 `400`，`error.code == "invalid_request"`
+- AND   `error.issues` 指出 ops 长度违反约束
 
 ### Requirement: POST /api/hook/:sessionId/:event
 
