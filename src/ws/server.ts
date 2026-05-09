@@ -62,7 +62,12 @@ export async function registerWebSocketRoutes(
 
   function flush(bundle: SessionBundle): void {
     if (bundle.pending.length === 0) return;
-    const frame: ServerFrame = { type: 'output', data: bundle.pending };
+    // headSeq is the cumulative byte counter AFTER everything in pending
+    // has been appended to the scrollback (which happens synchronously on
+    // PTY data — pending grew from those same data events). Sending it
+    // tells the client what `lastSeq` to remember for reconnect.
+    const seq = bundle.session.scrollback.headSeq;
+    const frame: ServerFrame = { type: 'output', seq, data: bundle.pending };
     bundle.pending = '';
     for (const c of bundle.clients) sendFrame(c, frame);
   }
@@ -145,6 +150,10 @@ export async function registerWebSocketRoutes(
     (sock, req) => {
       const sessionId = req.params.id;
       const session = manager.get(sessionId);
+      logger.debug(
+        { sessionId, deviceId: req.authDevice?.id, ip: req.ip, found: session !== undefined },
+        'ws client connected',
+      );
       if (!session) {
         sendFrame(sock, { type: 'error', message: 'session not found' });
         sock.close(1008, 'session not found');
@@ -158,8 +167,46 @@ export async function registerWebSocketRoutes(
         ? attachHeartbeatToWs(sock, options.heartbeat)
         : null;
 
-      sendFrame(sock, { type: 'snapshot', data: session.scrollback.snapshot() });
-      sendFrame(sock, { type: 'status', state: session.state });
+      // Initial state delivery, gated on the first 'resize' so that the
+      // server-side screenState's cols/rows match the client xterm before
+      // SerializeAddon emits cursor-positioned ANSI. For reconnects with
+      // ?lastSeq=N, send incremental delta instead of a full snapshot —
+      // client xterm keeps its existing buffer and just appends.
+      const lastSeqRaw = (req.query as { lastSeq?: string } | undefined)?.lastSeq;
+      const parsedLastSeq = typeof lastSeqRaw === 'string' ? Number.parseInt(lastSeqRaw, 10) : 0;
+      const lastSeq = Number.isFinite(parsedLastSeq) && parsedLastSeq >= 0 ? parsedLastSeq : 0;
+
+      let snapshotSent = false;
+      const sendInitialState = (): void => {
+        if (snapshotSent) return;
+        snapshotSent = true;
+        const headSeq = session.scrollback.headSeq;
+        if (lastSeq > 0) {
+          const delta = session.scrollback.since(lastSeq);
+          if (delta === null) {
+            // Client's lastSeq is older than our ring; fall back to full
+            // snapshot via screenState's minimal-ANSI serialization.
+            sendFrame(sock, {
+              type: 'snapshot',
+              upToSeq: headSeq,
+              data: session.screenState.snapshot(),
+            });
+          } else if (delta.length > 0) {
+            // Incremental — client doesn't reset, just appends.
+            sendFrame(sock, { type: 'output', seq: headSeq, data: delta });
+          }
+          // else: nothing missed; status frame is enough.
+        } else {
+          // First connect — full snapshot.
+          sendFrame(sock, {
+            type: 'snapshot',
+            upToSeq: headSeq,
+            data: session.screenState.snapshot(),
+          });
+        }
+        sendFrame(sock, { type: 'status', state: session.state });
+      };
+      const fallbackTimer = setTimeout(sendInitialState, 1_500);
 
       sock.on('message', (raw: Buffer) => {
         let parsed: unknown;
@@ -187,6 +234,19 @@ export async function registerWebSocketRoutes(
                 type: 'error',
                 message: err instanceof Error ? err.message : 'resize error',
               });
+              return;
+            }
+            // First resize after connect — dimensions are now aligned.
+            // session.resize() returns synchronously (PTY ioctl), but cc
+            // reacts to SIGWINCH asynchronously and its redraw bytes need
+            // to flow through PTY data → screenState.feed before the
+            // serialize call captures the new layout. Give it a short
+            // window so the snapshot reflects the post-resize grid; if
+            // we serialize too early it carries the old cols/rows and
+            // the client sees broken row widths.
+            if (!snapshotSent) {
+              clearTimeout(fallbackTimer);
+              setTimeout(sendInitialState, 200);
             }
             return;
           case 'ping':
@@ -195,9 +255,14 @@ export async function registerWebSocketRoutes(
         }
       });
 
-      sock.on('close', () => {
+      sock.on('close', (code: number, reason: Buffer) => {
         bundle.clients.delete(sock);
         detachHeartbeat?.();
+        clearTimeout(fallbackTimer);
+        logger.debug(
+          { sessionId, code, reason: reason.toString('utf8') },
+          'ws client closed',
+        );
       });
 
       sock.on('error', (err: Error) => {

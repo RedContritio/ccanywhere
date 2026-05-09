@@ -13,8 +13,18 @@ export const ClientFrameSchema = z.discriminatedUnion('type', [
 export type ClientFrame = z.infer<typeof ClientFrameSchema>;
 
 export type ServerFrame =
-  | { type: 'snapshot'; data: string }
-  | { type: 'output'; data: string }
+  /**
+   * Full-state restore. Sent on first connect or when the client's
+   * `lastSeq` falls outside the server scrollback ring (data evicted).
+   * Client should `term.reset()` before writing this.
+   */
+  | { type: 'snapshot'; upToSeq: number; data: string }
+  /**
+   * Incremental cc bytes. `seq` is the cumulative byte counter AFTER
+   * this frame's data has been written — the client persists it as
+   * `lastSeq` to feed back on reconnect via `?lastSeq=N`.
+   */
+  | { type: 'output'; seq: number; data: string }
   | { type: 'status'; state: SessionState }
   | { type: 'error'; message: string }
   | { type: 'pong' };

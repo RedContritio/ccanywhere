@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
+import { logger } from '../../log.js';
 import type { ProjectStore } from '../../projects/store.js';
 import type { SessionManager, SpawnOptions } from '../../session/manager.js';
 import { listHistory } from '../history.js';
@@ -213,6 +214,7 @@ export async function registerSessionRoutes(
   app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
     const session = manager.get(req.params.id);
     if (!session) {
+      logger.debug({ id: req.params.id }, 'delete session: not found');
       await reply
         .code(404)
         .send({ error: { code: 'not_found', message: 'session not found' } });
@@ -221,6 +223,10 @@ export async function registerSessionRoutes(
     // markDeleted is idempotent: re-DELETE on the same id returns 204 too,
     // and the session row is preserved with deletedAt set.
     session.markDeleted();
+    logger.debug(
+      { id: req.params.id, deviceId: req.authDevice?.id },
+      'session deleted',
+    );
     await reply.code(204).send();
   });
 }

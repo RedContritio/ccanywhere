@@ -126,5 +126,9 @@ export async function registerAuth(
       return;
     }
     req.authDevice = device;
+    logger.debug(
+      { url, method: req.method, deviceId: device.id, ip: req.ip },
+      'authed request',
+    );
   });
 }

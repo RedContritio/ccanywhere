@@ -95,8 +95,8 @@ describe('TerminalSocket', () => {
     };
     new TerminalSocket('s', handlers, rig.factory);
     rig.current!.open();
-    rig.current!.receive(JSON.stringify({ type: 'snapshot', data: 'hi' }));
-    rig.current!.receive(JSON.stringify({ type: 'output', data: 'world' }));
+    rig.current!.receive(JSON.stringify({ type: 'snapshot', upToSeq: 2, data: 'hi' }));
+    rig.current!.receive(JSON.stringify({ type: 'output', seq: 7, data: 'world' }));
     rig.current!.receive(JSON.stringify({ type: 'status', state: 'busy' }));
     rig.current!.receive(JSON.stringify({ type: 'error', message: 'oops' }));
     rig.current!.receive(JSON.stringify({ type: 'pong' }));
@@ -112,7 +112,7 @@ describe('TerminalSocket', () => {
     new TerminalSocket('s', { onError }, rig.factory);
     rig.current!.open();
     expect(() => rig.current!.receive('not json')).not.toThrow();
-    rig.current!.receive(JSON.stringify({ type: 'output', data: 'still-fine' }));
+    rig.current!.receive(JSON.stringify({ type: 'output', seq: 10, data: 'still-fine' }));
     expect(onError).not.toHaveBeenCalled();
   });
 

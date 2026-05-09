@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import { logger } from '../log.js';
+import { ScreenState } from './screen-state.js';
 import { Scrollback } from './scrollback.js';
 import type {
   SessionEventMap,
@@ -28,6 +29,7 @@ export interface Session {
   readonly info: SessionInfo;
   readonly state: SessionState;
   readonly scrollback: Scrollback;
+  readonly screenState: ScreenState;
   readonly deletedAt: number | null;
   write(data: string): void;
   resize(cols: number, rows: number): void;
@@ -59,9 +61,11 @@ class SessionImpl implements Session {
     public readonly info: SessionInfo,
     private readonly pty: IPty,
     public readonly scrollback: Scrollback,
+    public readonly screenState: ScreenState,
   ) {
     this.pty.onData((data) => {
       this.scrollback.append(data);
+      this.screenState.feed(data);
       this.emit('data', { sessionId: this.info.id, data });
     });
     this.pty.onExit(({ exitCode, signal }) => {
@@ -75,6 +79,14 @@ class SessionImpl implements Session {
       const resolvers = this.killResolvers;
       this.killResolvers = [];
       for (const r of resolvers) r();
+      // Free the headless terminal — it's process-heavy (~MB on long
+      // sessions) and the dead session lives on in the manager map until
+      // its deletedAt + ttl elapses.
+      try {
+        this.screenState.dispose();
+      } catch {
+        // ignore — best effort
+      }
     });
   }
 
@@ -89,6 +101,7 @@ class SessionImpl implements Session {
       throw new RangeError(`resize requires positive cols/rows, got ${cols}x${rows}`);
     }
     this.pty.resize(cols, rows);
+    this.screenState.resize(cols, rows);
   }
 
   setState(next: SessionState): void {
@@ -226,10 +239,28 @@ export class SessionManager {
             createdAt: Date.now(),
           };
 
-    const session = new SessionImpl(info, pty, new Scrollback(opts.scrollbackBytes));
+    const session = new SessionImpl(
+      info,
+      pty,
+      new Scrollback(opts.scrollbackBytes),
+      new ScreenState(cols, rows),
+    );
     this.sessions.set(id, session);
 
     session.setState('idle');
+    logger.debug(
+      {
+        sessionId: id,
+        projectId: info.projectId,
+        cwd: opts.cwd,
+        mode: opts.mode,
+        resumeSessionId: opts.resumeSessionId ?? null,
+        cols,
+        rows,
+        envOverrides: Object.keys(opts.env ?? {}),
+      },
+      'session spawned',
+    );
 
     return session;
   }

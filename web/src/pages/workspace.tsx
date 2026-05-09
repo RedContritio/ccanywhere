@@ -7,6 +7,7 @@ import {
 } from '../components/new-session-dialog.js';
 import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
+import { FeedbackDialog } from '../components/feedback-dialog.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
 import { logoutServer } from '../auth-flow.js';
@@ -41,6 +42,7 @@ export function WorkspacePage(): JSX.Element {
 
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
 
@@ -167,6 +169,13 @@ export function WorkspacePage(): JSX.Element {
           onNew={onOpenNew}
           onDelete={(sid) => void onDelete(sid)}
         />
+        <button
+          type="button"
+          className="drawer-feedback"
+          onClick={() => setFeedbackOpen(true)}
+        >
+          反馈
+        </button>
       </aside>
       <button
         type="button"
@@ -277,6 +286,10 @@ export function WorkspacePage(): JSX.Element {
         projects={projects}
         onClose={() => setNewDialogOpen(false)}
         onCreate={onCreate}
+      />
+      <FeedbackDialog
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
       />
     </div>
   );

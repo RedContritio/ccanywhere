@@ -1,8 +1,8 @@
 import type { SessionState } from './state/sessions.js';
 
 export type ServerFrame =
-  | { type: 'snapshot'; data: string }
-  | { type: 'output'; data: string }
+  | { type: 'snapshot'; upToSeq: number; data: string }
+  | { type: 'output'; seq: number; data: string }
   | { type: 'status'; state: SessionState }
   | { type: 'error'; message: string }
   | { type: 'pong' };
@@ -33,12 +33,36 @@ export class TerminalSocket {
   private dead = false;
   private retryIdx = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Cumulative byte count of cc output the server has acknowledged. The
+   * server sends this on every output / snapshot frame; we feed it back
+   * via `?lastSeq=N` on reconnect so the server knows whether to send a
+   * full snapshot (lastSeq=0 or evicted) or just incremental delta.
+   */
+  private lastSeq = 0;
+
+  private readonly onOnline = (): void => {
+    this.forceReconnect();
+  };
+  private readonly onVisibility = (): void => {
+    if (document.visibilityState === 'visible') this.forceReconnect();
+  };
 
   constructor(
     private readonly sessionId: string,
     private readonly handlers: SocketHandlers,
     private readonly factory: WebSocketFactory = (url) => new WebSocket(url),
   ) {
+    // Listen for the two signals that "the user's network situation
+    // probably just got better": OS-level online event after a flap, and
+    // page returning to foreground after the user backgrounded the tab.
+    // Without these, the exponential backoff caps at 8s but keeps cycling
+    // even after connectivity is back — the UI looks "stuck" until the
+    // user reloads.
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', this.onOnline);
+      document.addEventListener('visibilitychange', this.onVisibility);
+    }
     this.connect();
   }
 
@@ -53,6 +77,10 @@ export class TerminalSocket {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', this.onOnline);
+      document.removeEventListener('visibilitychange', this.onVisibility);
+    }
     if (this.retryTimer !== null) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
@@ -65,6 +93,34 @@ export class TerminalSocket {
       }
       this.ws = null;
     }
+  }
+
+  /**
+   * Skip the current backoff window and try connecting now. Called when
+   * we have an external reason to believe the network is back (browser
+   * 'online' event, page visibility flipping back to 'visible'). No-op if
+   * already open / closed / dead, or if the socket is mid-handshake.
+   */
+  private forceReconnect(): void {
+    if (this.closed || this.dead) return;
+    if (this.ws !== null) {
+      const rs = this.ws.readyState;
+      if (rs === this.ws.OPEN || rs === this.ws.CONNECTING) return;
+    }
+    this.retryIdx = 0;
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    if (this.ws !== null) {
+      try {
+        this.ws.close();
+      } catch {
+        // ignore
+      }
+      this.ws = null;
+    }
+    this.connect();
   }
 
   private connect(): void {
@@ -103,9 +159,11 @@ export class TerminalSocket {
   private dispatch(frame: ServerFrame): void {
     switch (frame.type) {
       case 'snapshot':
+        this.lastSeq = frame.upToSeq;
         this.handlers.onSnapshot?.(frame.data);
         return;
       case 'output':
+        this.lastSeq = frame.seq;
         this.handlers.onOutput?.(frame.data);
         return;
       case 'status':
@@ -140,6 +198,10 @@ export class TerminalSocket {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     // Browser sends the session cookie automatically on same-origin WS
     // upgrade; no token in the URL.
-    return `${proto}//${location.host}/ws/sessions/${encodeURIComponent(this.sessionId)}`;
+    const path = `${proto}//${location.host}/ws/sessions/${encodeURIComponent(this.sessionId)}`;
+    if (this.lastSeq > 0) {
+      return `${path}?lastSeq=${this.lastSeq}`;
+    }
+    return path;
   }
 }

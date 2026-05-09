@@ -614,6 +614,107 @@
   flex-shrink: 0;
 }
 
+.dialog-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.dialog-textarea:focus {
+  border-color: var(--accent);
+}
+
+.drawer-feedback {
+  margin: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.drawer-feedback:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.error-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.error-fallback-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.error-fallback-message {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-fallback-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.error-fallback-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.error-fallback-reset {
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.error-fallback-reset:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.error-fallback-reset.is-primary {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.error-fallback-reset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 
 .dialog-mode {
   border: 1px solid var(--border);
@@ -710,6 +811,25 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
+}
+
+/* Kill native scroll on xterm's actual scroll container. cc runs in
+ * alt-screen (no scrollback to expose) and any inertial / native scroll
+ * over `.xterm-viewport` desyncs xterm's row state on Android Chrome,
+ * showing duplicated or dropped rows on the banner/status line. We
+ * have nothing to scroll, so the simplest fix is to take the scroll
+ * container out of the picture entirely.
+ *
+ * `touch-action: none` blocks the OS from generating ballistic scroll
+ * events on this element; `overscroll-behavior: contain` prevents the
+ * gesture from chaining out (pull-to-refresh, etc).
+ *
+ * !important is intentional — xterm sets inline overflow on the
+ * viewport itself when scrollback updates. */
+.terminal-host .xterm-viewport {
+  overflow: hidden !important;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .terminal-view {

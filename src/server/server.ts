@@ -13,6 +13,7 @@ import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
 import { IdempotencyStore } from './idempotency.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerInternalRoutes } from './routes/internal.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
@@ -73,6 +74,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     webOrigin: opts.config.webOrigin,
   });
   await registerInternalRoutes(app, { store: opts.deviceStore });
+  await registerFeedbackRoutes(app);
 
   app.get('/healthz', () => ({ ok: true }));
 

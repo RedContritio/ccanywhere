@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api.js';
+import { recordOp } from './ops-log.js';
 
 export interface Project {
   id: string;
@@ -108,6 +109,11 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
       body,
       idempotencyKey,
     });
+    recordOp('session.create', {
+      id: created.id,
+      projectId: created.projectId,
+      mode: created.mode,
+    });
     set((s) => ({
       sessions: s.sessions.some((x) => x.id === created.id)
         ? s.sessions.map((x) => (x.id === created.id ? created : x))
@@ -117,6 +123,7 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
   },
   deleteSession: async (id) => {
     await api<void>(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    recordOp('session.delete', { id });
     set((s) => ({
       sessions: s.sessions.map((x) =>
         x.id === id ? { ...x, deletedAt: x.deletedAt ?? Date.now() } : x,
@@ -134,6 +141,7 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
       method: 'POST',
       body: { name },
     });
+    recordOp('project.create', { id: created.id });
     set((s) => ({
       projects: s.projects.some((p) => p.id === created.id)
         ? s.projects
@@ -143,6 +151,7 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
   },
   hideProject: async (id) => {
     await api<void>(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    recordOp('project.hide', { id });
     set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
   },
 }));

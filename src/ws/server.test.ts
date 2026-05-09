@@ -83,11 +83,32 @@ interface TrackedClient {
     type: T,
     timeoutMs?: number,
   ): Promise<Extract<ServerFrame, { type: T }>>;
+  /**
+   * Like waitFor('output') but keeps consuming output frames until one
+   * (cumulatively) contains the needle. Necessary because the shell
+   * prints its prompt before the test sends `input`, and that prompt
+   * arrives as its own output frame — without filtering, waitFor would
+   * resolve on the prompt and miss the actual `cc-marker` payload.
+   */
+  waitForOutputContaining(
+    needle: string,
+    timeoutMs?: number,
+  ): Promise<string>;
 }
 
 function connect(port: number, sessionId: string, cookie: string): TrackedClient {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/sessions/${sessionId}`, {
     headers: { cookie },
+  });
+  // Server defers the snapshot until the first 'resize' message; send a
+  // default size on open so we don't burn the 1.5s fallback timeout on
+  // every test that calls connect().
+  ws.on('open', () => {
+    try {
+      ws.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
+    } catch {
+      // ws may already be closing on rejection paths; ignore.
+    }
   });
   const buffered: ServerFrame[] = [];
   const waiters: Array<{
@@ -133,7 +154,32 @@ function connect(port: number, sessionId: string, cookie: string): TrackedClient
     });
   };
 
-  return { ws, waitFor };
+  const waitForOutputContaining = async (
+    needle: string,
+    timeoutMs = 6000,
+  ): Promise<string> => {
+    const start = Date.now();
+    let acc = '';
+    // First sweep buffered output frames already collected.
+    for (let i = buffered.length - 1; i >= 0; i--) {
+      const f = buffered[i];
+      if (f?.type === 'output') {
+        acc += f.data;
+        buffered.splice(i, 1);
+      }
+    }
+    if (acc.includes(needle)) return acc;
+    while (Date.now() - start < timeoutMs) {
+      const remaining = timeoutMs - (Date.now() - start);
+      if (remaining <= 0) break;
+      const frame = await waitFor('output', remaining);
+      acc += frame.data;
+      if (acc.includes(needle)) return acc;
+    }
+    throw new Error(`timeout waiting for output containing ${needle}`);
+  };
+
+  return { ws, waitFor, waitForOutputContaining };
 }
 
 function waitOpen(ws: WebSocket, timeoutMs = 4000): Promise<void> {
@@ -230,8 +276,8 @@ describe('WebSocket /ws/sessions/:id', () => {
     await c.waitFor('snapshot');
 
     c.ws.send(JSON.stringify({ type: 'input', data: 'echo cc-marker\n' }));
-    const output = await c.waitFor('output', 6000);
-    expect(output.data).toMatch(/cc-marker/);
+    const acc = await c.waitForOutputContaining('cc-marker', 6000);
+    expect(acc).toMatch(/cc-marker/);
     c.ws.close();
   });
 
@@ -271,11 +317,12 @@ describe('WebSocket /ws/sessions/:id', () => {
     await Promise.all([c1.waitFor('snapshot'), c2.waitFor('snapshot')]);
 
     c1.ws.send(JSON.stringify({ type: 'input', data: 'echo dual-marker\n' }));
-    const [o1, o2] = await Promise.all([
-      c1.waitFor('output', 6000),
-      c2.waitFor('output', 6000),
+    const [acc1, acc2] = await Promise.all([
+      c1.waitForOutputContaining('dual-marker', 6000),
+      c2.waitForOutputContaining('dual-marker', 6000),
     ]);
-    expect(o1.data + o2.data).toMatch(/dual-marker/);
+    expect(acc1).toMatch(/dual-marker/);
+    expect(acc2).toMatch(/dual-marker/);
     c1.ws.close();
     c2.ws.close();
   });
