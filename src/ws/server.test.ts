@@ -354,4 +354,109 @@ describe('WebSocket /ws/sessions/:id', () => {
     await c.waitFor('pong');
     c.ws.close();
   });
+
+  it('snapshot is the first broadcast frame even when PTY is streaming', async () => {
+    const id = await createSession(h);
+    // First client kicks off a continuous PTY stream so by the time we
+    // bring up the second client the broadcast pipe is hot.
+    const c1 = connect(h.port, id, h.authCookie);
+    await waitOpen(c1.ws);
+    await c1.waitFor('snapshot');
+    c1.ws.send(
+      JSON.stringify({
+        type: 'input',
+        data: 'while true; do echo gate-marker; sleep 0.005; done\n',
+      }),
+    );
+    await c1.waitForOutputContaining('gate-marker', 4000);
+
+    // Raw collector — connect helper reorders by type, but here we need
+    // to assert the actual receive order to catch output-before-snapshot
+    // regressions.
+    const c2Frames: ServerFrame[] = [];
+    const ws2 = new WebSocket(`ws://127.0.0.1:${h.port}/ws/sessions/${id}`, {
+      headers: { cookie: h.authCookie },
+    });
+    ws2.on('message', (raw: WebSocket.RawData) => {
+      c2Frames.push(JSON.parse(raw.toString()) as ServerFrame);
+    });
+    await waitOpen(ws2);
+    ws2.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
+
+    // Initial-state arrives ~200ms after first resize; allow 1s for
+    // snapshot + status + a few buffered/post-init output frames.
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+
+    expect(c2Frames.length).toBeGreaterThan(0);
+    const firstFrame = c2Frames[0];
+    expect(firstFrame?.type).toBe('snapshot');
+    // No output frame may precede the snapshot.
+    const firstOutputIdx = c2Frames.findIndex((f) => f.type === 'output');
+    const snapshotIdx = c2Frames.findIndex((f) => f.type === 'snapshot');
+    if (firstOutputIdx >= 0) {
+      expect(snapshotIdx).toBeLessThan(firstOutputIdx);
+    }
+
+    ws2.close();
+    c1.ws.close();
+  }, 12_000);
+
+  it('per-socket gate does not interfere with already-active clients', async () => {
+    const id = await createSession(h);
+    const c1 = connect(h.port, id, h.authCookie);
+    await waitOpen(c1.ws);
+    await c1.waitFor('snapshot');
+    c1.ws.send(
+      JSON.stringify({
+        type: 'input',
+        data: 'while true; do echo c1-marker; sleep 0.01; done\n',
+      }),
+    );
+    await c1.waitForOutputContaining('c1-marker', 4000);
+
+    // Bring up c2; gate engages on c2 only — c1 should keep receiving
+    // output uninterrupted.
+    const c2Frames: ServerFrame[] = [];
+    const ws2 = new WebSocket(`ws://127.0.0.1:${h.port}/ws/sessions/${id}`, {
+      headers: { cookie: h.authCookie },
+    });
+    ws2.on('message', (raw: WebSocket.RawData) => {
+      c2Frames.push(JSON.parse(raw.toString()) as ServerFrame);
+    });
+    await waitOpen(ws2);
+    ws2.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
+
+    // Wait for c2 to receive its initial state.
+    await new Promise<void>((resolve) => setTimeout(resolve, 800));
+    expect(c2Frames[0]?.type).toBe('snapshot');
+
+    // After c2's gate engaged and drained, c1 must still be getting
+    // live output for the marker stream.
+    await c1.waitForOutputContaining('c1-marker', 2000);
+
+    ws2.close();
+    c1.ws.close();
+  }, 12_000);
+
+  it('connect-then-close before resize does not crash the server', async () => {
+    const id = await createSession(h);
+    const ws = new WebSocket(`ws://127.0.0.1:${h.port}/ws/sessions/${id}`, {
+      headers: { cookie: h.authCookie },
+    });
+    await waitOpen(ws);
+    ws.close();
+    await new Promise<void>((resolve) => ws.once('close', () => resolve()));
+
+    // Wait past the 1.5s sendInitialState fallback so any post-close
+    // drain attempt would surface here.
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_700));
+
+    // Server must still serve a fresh client — a stranded pendingClients
+    // entry or a fallback-timer crash would manifest as the next connect
+    // hanging or being rejected.
+    const c = connect(h.port, id, h.authCookie);
+    await waitOpen(c.ws);
+    await c.waitFor('snapshot');
+    c.ws.close();
+  }, 8_000);
 });

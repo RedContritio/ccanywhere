@@ -45,6 +45,12 @@ function sendFrame(ws: WebSocket, frame: ServerFrame): void {
 interface SessionBundle {
   readonly session: Session;
   readonly clients: Set<WebSocket>;
+  // Per-socket buffer for broadcast frames received before the socket's
+  // sendInitialState ran. Drained at the end of sendInitialState (output
+  // with seq <= snapshot.upToSeq dropped, status dropped). Without this,
+  // PTY data flushed in the [attach, sendInitialState] window arrives
+  // before snapshot, violating "snapshot first then write" client contract.
+  readonly pendingClients: Map<WebSocket, ServerFrame[]>;
   pending: string;
   flushTimer: NodeJS.Timeout | null;
   disposers: Array<() => void>;
@@ -60,6 +66,12 @@ export async function registerWebSocketRoutes(
   const flushIntervalMs = options.outputFlushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const bundles = new Map<string, SessionBundle>();
 
+  function deliver(bundle: SessionBundle, c: WebSocket, frame: ServerFrame): void {
+    const queue = bundle.pendingClients.get(c);
+    if (queue !== undefined) queue.push(frame);
+    else sendFrame(c, frame);
+  }
+
   function flush(bundle: SessionBundle): void {
     if (bundle.pending.length === 0) return;
     // headSeq is the cumulative byte counter AFTER everything in pending
@@ -69,7 +81,7 @@ export async function registerWebSocketRoutes(
     const seq = bundle.session.scrollback.headSeq;
     const frame: ServerFrame = { type: 'output', seq, data: bundle.pending };
     bundle.pending = '';
-    for (const c of bundle.clients) sendFrame(c, frame);
+    for (const c of bundle.clients) deliver(bundle, c, frame);
   }
 
   function teardown(bundle: SessionBundle): void {
@@ -93,6 +105,7 @@ export async function registerWebSocketRoutes(
       }
     }
     bundle.clients.clear();
+    bundle.pendingClients.clear();
     bundles.delete(bundle.session.info.id);
   }
 
@@ -102,6 +115,7 @@ export async function registerWebSocketRoutes(
     const bundle: SessionBundle = {
       session,
       clients: new Set(),
+      pendingClients: new Map(),
       pending: '',
       flushTimer: null,
       disposers: [],
@@ -131,7 +145,7 @@ export async function registerWebSocketRoutes(
       session.on('status', ({ state }) => {
         flush(bundle);
         const frame: ServerFrame = { type: 'status', state };
-        for (const c of bundle.clients) sendFrame(c, frame);
+        for (const c of bundle.clients) deliver(bundle, c, frame);
       }),
     );
     bundle.disposers.push(
@@ -162,6 +176,11 @@ export async function registerWebSocketRoutes(
 
       const bundle = attach(session);
       bundle.clients.add(sock);
+      // Gate broadcast frames until sendInitialState delivers snapshot/
+      // delta + status. Without this, PTY data flushed in this window
+      // arrives before snapshot and breaks the client's "snapshot →
+      // term.reset → write" ordering.
+      bundle.pendingClients.set(sock, []);
 
       const detachHeartbeat = options.heartbeat
         ? attachHeartbeatToWs(sock, options.heartbeat)
@@ -205,6 +224,23 @@ export async function registerWebSocketRoutes(
           });
         }
         sendFrame(sock, { type: 'status', state: session.state });
+
+        // Drain pending broadcast queue. All buffered output frames have
+        // seq <= headSeq because Scrollback.append happens synchronously
+        // in PTY onData before 'data' is emitted (single-threaded event
+        // loop), so the snapshot/delta path above already covers them —
+        // drop. Pre-init status frames are stale; the status frame just
+        // sent above carries the current state — drop. Delete map entry
+        // first so a sync send error mid-loop doesn't leave it stranded.
+        const queue = bundle.pendingClients.get(sock);
+        bundle.pendingClients.delete(sock);
+        if (queue !== undefined) {
+          for (const frame of queue) {
+            if (frame.type === 'output' && frame.seq <= headSeq) continue;
+            if (frame.type === 'status') continue;
+            sendFrame(sock, frame);
+          }
+        }
       };
       const fallbackTimer = setTimeout(sendInitialState, 1_500);
 
@@ -257,6 +293,7 @@ export async function registerWebSocketRoutes(
 
       sock.on('close', (code: number, reason: Buffer) => {
         bundle.clients.delete(sock);
+        bundle.pendingClients.delete(sock);
         detachHeartbeat?.();
         clearTimeout(fallbackTimer);
         logger.debug(
