@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
 import { logger } from '../../log.js';
 import type { ProjectStore } from '../../projects/store.js';
-import type { SessionManager, SpawnOptions } from '../../session/manager.js';
+import type { Session, SessionManager, SpawnOptions } from '../../session/manager.js';
 import { listHistory } from '../history.js';
 import { hashBody, IdempotencyStore, isValidIdempotencyKey } from '../idempotency.js';
 
@@ -188,7 +188,34 @@ export async function registerSessionRoutes(
     const withResume =
       body.mode === 'resume' ? { resumeSessionId: body.sessionId } : {};
 
-    const session = manager.spawn({ ...baseSpawn, ...withSize, ...withResume });
+    const spawnResult = manager.spawn({ ...baseSpawn, ...withSize, ...withResume });
+
+    // 200 attach (idempotent resume of an already-active cc-X) vs 201
+    // created (spawned a new cc process). Body schema is identical; only
+    // the status code distinguishes "attached existing" from "newly created".
+    // See openspec/specs/sessions/spec.md "resume 唯一性".
+    let session: Session;
+    let responseStatus: 200 | 201;
+    if (spawnResult.kind === 'attached') {
+      const existing = manager.get(spawnResult.existingId);
+      if (existing === undefined) {
+        // Single-threaded invariant: activeResumeTargets stays consistent
+        // with manager.sessions. If we hit this, something has been
+        // mutated out-of-band — bail loudly rather than silently mis-route.
+        await reply.code(500).send({
+          error: {
+            code: 'internal',
+            message: `resume target ${spawnResult.existingId} missing from manager`,
+          },
+        });
+        return;
+      }
+      session = existing;
+      responseStatus = 200;
+    } else {
+      session = spawnResult.session;
+      responseStatus = 201;
+    }
 
     const responseBody = {
       id: session.info.id,
@@ -201,13 +228,13 @@ export async function registerSessionRoutes(
     };
 
     if (idempotencyKey !== null && store) {
-      store.store(scope, idempotencyKey, bodyHash, 201, responseBody);
+      store.store(scope, idempotencyKey, bodyHash, responseStatus, responseBody);
       void reply
-        .code(201)
+        .code(responseStatus)
         .header('idempotency-stored', 'true')
         .send(responseBody);
     } else {
-      await reply.code(201).send(responseBody);
+      await reply.code(responseStatus).send(responseBody);
     }
   });
 

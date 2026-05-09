@@ -173,7 +173,7 @@ describe('POST /api/feedback', () => {
     // Spawn a real session in the manager so the route can read its
     // scrollback / state. `claudeBin: 'sh'` from baseConfig is enough —
     // we don't need cc to actually do anything; we just need a live PTY.
-    const session: Session = mgr.spawn({
+    const spawnResult = mgr.spawn({
       projectId: 'demo',
       cwd: env.demoCwd,
       command: baseConfig.claudeBin,
@@ -181,6 +181,10 @@ describe('POST /api/feedback', () => {
       scrollbackBytes: 4096,
       mode: 'create',
     });
+    if (spawnResult.kind !== 'created') {
+      throw new Error(`expected created spawn, got ${spawnResult.kind}`);
+    }
+    const session: Session = spawnResult.session;
 
     const res = await app.inject({
       method: 'POST',

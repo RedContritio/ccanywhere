@@ -25,6 +25,18 @@ export interface SpawnOptions {
   readonly resumeSessionId?: string;
 }
 
+/**
+ * Discriminated result of `SessionManager.spawn`. `attached` means a prior
+ * web-session is already alive for the same cc resumeSessionId — caller
+ * should idempotently return that existing session row instead of treating
+ * this as a "new" creation. Without this guard, two cc processes end up
+ * writing the same `~/.claude/projects/<cwd>/<X>.jsonl` and the history
+ * file is corrupted (anthropics/claude-code#26964).
+ */
+export type SpawnResult =
+  | { readonly kind: 'created'; readonly session: Session }
+  | { readonly kind: 'attached'; readonly existingId: string };
+
 export interface PtyDataChunkRecord {
   readonly ts: number;
   readonly len: number;
@@ -227,6 +239,13 @@ const DEFAULT_DELETED_TTL_MS = 10 * 60 * 1000;
 
 export class SessionManager {
   private readonly sessions = new Map<string, SessionImpl>();
+  // Tracks which cc resumeSessionId is currently being driven by which
+  // active web-session. Same cc-X MUST NOT have two concurrent cc
+  // processes — they'd interleave jsonl writes (anthropics/claude-code#26964).
+  // Map can briefly hold stale entries during the markDeleted → kill →
+  // exit window; spawn() rechecks the candidate is still active before
+  // honoring an attach, so stale entries never leak to callers.
+  private readonly _activeResumeTargets = new Map<string, string>();
   private readonly deletedSessionTtlMs: number;
 
   constructor(options: SessionManagerOptions = {}) {
@@ -238,8 +257,30 @@ export class SessionManager {
     }
   }
 
-  spawn(opts: SpawnOptions): Session {
+  spawn(opts: SpawnOptions): SpawnResult {
     this.gc(Date.now());
+
+    // Idempotent attach: if cc-X is already being driven by an active
+    // web-session, hand the caller that webSessionId instead of spawning
+    // a second cc process for the same jsonl history file.
+    if (opts.mode === 'resume' && opts.resumeSessionId !== undefined) {
+      const existingId = this._activeResumeTargets.get(opts.resumeSessionId);
+      if (existingId !== undefined) {
+        const existing = this.sessions.get(existingId);
+        if (
+          existing !== undefined &&
+          existing.deletedAt === null &&
+          existing.state !== 'dead'
+        ) {
+          return { kind: 'attached', existingId };
+        }
+        // Stale: candidate has been deleted or its PTY has exited but the
+        // exit listener hasn't fired yet (or it was never registered due
+        // to a prior bug). Drop the stale entry and fall through.
+        this._activeResumeTargets.delete(opts.resumeSessionId);
+      }
+    }
+
     const id = randomUUID();
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
@@ -284,6 +325,19 @@ export class SessionManager {
     );
     this.sessions.set(id, session);
 
+    if (opts.mode === 'resume' && opts.resumeSessionId !== undefined) {
+      const lockKey = opts.resumeSessionId;
+      this._activeResumeTargets.set(lockKey, id);
+      // Identity check on release: if the same lockKey was reclaimed by a
+      // newer web-session in the meantime, this stale exit must not wipe
+      // the new owner's entry.
+      session.on('exit', () => {
+        if (this._activeResumeTargets.get(lockKey) === id) {
+          this._activeResumeTargets.delete(lockKey);
+        }
+      });
+    }
+
     session.setState('idle');
     logger.debug(
       {
@@ -299,7 +353,7 @@ export class SessionManager {
       'session spawned',
     );
 
-    return session;
+    return { kind: 'created', session };
   }
 
   get(id: string): Session | undefined {

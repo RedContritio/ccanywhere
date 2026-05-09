@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SessionManager, type SpawnOptions } from './manager.js';
+import { SessionManager, type Session, type SpawnOptions } from './manager.js';
 
 const baseSpawn: Omit<SpawnOptions, 'command' | 'args'> = {
   projectId: 'demo',
@@ -7,6 +7,20 @@ const baseSpawn: Omit<SpawnOptions, 'command' | 'args'> = {
   scrollbackBytes: 4096,
   mode: 'create',
 };
+
+// Adapter for the existing `const session = spawnCreated(mgr,...)` pattern. The
+// real spawn returns a discriminated union (`created` | `attached`) since
+// resume-singleton — most existing tests only exercise the `create` path,
+// so they want the Session out, asserting it's not an attach. The internal
+// call uses `m` rather than `mgr`/`tiny` so the bulk replace below
+// doesn't recurse into this helper.
+function spawnCreated(m: SessionManager, opts: SpawnOptions): Session {
+  const result = m.spawn(opts);
+  if (result.kind !== 'created') {
+    throw new Error(`expected created spawn, got ${result.kind}`);
+  }
+  return result.session;
+}
 
 describe('SessionManager', () => {
   let mgr: SessionManager;
@@ -20,7 +34,7 @@ describe('SessionManager', () => {
   });
 
   it('spawns a process and emits data events', async () => {
-    const session = mgr.spawn({
+    const session = spawnCreated(mgr,{
       ...baseSpawn,
       command: 'sh',
       args: ['-c', 'echo hello-world; sleep 30'],
@@ -40,8 +54,8 @@ describe('SessionManager', () => {
   });
 
   it('records resumeSessionId only when provided', () => {
-    const a = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
-    const b = mgr.spawn({
+    const a = spawnCreated(mgr,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
+    const b = spawnCreated(mgr,{
       ...baseSpawn,
       mode: 'resume',
       resumeSessionId: 'prev-uuid',
@@ -54,7 +68,7 @@ describe('SessionManager', () => {
   });
 
   it('kills a process and emits exit + status=dead, but stays in manager', async () => {
-    const session = mgr.spawn({
+    const session = spawnCreated(mgr,{
       ...baseSpawn,
       command: 'sh',
       args: ['-c', 'sleep 60'],
@@ -76,7 +90,7 @@ describe('SessionManager', () => {
   });
 
   it('markDeleted sets deletedAt, kills the PTY, and is idempotent', async () => {
-    const session = mgr.spawn({
+    const session = spawnCreated(mgr,{
       ...baseSpawn,
       command: 'sh',
       args: ['-c', 'sleep 60'],
@@ -97,8 +111,8 @@ describe('SessionManager', () => {
   });
 
   it('listActive excludes deleted sessions; list includes all', async () => {
-    const a = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
-    const b = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+    const a = spawnCreated(mgr,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+    const b = spawnCreated(mgr,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
     a.markDeleted();
     expect(mgr.listActive().map((s) => s.info.id)).toEqual([b.info.id]);
     expect(mgr.list().map((s) => s.info.id).sort()).toEqual(
@@ -109,7 +123,7 @@ describe('SessionManager', () => {
   describe('GC of soft-deleted sessions', () => {
     it('keeps deleted sessions before ttl elapses', () => {
       const tiny = new SessionManager({ deletedSessionTtlMs: 60_000 });
-      const a = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      const a = spawnCreated(tiny,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
       a.markDeleted();
       const deletedAt = a.deletedAt;
       expect(deletedAt).not.toBeNull();
@@ -119,7 +133,7 @@ describe('SessionManager', () => {
 
     it('removes deleted sessions once ttl elapses', () => {
       const tiny = new SessionManager({ deletedSessionTtlMs: 60_000 });
-      const a = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      const a = spawnCreated(tiny,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
       a.markDeleted();
       const deletedAt = a.deletedAt;
       tiny.gc(deletedAt! + 60_001);
@@ -129,14 +143,14 @@ describe('SessionManager', () => {
 
     it('never collects sessions that were not deleted', () => {
       const tiny = new SessionManager({ deletedSessionTtlMs: 60_000 });
-      const live = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      const live = spawnCreated(tiny,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
       tiny.gc(Date.now() + 365 * 24 * 60 * 60 * 1000);
       expect(tiny.get(live.info.id)?.info.id).toBe(live.info.id);
     });
 
     it('list() opportunistically triggers gc', () => {
       const tiny = new SessionManager({ deletedSessionTtlMs: 1 });
-      const a = tiny.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
+      const a = spawnCreated(tiny,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 60'] });
       a.markDeleted();
       // wait beyond ttl, then list should trigger gc internally.
       const before = a.deletedAt!;
@@ -152,7 +166,7 @@ describe('SessionManager', () => {
   });
 
   it('resize accepts valid sizes and rejects non-positive', () => {
-    const session = mgr.spawn({
+    const session = spawnCreated(mgr,{
       ...baseSpawn,
       command: 'sh',
       args: ['-c', 'sleep 30'],
@@ -163,7 +177,7 @@ describe('SessionManager', () => {
   });
 
   it('scrollback respects byte limit while writing fast output', async () => {
-    const session = mgr.spawn({
+    const session = spawnCreated(mgr,{
       ...baseSpawn,
       scrollbackBytes: 2048,
       command: 'sh',
@@ -183,7 +197,7 @@ describe('SessionManager', () => {
   });
 
   it('setState fires status events but ignores transitions from dead', async () => {
-    const session = mgr.spawn({
+    const session = spawnCreated(mgr,{
       ...baseSpawn,
       command: 'sh',
       args: ['-c', 'sleep 30'],
@@ -202,12 +216,108 @@ describe('SessionManager', () => {
   });
 
   it('list keeps dead sessions (so DELETE stays idempotent)', async () => {
-    const a = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
-    const b = mgr.spawn({ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
+    const a = spawnCreated(mgr,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
+    const b = spawnCreated(mgr,{ ...baseSpawn, command: 'sh', args: ['-c', 'sleep 30'] });
     expect(mgr.list().map((s) => s.info.id).sort()).toEqual([a.info.id, b.info.id].sort());
     await a.kill();
     expect(mgr.list().map((s) => s.info.id).sort()).toEqual([a.info.id, b.info.id].sort());
     expect(a.state).toBe('dead');
     expect(a.deletedAt).toBeNull();
+  });
+
+  describe('resume singleton', () => {
+    const resumeOpts = (resumeSessionId: string): SpawnOptions => ({
+      ...baseSpawn,
+      mode: 'resume' as const,
+      resumeSessionId,
+      command: 'sh',
+      args: ['-c', 'sleep 30'],
+    });
+
+    it('second resume of the same cc-X attaches to the existing web-session', () => {
+      const first = mgr.spawn(resumeOpts('cc-X'));
+      expect(first.kind).toBe('created');
+      if (first.kind !== 'created') throw new Error('unreachable');
+      const w1Id = first.session.info.id;
+
+      const second = mgr.spawn(resumeOpts('cc-X'));
+      expect(second.kind).toBe('attached');
+      if (second.kind !== 'attached') throw new Error('unreachable');
+      expect(second.existingId).toBe(w1Id);
+      // No second cc process spawned — list still has one entry.
+      expect(mgr.list()).toHaveLength(1);
+    });
+
+    it('after PTY exit the lock releases and a fresh resume spawns new', async () => {
+      const first = mgr.spawn(resumeOpts('cc-Y'));
+      if (first.kind !== 'created') throw new Error('unreachable');
+      const w1Id = first.session.info.id;
+
+      const exited = new Promise<void>((resolve) =>
+        first.session.on('exit', () => resolve()),
+      );
+      await first.session.kill();
+      await exited;
+
+      const second = mgr.spawn(resumeOpts('cc-Y'));
+      expect(second.kind).toBe('created');
+      if (second.kind !== 'created') throw new Error('unreachable');
+      expect(second.session.info.id).not.toBe(w1Id);
+    });
+
+    it('create mode never touches resume lock', () => {
+      const first = mgr.spawn({
+        ...baseSpawn,
+        mode: 'create',
+        command: 'sh',
+        args: ['-c', 'sleep 30'],
+      });
+      expect(first.kind).toBe('created');
+      // A subsequent resume of any cc-X must still spawn (no spurious lock).
+      const second = mgr.spawn(resumeOpts('cc-Z'));
+      expect(second.kind).toBe('created');
+    });
+
+    it('markDeleted clears stale lock synchronously on next resume', () => {
+      const first = mgr.spawn(resumeOpts('cc-W'));
+      if (first.kind !== 'created') throw new Error('unreachable');
+      const w1Id = first.session.info.id;
+
+      // markDeleted sets deletedAt + triggers async kill, but the exit
+      // listener has not fired yet — without the active-check guard, the
+      // second spawn would attach to a dying session.
+      first.session.markDeleted();
+      expect(first.session.deletedAt).not.toBeNull();
+      // Same synchronous task, do NOT await exit:
+      const second = mgr.spawn(resumeOpts('cc-W'));
+      expect(second.kind).toBe('created');
+      if (second.kind !== 'created') throw new Error('unreachable');
+      expect(second.session.info.id).not.toBe(w1Id);
+    });
+
+    it('stale exit listener does not wipe new owner of the same lock', async () => {
+      const first = mgr.spawn(resumeOpts('cc-V'));
+      if (first.kind !== 'created') throw new Error('unreachable');
+      const w1 = first.session;
+
+      // Simulate the markDeleted-immediate-respawn race: spawn a new
+      // resume(cc-V) before the first PTY actually exits. Stale-lock
+      // cleanup inside spawn drops the old entry; the new spawn re-claims it.
+      w1.markDeleted();
+      const second = mgr.spawn(resumeOpts('cc-V'));
+      if (second.kind !== 'created') throw new Error('unreachable');
+      const w2 = second.session;
+      expect(w2.info.id).not.toBe(w1.info.id);
+
+      // Now the first PTY finally exits — its listener must NOT touch the
+      // lock, since it now points at w2.
+      await new Promise<void>((resolve) => w1.on('exit', () => resolve()));
+
+      // Verify: a third resume(cc-V) still attaches to w2 (lock intact).
+      const third = mgr.spawn(resumeOpts('cc-V'));
+      expect(third.kind).toBe('attached');
+      if (third.kind !== 'attached') throw new Error('unreachable');
+      expect(third.existingId).toBe(w2.info.id);
+    });
   });
 });

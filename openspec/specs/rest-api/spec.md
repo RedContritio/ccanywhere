@@ -78,7 +78,8 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 
 ### Requirement: POST /api/sessions
 
-创建一个新 session。body MUST 是以下之一：
+创建一个新 session **或** attach 到一个 resume 占用着的现有 web-session。
+body MUST 是以下之一：
 
 ```json
 { "projectId": "<id>", "mode": "create", "cols"?, "rows"?, "webTheme"? }
@@ -102,9 +103,17 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 2. 查 `projectId`；不命中返回 `404 not_found`。
 3. 若 `mode == "resume"`，验证 `sessionId` 出现在 `listHistory(project.cwd)`
    中；不命中返回 `400 invalid_resume`。
-4. spawn cc 进程；响应 `201` 并返回 session 行。
+4. 调用 `manager.spawn({...})` 并 match 返回值：
+   - `{ kind: 'created', session }`：cc 进程已 spawn，响应 `201` + session 行。
+   - `{ kind: 'attached', existingId }`：该 cc sessionId 已被某个未 dead
+     的 web-session 占用，**不 spawn 新 cc**，响应 `200` + 现有 web-session
+     的行（取 `manager.get(existingId)`）。详见
+     `openspec/specs/sessions/spec.md` "resume 唯一性"。
 
-响应 body 形如：
+attached 路径仅在 `body.mode === 'resume'` 时可能触发——`create` mode
+永远走 created 路径。
+
+响应 body 形如（200 与 201 schema 一致）：
 
 ```json
 {
@@ -118,12 +127,34 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 }
 ```
 
+idempotency-key 处理（详见 "Idempotency-Key for POST /api/sessions"
+Requirement）：服务端 MUST 把实际响应 status（200 或 201）作为缓存项的
+status；后续重放时按缓存返回原 status 与 body。
+
 #### Scenario: resume 指向未知 sessionId
 
 - GIVEN `POST /api/sessions` body `{projectId, mode: "resume", sessionId: "x"}`
 - AND   `"x"` 不在该项目的历史目录中
 - WHEN  服务端处理
 - THEN  状态 `400`，`error.code == "invalid_resume"`
+
+#### Scenario: resume 命中已活 web-session 返 200 attach
+
+- GIVEN web-session `W1` 由前一次 `POST /api/sessions
+  {projectId:'p', mode:'resume', sessionId:'X'}` 创建并 active
+- WHEN  以同样 body 第二次 `POST /api/sessions`（**新** Idempotency-Key
+  或不带 key）
+- THEN  状态 `200`
+- AND   响应 body `id` 等于 W1 的 web-session id（不是新生成的）
+- AND   服务端 manager 中 cc 进程数不增（仍只有 W1 一个 cc）
+
+#### Scenario: resume 已退出实例后再 resume 创建新 web-session
+
+- GIVEN W1 之前 resume cc-X，但 W1.PTY 已 exit（state == 'dead'，
+        `activeResumeTargets` 已释放 X）
+- WHEN  `POST /api/sessions {projectId:'p', mode:'resume', sessionId:'X'}`
+- THEN  状态 `201`（不是 200）
+- AND   响应 body `id` 是新生成的 W2 id（不是 W1）
 
 ### Requirement: GET /api/sessions
 
