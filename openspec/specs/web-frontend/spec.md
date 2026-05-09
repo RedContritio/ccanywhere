@@ -198,7 +198,13 @@ session 的 `webTheme`——env 注入仅作用于新 spawn。已存在 session 
    stack、ops 附 ErrorBoundary 捕获瞬间的 ops-log snapshot、diag 附捕获瞬间
    的客户端诊断现场。失败时 UI 显示"重试反馈"按钮；不阻塞 fallback UI 渲染。
 
-ops-log MUST 是 module-scoped 环形缓冲区（最近 N 条，N MAY 取 50）。
+ops-log MUST 是 module-scoped 环形缓冲区。容量 `N` 由保留窗口与峰值事件
+密度推导：`N = ceil(RETENTION_WINDOW_S × PEAK_EV_PER_S × HEADROOM)`。
+基线 `RETENTION_WINDOW_S = 60`（用户感知问题到打开反馈 dialog 的合理上限）、
+`PEAK_EV_PER_S = 90`（dominant 源 `term.write` ≤ outputFps 60/s 加上限频
+后的 touch/mouse/selection 事件 ~30/s）、`HEADROOM = 1.2`，对应 `N ≈ 6480`。
+单 op JSON ~120 B，POST body 上限 ~780 KB（fastify 默认 1 MB 兜底）。
+未来调整保留窗口或峰值上限时只需改输入，不要直接调容量。
 `recordOp(kind, payload?)` MUST 在以下时机被调用：
 
 - session 生命周期事件（`session.create`、`session.delete`）
@@ -209,9 +215,26 @@ ops-log MUST 是 module-scoped 环形缓冲区（最近 N 条，N MAY 取 50）�
 - WebSocket 生命周期（`ws.connect`、`ws.close`、`ws.reconnect`）
 - WebSocket 帧错误（`ws.frame.error` —— 解析失败 / 未知 type）
 - 终端写入错误（`term.write.error` —— `chunkedWrite` 抛异常）
+- 终端写入轨迹（`term.write` —— `chunkedWrite` 入口，含 `source`
+  `'snapshot' | 'output'` / 当前 `buf.type` / `len` / `chunked?`）
+- 终端 reset（`term.reset` —— `onSnapshot` 触发）
+- 终端 buffer 切换（`term.buffer.change` —— alt-screen 进/出）
+- 终端 selection 变化（`term.selection` —— xterm `onSelectionChange`，
+  含 `empty` / `len` / `sample`）
+- 终端 resize（`term.resize` —— `fit.fit()` 后 cols/rows 真的变化时；
+  payload 含 `from` / `to`）
+- 触摸事件（`touch.start` / `touch.end` / `touch.drag.start` /
+  `touch.drag.move` / `touch.pinch`）
+- mouse capture（`mouse.down` —— container 上 capture-phase 监听，
+  payload 含 `targetClass` / `button` / `buttons`）
 
 `ws.reconnect` 调用 MUST 限频到至多 1 次/秒（避免 backoff 8s 窗口期内的
 反复 schedule 把 ops 全填满）。
+
+高频事件（`touch.drag.move` / `touch.pinch` / `mouse.down`）MUST 使用
+`recordOpThrottled(kind, payload, intervalMs)` 限频，建议 `intervalMs` 取
+`50` ~ `100` —— 用最近样本而非完整流，让有限的 ring 容量优先承载用户
+触发链而非单帧密集事件流。
 
 #### Scenario: 崩溃自动上报含诊断现场
 

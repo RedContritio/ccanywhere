@@ -25,10 +25,17 @@ const DiagSchema = z
   })
   .passthrough();
 
+// Runaway-input guard only. The real bound on submission size is the
+// client ring (web/src/state/ops-log.ts `MAX_OPS`, currently derived
+// from a 60s retention window × 90 ev/s × 1.2 headroom ≈ 6500). We set
+// this an order of magnitude above that so legitimate submissions
+// never hit 400, and bumping the client constant doesn't require
+// touching this schema in lockstep — only fast-paced abuse trips it.
+const FEEDBACK_OPS_RUNAWAY_GUARD = 20_000;
 const FeedbackBodySchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().max(10_000).optional(),
-  ops: z.array(OpSchema).max(100).optional(),
+  ops: z.array(OpSchema).max(FEEDBACK_OPS_RUNAWAY_GUARD).optional(),
   diag: DiagSchema.optional(),
 });
 

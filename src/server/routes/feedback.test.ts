@@ -108,6 +108,46 @@ describe('POST /api/feedback', () => {
     expect(res.json().error.code).toBe('invalid_request');
   });
 
+  it('accepts ops arrays at the dogfood ceiling (~7000 entries, beyond client ring)', async () => {
+    // Contract guard: server cap is a runaway-input guard set well
+    // above the client ring (web/src/state/ops-log.ts MAX_OPS, derived
+    // from a 60s × 90 ev/s × 1.2 budget). Submissions at any plausible
+    // client size MUST pass — including bursts that briefly exceed the
+    // documented client cap due to in-flight events between
+    // snapshotOps() and POST. Regression caught manually when this cap
+    // was an undertuned 100: dogfood feedback got a silent 400.
+    const ops = Array.from({ length: 7_000 }, (_, i) => ({
+      ts: 1_700_000_000_000 + i,
+      kind: i % 2 === 0 ? 'touch.drag.move' : 'term.write',
+      payload: { i },
+    }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/feedback',
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
+      payload: { title: 'high-density trace', ops },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('rejects ops arrays beyond the runaway-input guard (20001 entries)', async () => {
+    // Above any plausible client ring; only abusive / malformed bodies
+    // reach this. The exact ceiling lives in feedback.ts as
+    // FEEDBACK_OPS_RUNAWAY_GUARD = 20_000.
+    const ops = Array.from({ length: 20_001 }, (_, i) => ({
+      ts: 1_700_000_000_000 + i,
+      kind: 'noise',
+    }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/feedback',
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
+      payload: { title: 'overflow', ops },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('invalid_request');
+  });
+
   it('persists record with serverInfo even without diag', async () => {
     const res = await app.inject({
       method: 'POST',

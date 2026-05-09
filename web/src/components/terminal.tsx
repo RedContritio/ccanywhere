@@ -7,7 +7,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { noteTermWrite, setActiveTerm } from '../state/diag.js';
-import { recordOp } from '../state/ops-log.js';
+import { recordOp, recordOpThrottled } from '../state/ops-log.js';
 import type { SessionState } from '../state/sessions.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
 import { TerminalSocket } from '../ws.js';
@@ -96,9 +96,15 @@ const SNAPSHOT_CHUNK_BYTES = 4096;
  * we hit with `term.write(huge)` earlier (`loadCell` undef on canvas,
  * `_isDisposed` undef on webgl during dispose).
  */
-function chunkedWrite(term: Terminal, data: string): void {
+function chunkedWrite(term: Terminal, data: string, source: 'snapshot' | 'output'): void {
   if (data.length === 0) return;
+  // Trace which buffer kind we wrote into ('normal' | 'alternate') and
+  // the data length — together with the source ('snapshot' resets first,
+  // 'output' appends), this is enough to spot interleavings between a
+  // mid-flight snapshot RAF queue and an arriving output frame.
+  const bufType = term.buffer.active.type;
   if (data.length <= SNAPSHOT_CHUNK_BYTES) {
+    recordOp('term.write', { source, buf: bufType, len: data.length });
     try {
       term.write(data);
       noteTermWrite();
@@ -111,6 +117,12 @@ function chunkedWrite(term: Terminal, data: string): void {
     return;
   }
   let i = 0;
+  recordOp('term.write', {
+    source,
+    buf: bufType,
+    len: data.length,
+    chunked: true,
+  });
   const step = (): void => {
     if (i >= data.length) return;
     const end = Math.min(i + SNAPSHOT_CHUNK_BYTES, data.length);
@@ -209,14 +221,15 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     const sock: TerminalSocket = new TerminalSocket(props.sessionId, {
       onSnapshot: (data) => {
+        recordOp('term.reset', { reason: 'snapshot' });
         term.reset();
-        chunkedWrite(term, data);
+        chunkedWrite(term, data, 'snapshot');
       },
       // Incremental delta on reconnect — DON'T reset; just append. With
       // the M-ws-seq-ack protocol the server sends incremental output
       // frames after reconnect (rather than a full snapshot reset),
       // letting the existing xterm buffer state carry through.
-      onOutput: (data) => chunkedWrite(term, data),
+      onOutput: (data) => chunkedWrite(term, data, 'output'),
       onStatus: (state) => handlersRef.current.onStatus?.(state),
       onError: (msg) => {
         term.write(`\r\n\x1b[31m[ws error: ${msg}]\x1b[0m\r\n`);
@@ -252,10 +265,15 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const flushResize = (): void => {
+      const before = { cols: term.cols, rows: term.rows };
       try {
         fit.fit();
       } catch {
         return;
+      }
+      const after = { cols: term.cols, rows: term.rows };
+      if (before.cols !== after.cols || before.rows !== after.rows) {
+        recordOp('term.resize', { from: before, to: after });
       }
       sock.send({ type: 'resize', cols: term.cols, rows: term.rows });
     };
@@ -268,18 +286,48 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     // initial resize once mounted
     flushResize();
 
-    // Disable native scroll on xterm's actual scroll container
-    // (`.xterm-viewport`), not just our outer host div. cc spends ~all
-    // its time in alt-screen — there is genuinely nothing to scroll —
-    // and Android Chrome's inertial wheel events on .xterm-viewport
-    // desync xterm's row state, causing duplicated/dropped rows in
-    // cursor-positioned regions (banner, status line). See xterm.js#1007
-    // and copilot-cli#1805 ("rocket scroll fix"). The bulk is done in
-    // app.css with `.terminal-host .xterm-viewport { ... }`; this code
-    // path is a no-op now (kept for future alt/normal-mode toggles).
-    const noopBufferDisposer = term.buffer.onBufferChange(() => {
-      /* no-op — viewport scroll is killed at the CSS layer */
+    // Buffer change tracing — every alt-screen entry/exit shows up here.
+    // This is the keystone for diagnosing the "two banners on screen" bug:
+    // if cc enters alt-screen during reconnect/SIGWINCH, the normal buffer
+    // shouldn't accumulate banner copies; if it doesn't enter alt-screen
+    // (or exits unexpectedly), we'll see the toggle here.
+    const bufferDisposer = term.buffer.onBufferChange((newBuffer) => {
+      recordOp('term.buffer.change', { type: newBuffer.type });
     });
+
+    // Selection change tracing — original report for #24 said 1-finger
+    // drag paints stray highlight rows. If xterm's selection service is
+    // still being activated despite our touchmove preventDefault, every
+    // drag will fire onSelectionChange with a non-empty selection, and
+    // we'll see exactly when (relative to touch ops below).
+    const selectionDisposer = term.onSelectionChange(() => {
+      const sel = term.getSelection();
+      recordOp('term.selection', {
+        empty: sel.length === 0,
+        len: sel.length,
+        sample: sel.slice(0, 40),
+      });
+    });
+
+    // mousedown capture-phase trace. Mobile browsers synthesize mouse
+    // events from a touch sequence after touchend (or sometimes during a
+    // sufficiently slow drag); we register at capture phase so we see
+    // them *before* xterm's own mousedown listener inside selection
+    // service can act, even if our touchmove preventDefault failed.
+    const onMouseDownCapture = (e: MouseEvent): void => {
+      const target = e.target as Element | null;
+      const klass = target?.className ?? '';
+      recordOpThrottled(
+        'mouse.down',
+        {
+          targetClass: typeof klass === 'string' ? klass.slice(0, 80) : String(klass).slice(0, 80),
+          button: e.button,
+          buttons: e.buttons,
+        },
+        50,
+      );
+    };
+    container.addEventListener('mousedown', onMouseDownCapture, { capture: true });
 
     // Touch handling on the terminal area:
     //
@@ -305,6 +353,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     };
     const onTouchStart = (e: TouchEvent): void => {
+      recordOp('touch.start', { fingers: e.touches.length });
       if (e.touches.length === 2) {
         pinchBase = {
           dist: fingerDistance(e.touches),
@@ -323,6 +372,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     };
     const onTouchMove = (e: TouchEvent): void => {
       if (e.touches.length === 2 && pinchBase !== null) {
+        recordOpThrottled('touch.pinch', { fingers: 2 }, 100);
         const ratio = fingerDistance(e.touches) / pinchBase.dist;
         const next = Math.max(
           FONT_SIZE_MIN,
@@ -344,6 +394,10 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         const dx = Math.abs(t.clientX - singleTouchStart.x);
         const dy = Math.abs(t.clientY - singleTouchStart.y);
         if (singleTouchDragging || dx + dy > TAP_THRESHOLD_PX) {
+          if (!singleTouchDragging) {
+            recordOp('touch.drag.start', { dx, dy });
+          }
+          recordOpThrottled('touch.drag.move', { dx, dy }, 100);
           singleTouchDragging = true;
           // prevent the OS from generating mouse events that would feed
           // xterm's selection service — that's what painted the stray
@@ -353,6 +407,11 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       }
     };
     const onTouchEnd = (e: TouchEvent): void => {
+      recordOp('touch.end', {
+        remaining: e.touches.length,
+        wasDragging: singleTouchDragging,
+        wasPinch: pinchBase !== null,
+      });
       if (e.touches.length < 2 && pinchBase !== null) {
         try {
           localStorage.setItem(
@@ -382,7 +441,9 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       container.removeEventListener('touchmove', onTouchMove);
       container.removeEventListener('touchend', onTouchEnd);
       container.removeEventListener('touchcancel', onTouchEnd);
-      noopBufferDisposer.dispose();
+      container.removeEventListener('mousedown', onMouseDownCapture, { capture: true });
+      bufferDisposer.dispose();
+      selectionDisposer.dispose();
       inputDisposer.dispose();
       sock.close();
       sockRef.current = null;
