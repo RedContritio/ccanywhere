@@ -56,6 +56,10 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     logger: false,
     disableRequestLogging: true,
     forceCloseConnections: true,
+    // Trust X-Forwarded-For only when the upstream socket is loopback
+    // (frpc terminates TLS on this mac and proxies to 127.0.0.1). Anyone
+    // off-host hits via the public origin first, so they can't spoof IPs.
+    trustProxy: 'loopback',
   });
 
   await app.register(cookiePlugin);

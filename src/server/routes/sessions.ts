@@ -14,9 +14,10 @@ export interface SessionRoutesOptions {
 const CreateBodySchema = z.discriminatedUnion('mode', [
   z.object({
     projectId: z.string().min(1),
-    mode: z.literal('fresh'),
+    mode: z.literal('create'),
     cols: z.number().int().min(1).optional(),
     rows: z.number().int().min(1).optional(),
+    webTheme: z.enum(['dark', 'light']).optional(),
   }),
   z.object({
     projectId: z.string().min(1),
@@ -24,8 +25,25 @@ const CreateBodySchema = z.discriminatedUnion('mode', [
     sessionId: z.string().min(1),
     cols: z.number().int().min(1).optional(),
     rows: z.number().int().min(1).optional(),
+    webTheme: z.enum(['dark', 'light']).optional(),
   }),
 ]);
+
+/**
+ * Build env vars to override on the spawned cc process. Currently only
+ * COLORFGBG, which cc reads when its `theme` setting is `"auto"` to pick
+ * dark vs light. Format is `<fg>;<bg>` (ANSI color indices); bg=0 means
+ * black (=> dark theme), bg=15 means white (=> light theme).
+ *
+ * cc still falls back to its `~/.claude/settings.json` `theme` field if
+ * that's not set to "auto", so users have to opt in once. See README.
+ */
+function buildThemeEnv(webTheme: 'dark' | 'light' | undefined): Record<string, string> {
+  if (webTheme === undefined) return {};
+  return webTheme === 'dark'
+    ? { COLORFGBG: '15;0' }
+    : { COLORFGBG: '0;15' };
+}
 
 export async function registerSessionRoutes(
   app: FastifyInstance,
@@ -152,6 +170,7 @@ export async function registerSessionRoutes(
       args.push('--resume', body.sessionId);
     }
 
+    const themeEnv = buildThemeEnv(body.webTheme);
     const baseSpawn = {
       projectId: project.id,
       cwd: project.cwd,
@@ -159,6 +178,7 @@ export async function registerSessionRoutes(
       args,
       scrollbackBytes: config.scrollbackBytes,
       mode: body.mode,
+      ...(Object.keys(themeEnv).length > 0 ? { env: themeEnv } : {}),
     };
     const withSize: Pick<SpawnOptions, 'cols' | 'rows'> = {
       ...(body.cols !== undefined ? { cols: body.cols } : {}),

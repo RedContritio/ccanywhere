@@ -1,4 +1,4 @@
-import { createInterface } from 'node:readline/promises';
+import { createInterface, type Interface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { makeInternalClient } from './internal-client.js';
 
@@ -10,13 +10,8 @@ interface PendingPair {
   userAgent: string | null;
 }
 
-async function prompt(question: string): Promise<string> {
-  const rl = createInterface({ input: stdin, output: stdout });
-  try {
-    return (await rl.question(question)).trim();
-  } finally {
-    rl.close();
-  }
+async function ask(rl: Interface, question: string): Promise<string> {
+  return (await rl.question(question)).trim();
 }
 
 function fmtAge(epochMs: number): string {
@@ -49,38 +44,43 @@ export async function runApprove(): Promise<void> {
   }
   stdout.write('\n');
 
-  const sel = await prompt('approve which (number, "all", or empty to abort): ');
-  if (sel.length === 0) {
-    stdout.write('aborted.\n');
-    return;
-  }
-
-  const targets: PendingPair[] =
-    sel === 'all'
-      ? pending
-      : (() => {
-          const idx = Number.parseInt(sel, 10);
-          if (Number.isNaN(idx) || idx < 1 || idx > pending.length) {
-            stdout.write(`invalid selection: ${sel}\n`);
-            process.exit(1);
-          }
-          return [pending[idx - 1]!];
-        })();
-
-  for (const p of targets) {
-    const ans = await prompt(`approve "${p.label}" (from ${p.remoteAddr ?? '?'})? [y/N] `);
-    if (ans.toLowerCase() !== 'y' && ans.toLowerCase() !== 'yes') {
-      stdout.write(`  skipped: ${p.label}\n`);
-      continue;
+  const rl = createInterface({ input: stdin, output: stdout });
+  try {
+    const sel = await ask(rl, 'review which (number, "all", or empty to abort): ');
+    if (sel.length === 0) {
+      stdout.write('aborted.\n');
+      return;
     }
-    const r = await client.fetch(`/api/internal/pending/${p.pendingId}/approve`, {
-      method: 'POST',
-    });
-    if (!r.ok) {
-      stdout.write(`  approve failed for ${p.label}: ${r.status} ${await r.text()}\n`);
-      continue;
+
+    const targets: PendingPair[] =
+      sel === 'all'
+        ? pending
+        : (() => {
+            const idx = Number.parseInt(sel, 10);
+            if (Number.isNaN(idx) || idx < 1 || idx > pending.length) {
+              stdout.write(`invalid selection: ${sel}\n`);
+              process.exit(1);
+            }
+            return [pending[idx - 1]!];
+          })();
+
+    for (const p of targets) {
+      const ans = await ask(rl, `approve "${p.label}" (from ${p.remoteAddr ?? '?'})? [y/N] `);
+      if (ans.toLowerCase() !== 'y' && ans.toLowerCase() !== 'yes') {
+        stdout.write(`  skipped: ${p.label}\n`);
+        continue;
+      }
+      const r = await client.fetch(`/api/internal/pending/${p.pendingId}/approve`, {
+        method: 'POST',
+      });
+      if (!r.ok) {
+        stdout.write(`  approve failed for ${p.label}: ${r.status} ${await r.text()}\n`);
+        continue;
+      }
+      const body = (await r.json()) as { deviceId: string; label: string };
+      stdout.write(`  approved: ${body.label} → device ${body.deviceId}\n`);
     }
-    const body = (await r.json()) as { deviceId: string; label: string };
-    stdout.write(`  approved: ${body.label} → device ${body.deviceId}\n`);
+  } finally {
+    rl.close();
   }
 }

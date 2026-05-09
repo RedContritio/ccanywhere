@@ -39,7 +39,7 @@ describe('api wrapper', () => {
       .mockResolvedValue(jsonResponse({ id: 'a' }, { status: 201 }));
     await api('/api/sessions', {
       method: 'POST',
-      body: { projectId: 'demo', mode: 'fresh' },
+      body: { projectId: 'demo', mode: 'create' },
       idempotencyKey: 'KEY-1',
     });
     const init = spy.mock.calls[0]?.[1] as RequestInit | undefined;

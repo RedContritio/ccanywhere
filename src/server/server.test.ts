@@ -222,12 +222,12 @@ describe('REST API', () => {
       method: 'POST',
       url: '/api/sessions',
       headers: { cookie: env.authCookie, 'content-type': 'application/json' },
-      payload: { projectId: 'demo', mode: 'fresh' },
+      payload: { projectId: 'demo', mode: 'create' },
     });
     expect(create.statusCode).toBe(201);
     const session = create.json() as { id: string; mode: string; state: string };
     expect(session.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(session.mode).toBe('fresh');
+    expect(session.mode).toBe('create');
 
     const list = await app.inject({
       method: 'GET',
@@ -261,7 +261,7 @@ describe('REST API', () => {
       method: 'POST',
       url: '/api/sessions',
       headers: { cookie: env.authCookie, 'content-type': 'application/json' },
-      payload: { projectId: 'ghost', mode: 'fresh' },
+      payload: { projectId: 'ghost', mode: 'create' },
     });
     expect(res.statusCode).toBe(404);
   });
@@ -298,7 +298,7 @@ describe('REST API', () => {
       method: 'POST',
       url: '/api/sessions',
       headers: { cookie: env.authCookie, 'content-type': 'application/json' },
-      payload: { projectId: 'demo', mode: 'fresh' },
+      payload: { projectId: 'demo', mode: 'create' },
     });
     const sid = (create.json() as { id: string }).id;
 
@@ -315,7 +315,7 @@ describe('REST API', () => {
       method: 'POST',
       url: '/api/sessions',
       headers: { cookie: env.authCookie, 'content-type': 'application/json' },
-      payload: { projectId: 'demo', mode: 'fresh' },
+      payload: { projectId: 'demo', mode: 'create' },
     });
     const sid = (create.json() as { id: string }).id;
 
@@ -332,7 +332,7 @@ describe('REST API', () => {
       method: 'POST',
       url: '/api/sessions',
       headers: { cookie: env.authCookie, 'content-type': 'application/json' },
-      payload: { projectId: 'demo', mode: 'fresh' },
+      payload: { projectId: 'demo', mode: 'create' },
     });
     const sid = (create.json() as { id: string }).id;
     const session = mgr.get(sid);
@@ -373,7 +373,7 @@ describe('REST API', () => {
       method: 'POST',
       url: '/api/sessions',
       headers: { cookie: env.authCookie, 'content-type': 'application/json' },
-      payload: { projectId: 'demo', mode: 'fresh' },
+      payload: { projectId: 'demo', mode: 'create' },
     });
     const sid = (create.json() as { id: string }).id;
 
@@ -517,26 +517,26 @@ describe('REST API idempotency', () => {
   }
 
   it('without Idempotency-Key behaves like before', async () => {
-    const a = await post(env.authCookie, null, { projectId: 'demo', mode: 'fresh' });
-    const b = await post(env.authCookie, null, { projectId: 'demo', mode: 'fresh' });
+    const a = await post(env.authCookie, null, { projectId: 'demo', mode: 'create' });
+    const b = await post(env.authCookie, null, { projectId: 'demo', mode: 'create' });
     expect(a.statusCode).toBe(201);
     expect(b.statusCode).toBe(201);
     expect((a.json() as { id: string }).id).not.toBe((b.json() as { id: string }).id);
   });
 
   it('rejects malformed Idempotency-Key', async () => {
-    const res = await post(env.authCookie, 'has space', { projectId: 'demo', mode: 'fresh' });
+    const res = await post(env.authCookie, 'has space', { projectId: 'demo', mode: 'create' });
     expect(res.statusCode).toBe(400);
     expect((res.json() as { error: { code: string } }).error.code).toBe('invalid_idempotency_key');
   });
 
   it('replays cached response for same key + body', async () => {
-    const a = await post(env.authCookie, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
+    const a = await post(env.authCookie, 'KEY-1', { projectId: 'demo', mode: 'create' });
     expect(a.statusCode).toBe(201);
     expect(a.headers['idempotency-stored']).toBe('true');
     const idA = (a.json() as { id: string }).id;
 
-    const b = await post(env.authCookie, 'KEY-1', { projectId: 'demo', mode: 'fresh' });
+    const b = await post(env.authCookie, 'KEY-1', { projectId: 'demo', mode: 'create' });
     expect(b.statusCode).toBe(201);
     expect(b.headers['idempotency-replayed']).toBe('true');
     expect((b.json() as { id: string }).id).toBe(idA);
@@ -551,10 +551,10 @@ describe('REST API idempotency', () => {
   });
 
   it('returns 409 on same key with different body', async () => {
-    await post(env.authCookie, 'KEY-2', { projectId: 'demo', mode: 'fresh' });
+    await post(env.authCookie, 'KEY-2', { projectId: 'demo', mode: 'create' });
     const conflict = await post(env.authCookie, 'KEY-2', {
       projectId: 'demo',
-      mode: 'fresh',
+      mode: 'create',
       cols: 200,
     });
     expect(conflict.statusCode).toBe(409);
@@ -564,16 +564,16 @@ describe('REST API idempotency', () => {
   });
 
   it('isolates idempotency-key namespace per device', async () => {
-    const a = await post(env.authCookie, 'SHARED', { projectId: 'demo', mode: 'fresh' });
-    const b = await post(otherCookie, 'SHARED', { projectId: 'demo', mode: 'fresh' });
+    const a = await post(env.authCookie, 'SHARED', { projectId: 'demo', mode: 'create' });
+    const b = await post(otherCookie, 'SHARED', { projectId: 'demo', mode: 'create' });
     expect(a.statusCode).toBe(201);
     expect(b.statusCode).toBe(201);
     expect((a.json() as { id: string }).id).not.toBe((b.json() as { id: string }).id);
   });
 
   it('caches 4xx errors so retried bad requests are stable', async () => {
-    const a = await post(env.authCookie, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
-    const b = await post(env.authCookie, 'BAD-1', { projectId: 'ghost', mode: 'fresh' });
+    const a = await post(env.authCookie, 'BAD-1', { projectId: 'ghost', mode: 'create' });
+    const b = await post(env.authCookie, 'BAD-1', { projectId: 'ghost', mode: 'create' });
     expect(a.statusCode).toBe(404);
     expect(b.statusCode).toBe(404);
     expect(b.headers['idempotency-replayed']).toBe('true');

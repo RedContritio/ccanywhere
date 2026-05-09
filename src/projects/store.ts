@@ -14,6 +14,8 @@ export interface Project {
   readonly id: string;
   readonly name: string;
   readonly cwd: string;
+  /** epoch-ms; the directory's filesystem mtime. */
+  readonly modifiedAt: number;
 }
 
 interface ProjectsState {
@@ -109,14 +111,15 @@ export class ProjectStore {
       if (this.hidden.has(name)) continue;
       if (name.startsWith('.')) continue;
       const cwd = join(this.opts.projectsRoot, name);
-      let isDir: boolean;
+      let modifiedAt: number;
       try {
-        isDir = statSync(cwd).isDirectory();
+        const st = statSync(cwd);
+        if (!st.isDirectory()) continue;
+        modifiedAt = st.mtimeMs;
       } catch {
         continue;
       }
-      if (!isDir) continue;
-      out.push({ id: name, name, cwd });
+      out.push({ id: name, name, cwd, modifiedAt });
     }
     out.sort((a, b) => a.id.localeCompare(b.id));
     return out;
@@ -146,7 +149,7 @@ export class ProjectStore {
       throw err;
     }
     if (this.hidden.delete(name)) this.persistState();
-    return { id: name, name, cwd };
+    return { id: name, name, cwd, modifiedAt: Date.now() };
   }
 
   /** Marks a project hidden; idempotent. Does NOT delete on disk. */

@@ -72,7 +72,7 @@ async function createSession(h: Harness): Promise<string> {
     method: 'POST',
     url: '/api/sessions',
     headers: { cookie: h.authCookie, 'content-type': 'application/json' },
-    payload: { projectId: 'demo', mode: 'fresh' },
+    payload: { projectId: 'demo', mode: 'create' },
   });
   return (res.json() as { id: string }).id;
 }

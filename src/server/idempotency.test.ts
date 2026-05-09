@@ -54,7 +54,7 @@ describe('IdempotencyStore', () => {
 
   it('miss → store → replay round trip', () => {
     store = new IdempotencyStore(60_000);
-    const hash = hashBody({ projectId: 'demo', mode: 'fresh' });
+    const hash = hashBody({ projectId: 'demo', mode: 'create' });
 
     expect(store.lookup('s1', 'k1', hash)).toEqual({ kind: 'miss' });
 

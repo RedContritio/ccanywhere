@@ -5,7 +5,7 @@ const baseSpawn: Omit<SpawnOptions, 'command' | 'args'> = {
   projectId: 'demo',
   cwd: process.cwd(),
   scrollbackBytes: 4096,
-  mode: 'fresh',
+  mode: 'create',
 };
 
 describe('SessionManager', () => {
@@ -26,7 +26,7 @@ describe('SessionManager', () => {
       args: ['-c', 'echo hello-world; sleep 30'],
     });
     expect(session.info.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(session.info.mode).toBe('fresh');
+    expect(session.info.mode).toBe('create');
     expect(session.state).toBe('idle');
 
     const seen = await new Promise<string>((resolve) => {

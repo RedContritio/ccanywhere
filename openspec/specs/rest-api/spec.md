@@ -81,7 +81,7 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 创建一个新 session。body MUST 是以下之一：
 
 ```json
-{ "projectId": "<id>", "mode": "fresh", "cols"?, "rows"? }
+{ "projectId": "<id>", "mode": "create", "cols"?, "rows"? }
 ```
 ```json
 { "projectId": "<id>", "mode": "resume", "sessionId": "<uuid>", "cols"?, "rows"? }
@@ -104,7 +104,7 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 {
   "id": "<uuid>",
   "projectId": "<id>",
-  "mode": "fresh|resume",
+  "mode": "create|resume",
   "resumeSessionId": "<uuid>|null",
   "state": "starting|idle|busy|dead",
   "createdAt": <epoch-ms>,

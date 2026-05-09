@@ -13,7 +13,12 @@ export async function registerProjectRoutes(
   historyRoot?: string,
 ): Promise<void> {
   app.get('/api/projects', () => ({
-    projects: store.list().map((p) => ({ id: p.id, name: p.name, cwd: p.cwd })),
+    projects: store.list().map((p) => ({
+      id: p.id,
+      name: p.name,
+      cwd: p.cwd,
+      modifiedAt: p.modifiedAt,
+    })),
   }));
 
   app.post('/api/projects', async (req, reply) => {
@@ -46,7 +51,12 @@ export async function registerProjectRoutes(
       }
       throw err;
     }
-    await reply.code(201).send({ id: project.id, name: project.name, cwd: project.cwd });
+    await reply.code(201).send({
+      id: project.id,
+      name: project.name,
+      cwd: project.cwd,
+      modifiedAt: project.modifiedAt,
+    });
   });
 
   app.delete<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {

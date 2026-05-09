@@ -42,14 +42,21 @@ export interface InternalClient {
 export function makeInternalClient(cfg: InternalClientConfig = loadInternalClientConfig()): InternalClient {
   return {
     cfg,
-    fetch: (path, init = {}) =>
-      fetch(`${cfg.baseUrl}${path}`, {
-        ...init,
-        headers: {
-          Authorization: `Bearer ${cfg.token}`,
-          'content-type': 'application/json',
-          ...(init.headers ?? {}),
-        },
-      }),
+    fetch: (path, init = {}) => {
+      // Only attach content-type when we actually send a body. Fastify 5
+      // rejects POST/DELETE with `application/json` header but empty body
+      // (FST_ERR_CTP_EMPTY_JSON_BODY) — the CLI POSTs approve / revoke
+      // without a body, so leaving the header off lets fastify skip JSON
+      // body parsing entirely.
+      const callerHeaders = (init.headers ?? {}) as Record<string, string>;
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${cfg.token}`,
+        ...callerHeaders,
+      };
+      if (init.body != null && headers['content-type'] === undefined) {
+        headers['content-type'] = 'application/json';
+      }
+      return fetch(`${cfg.baseUrl}${path}`, { ...init, headers });
+    },
   };
 }

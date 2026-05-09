@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { probeSession, runLogin, runPair } from '../auth-flow.js';
+import { ThemeToggle } from '../components/theme-toggle.js';
 import { useAuthStore } from '../state/auth.js';
 
 type Mode =
@@ -25,13 +26,20 @@ export function LoginPage(): JSX.Element {
 
   // Boot: probe existing cookie session; if it's live, go straight to /workspace.
   // If we have a stored deviceId but no live session, offer one-click login.
+  //
+  // Edge case: cookie still valid but localStorage was wiped (manual clear,
+  // older client logged out before we shipped the server-side logout call,
+  // etc.). In that case probeSession returns the device but our store has
+  // null deviceId — RequireAuth would bounce back to /login and we'd loop.
+  // Rebuild the snapshot from /api/auth/me so RequireAuth sees a non-null
+  // deviceId.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const me = await probeSession();
       if (cancelled) return;
       if (me !== null) {
-        markVerified();
+        setPaired(me.id, me.label);
         navigate('/workspace', { replace: true });
         return;
       }
@@ -40,7 +48,7 @@ export function LoginPage(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [deviceId, markVerified, navigate]);
+  }, [deviceId, setPaired, navigate]);
 
   useEffect(() => {
     return () => {
@@ -103,6 +111,9 @@ export function LoginPage(): JSX.Element {
 
   return (
     <main className="login-page">
+      <div className="login-page-corner">
+        <ThemeToggle />
+      </div>
       <div className="login-card">
         <h1 className="login-title">CC anywhere</h1>
         <p className="login-subtitle">把本地 cc 映射到 web 的远程入口</p>
@@ -172,9 +183,7 @@ export function LoginPage(): JSX.Element {
 
         {mode.kind === 'pairing-await' && (
           <div className="login-form">
-            <p className="login-hint">
-              已提交。等 mac 上的我执行 <code>ccanywhere approve</code> 选中你的设备…
-            </p>
+            <p className="login-hint">申请已提交，正在等待审批…</p>
             <button type="button" className="login-link" onClick={cancelPair}>
               取消
             </button>

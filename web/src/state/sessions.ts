@@ -5,6 +5,8 @@ export interface Project {
   id: string;
   name: string;
   cwd: string;
+  /** epoch-ms; directory mtime on the server side. */
+  modifiedAt: number;
 }
 
 export type SessionState = 'starting' | 'idle' | 'busy' | 'dead';
@@ -12,7 +14,7 @@ export type SessionState = 'starting' | 'idle' | 'busy' | 'dead';
 export interface Session {
   id: string;
   projectId: string;
-  mode: 'fresh' | 'resume';
+  mode: 'create' | 'resume';
   resumeSessionId: string | null;
   state: SessionState;
   createdAt: number;
@@ -27,8 +29,15 @@ export interface HistorySummary {
 
 export interface CreateSessionRequest {
   projectId: string;
-  mode: 'fresh' | 'resume';
+  mode: 'create' | 'resume';
   sessionId?: string;
+  /**
+   * Hint to the server which color scheme the cc TUI should use (cc reads
+   * `COLORFGBG` when its `theme` setting is `"auto"`). Captured at create
+   * time only — runtime web-side theme switches don't propagate to a
+   * running cc process.
+   */
+  webTheme?: 'dark' | 'light';
 }
 
 interface SessionsStore {
@@ -83,10 +92,17 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
     return history;
   },
   createSession: async (req, idempotencyKey) => {
+    const themeHint =
+      req.webTheme !== undefined ? { webTheme: req.webTheme } : {};
     const body =
       req.mode === 'resume'
-        ? { projectId: req.projectId, mode: req.mode, sessionId: req.sessionId }
-        : { projectId: req.projectId, mode: req.mode };
+        ? {
+            projectId: req.projectId,
+            mode: req.mode,
+            sessionId: req.sessionId,
+            ...themeHint,
+          }
+        : { projectId: req.projectId, mode: req.mode, ...themeHint };
     const created = await api<Session>('/api/sessions', {
       method: 'POST',
       body,

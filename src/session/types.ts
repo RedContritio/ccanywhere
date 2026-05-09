@@ -1,6 +1,6 @@
 export type SessionState = 'starting' | 'idle' | 'busy' | 'dead';
 
-export type SessionMode = 'fresh' | 'resume';
+export type SessionMode = 'create' | 'resume';
 
 export interface SessionInfo {
   readonly id: string;

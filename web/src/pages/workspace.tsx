@@ -9,6 +9,8 @@ import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
+import { logoutServer } from '../auth-flow.js';
+import { useEffectiveTheme } from '../state/use-theme.js';
 import { useBackgroundPoll } from '../state/use-background-poll.js';
 import { useCompletionNotify } from '../state/use-completion-notify.js';
 import { newIdempotencyKey } from '../api.js';
@@ -38,6 +40,7 @@ export function WorkspacePage(): JSX.Element {
   const logout = useAuthStore((s) => s.logout);
 
   const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
 
@@ -73,7 +76,12 @@ export function WorkspacePage(): JSX.Element {
     setLiveSessionState(null);
   }, [id]);
 
-  const onLogout = (): void => {
+  const onLogout = async (): Promise<void> => {
+    // Clear the server-side cookie first; otherwise probeSession() on the
+    // login page still sees a valid session and bounces straight back to
+    // /workspace, where RequireAuth (deviceId === null) bounces it to
+    // /login again — infinite loop, blank screen.
+    await logoutServer();
     logout();
     navigate('/login', { replace: true });
   };
@@ -83,8 +91,12 @@ export function WorkspacePage(): JSX.Element {
     setNewDialogOpen(true);
   };
 
+  const effectiveTheme = useEffectiveTheme();
   const onCreate = async (req: CreateRequest): Promise<void> => {
-    const created = await createSession(req, idemKeyRef.current);
+    const created = await createSession(
+      { ...req, webTheme: effectiveTheme },
+      idemKeyRef.current,
+    );
     navigate(`/workspace/${created.id}`);
   };
 
@@ -111,19 +123,43 @@ export function WorkspacePage(): JSX.Element {
   const headerStatus =
     liveSessionState ?? currentSession?.state ?? null;
 
+  // The drawer wraps the workspace header + session list on mobile. On
+  // desktop it stays open inline (CSS turns the transform into a no-op).
+  // Auto-close after picking a session so the terminal isn't hidden by
+  // the drawer the whole time.
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    closeDrawer();
+  }, [id]);
+
   return (
-    <div className="workspace">
-      <header className="workspace-header">
-        <div className="header-brand">CC anywhere</div>
-        <div className="header-spacer" />
-        <span className="header-device">{label ?? 'unnamed'}</span>
-        <ThemeToggle />
-        <button type="button" className="header-logout" onClick={onLogout}>
-          登出
-        </button>
-      </header>
-      <NotificationBanner />
-      <div className="workspace-body">
+    <div className={`workspace ${drawerOpen ? 'is-drawer-open' : ''}`}>
+      <aside className="workspace-drawer">
+        <header className="workspace-header">
+          <button
+            type="button"
+            className="header-brand"
+            onClick={() => navigate('/workspace')}
+            aria-label="返回主页"
+            title="返回主页"
+          >
+            CC anywhere
+          </button>
+          <div className="header-spacer" />
+          <div className="header-actions">
+            <span className="header-device">{label ?? 'unnamed'}</span>
+            <ThemeToggle />
+            <button
+              type="button"
+              className="header-logout"
+              onClick={() => void onLogout()}
+            >
+              登出
+            </button>
+          </div>
+        </header>
+        <NotificationBanner />
         <SessionList
           sessions={sessions}
           projects={projects}
@@ -131,15 +167,62 @@ export function WorkspacePage(): JSX.Element {
           onNew={onOpenNew}
           onDelete={(sid) => void onDelete(sid)}
         />
+      </aside>
+      <button
+        type="button"
+        className="workspace-backdrop"
+        aria-label="关闭侧边栏"
+        onClick={closeDrawer}
+      />
+      <main className="workspace-main">
         <section className="terminal-pane">
           {sessionsError !== null && id === undefined ? (
-            <div className="terminal-pane-empty">加载失败: {sessionsError}</div>
+            <div className="terminal-pane-empty">
+              <button
+                type="button"
+                className="terminal-hamburger"
+                aria-label="打开侧边栏"
+                onClick={() => setDrawerOpen(true)}
+              >
+                ☰
+              </button>
+              加载失败: {sessionsError}
+            </div>
           ) : id === undefined ? (
             <div className="terminal-pane-empty">
-              从左侧选中一个会话，或点击 "+ 新建" 创建一个
+              <button
+                type="button"
+                className="terminal-hamburger"
+                aria-label="打开侧边栏"
+                onClick={() => setDrawerOpen(true)}
+              >
+                ☰
+              </button>
+              <div className="home-card">
+                <h2 className="home-title">CC anywhere</h2>
+                <dl className="home-status">
+                  <dt>设备</dt>
+                  <dd>{label ?? 'unnamed'}</dd>
+                  <dt>项目</dt>
+                  <dd>{projects.length}</dd>
+                  <dt>活跃会话</dt>
+                  <dd>{sessions.filter((s) => s.deletedAt === null).length}</dd>
+                </dl>
+                <p className="home-hint">
+                  从左侧选中一个会话，或点击「+ 新建」创建一个
+                </p>
+              </div>
             </div>
           ) : currentSession === undefined ? (
             <div className="terminal-pane-empty">
+              <button
+                type="button"
+                className="terminal-hamburger"
+                aria-label="打开侧边栏"
+                onClick={() => setDrawerOpen(true)}
+              >
+                ☰
+              </button>
               session id 不在列表中（可能已被回收）
             </div>
           ) : deviceId === null ? (
@@ -147,6 +230,14 @@ export function WorkspacePage(): JSX.Element {
           ) : (
             <>
               <div className="terminal-header">
+                <button
+                  type="button"
+                  className="terminal-hamburger"
+                  aria-label="打开侧边栏"
+                  onClick={() => setDrawerOpen(true)}
+                >
+                  ☰
+                </button>
                 <span className="terminal-header-name">
                   {currentProject?.name ?? currentSession.projectId}
                 </span>
@@ -180,7 +271,7 @@ export function WorkspacePage(): JSX.Element {
             </>
           )}
         </section>
-      </div>
+      </main>
       <NewSessionDialog
         open={newDialogOpen}
         projects={projects}

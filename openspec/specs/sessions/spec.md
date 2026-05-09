@@ -11,16 +11,16 @@ session 的生命周期长于浏览器标签页（关闭笔记本上的标签后
 ### Requirement: session 标识与创建
 
 session MUST 拥有：服务端生成的 UUIDv4 `id`、当前可见 `ProjectStore` 中
-存在的 `projectId`、`mode`（`fresh` 或 `resume`）、epoch-ms 时间戳
+存在的 `projectId`、`mode`（`create` 或 `resume`）、epoch-ms 时间戳
 `createdAt`。当 `mode = resume` 时还 MUST 设置 `resumeSessionId`。
 
 session MUST 以下列方式 spawn：PTY 列数（默认 100）、行数（默认 30）、
 `name = "xterm-256color"`、cwd 取自 `ProjectStore.get(projectId).cwd`、
 二进制取自 `config.claudeBin`。
 
-#### Scenario: fresh session 没有 resumeSessionId
+#### Scenario: create session 没有 resumeSessionId
 
-- GIVEN `POST /api/sessions` 请求 body 含 `mode: "fresh"`
+- GIVEN `POST /api/sessions` 请求 body 含 `mode: "create"`
 - WHEN  session 被创建
 - THEN  `info.resumeSessionId` 为 `undefined`
 - AND   响应 body 中 `resumeSessionId` 为 `null`
