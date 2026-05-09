@@ -6,8 +6,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import type { SessionState } from '../state/sessions.js';
+import { noteTermWrite, setActiveTerm } from '../state/diag.js';
 import { recordOp } from '../state/ops-log.js';
+import type { SessionState } from '../state/sessions.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
 import { TerminalSocket } from '../ws.js';
 
@@ -96,15 +97,34 @@ const SNAPSHOT_CHUNK_BYTES = 4096;
  * `_isDisposed` undef on webgl during dispose).
  */
 function chunkedWrite(term: Terminal, data: string): void {
+  if (data.length === 0) return;
   if (data.length <= SNAPSHOT_CHUNK_BYTES) {
-    term.write(data);
+    try {
+      term.write(data);
+      noteTermWrite();
+    } catch (err) {
+      recordOp('term.write.error', {
+        message: err instanceof Error ? err.message : String(err),
+        len: data.length,
+      });
+    }
     return;
   }
   let i = 0;
   const step = (): void => {
     if (i >= data.length) return;
     const end = Math.min(i + SNAPSHOT_CHUNK_BYTES, data.length);
-    term.write(data.slice(i, end));
+    try {
+      term.write(data.slice(i, end));
+      noteTermWrite();
+    } catch (err) {
+      recordOp('term.write.error', {
+        message: err instanceof Error ? err.message : String(err),
+        offset: i,
+        len: data.length,
+      });
+      return;
+    }
     i = end;
     if (i < data.length) requestAnimationFrame(step);
   };
@@ -196,7 +216,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       // the M-ws-seq-ack protocol the server sends incremental output
       // frames after reconnect (rather than a full snapshot reset),
       // letting the existing xterm buffer state carry through.
-      onOutput: (data) => term.write(data),
+      onOutput: (data) => chunkedWrite(term, data),
       onStatus: (state) => handlersRef.current.onStatus?.(state),
       onError: (msg) => {
         term.write(`\r\n\x1b[31m[ws error: ${msg}]\x1b[0m\r\n`);
@@ -219,6 +239,14 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       onDead: () => handlersRef.current.onDead?.(),
     });
     sockRef.current = sock;
+
+    setActiveTerm({
+      term,
+      ws: sock,
+      sessionId: props.sessionId,
+      rendererKind: renderer,
+      lastWriteTs: 0,
+    });
 
     const inputDisposer = term.onData((data) => sock.send({ type: 'input', data }));
 
@@ -347,6 +375,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     container.addEventListener('touchcancel', onTouchEnd);
 
     return () => {
+      setActiveTerm(null);
       observer.disconnect();
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       container.removeEventListener('touchstart', onTouchStart);

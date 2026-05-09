@@ -53,6 +53,7 @@ function defaultWebDistDir(): string | null {
 }
 
 export async function buildServer(opts: BuildServerOptions): Promise<FastifyInstance> {
+  const serverStartedAt = Date.now();
   const app = Fastify({
     logger: false,
     disableRequestLogging: true,
@@ -74,7 +75,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     webOrigin: opts.config.webOrigin,
   });
   await registerInternalRoutes(app, { store: opts.deviceStore });
-  await registerFeedbackRoutes(app);
+  await registerFeedbackRoutes(app, { manager: opts.manager, serverStartedAt });
 
   app.get('/healthz', () => ({ ok: true }));
 

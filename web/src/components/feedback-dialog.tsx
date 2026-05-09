@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api.js';
+import { collectDiag } from '../state/diag.js';
 import { snapshotOps } from '../state/ops-log.js';
+import { useSessionsStore } from '../state/sessions.js';
+import { effectiveTheme, useUiStore } from '../state/ui.js';
 
 interface Props {
   readonly open: boolean;
@@ -33,6 +36,11 @@ export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
     const t = title.trim();
     if (t.length === 0) return;
     setMode({ kind: 'submitting' });
+    const themeMode = useUiStore.getState().themeMode;
+    const sessionIds = useSessionsStore
+      .getState()
+      .sessions.filter((s) => s.deletedAt === null)
+      .map((s) => s.id);
     try {
       const res = await api<{ id: string }>('/api/feedback', {
         method: 'POST',
@@ -42,6 +50,11 @@ export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
           // the receipt JSON stays clean instead of carrying empty strings
           ...(body.trim().length > 0 ? { body: body.trim() } : {}),
           ops: snapshotOps(),
+          diag: collectDiag({
+            sessionIds,
+            theme: themeMode,
+            effectiveTheme: effectiveTheme(themeMode),
+          }),
         },
       });
       setMode({ kind: 'submitted', id: res.id });
@@ -102,7 +115,8 @@ export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
               />
             </label>
             <p className="dialog-hint">
-              提交时自动附最近 50 条操作记录（仅 id / 类型，不含敏感内容）。
+              提交时自动附最近 50 条操作、当前终端可见内容、浏览器与网络
+              状态——便于定位。如终端正显示敏感内容请取消。
             </p>
             {mode.kind === 'error' && (
               <p className="dialog-error" role="alert">

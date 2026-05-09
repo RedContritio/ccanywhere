@@ -31,6 +31,8 @@ export interface Session {
   readonly scrollback: Scrollback;
   readonly screenState: ScreenState;
   readonly deletedAt: number | null;
+  readonly lastDataAt: number | null;
+  readonly exitCode: number | null;
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(): Promise<void>;
@@ -45,6 +47,8 @@ const KILL_FORCE_AFTER_MS = 7_000;
 class SessionImpl implements Session {
   state: SessionState = 'starting';
   deletedAt: number | null = null;
+  lastDataAt: number | null = null;
+  exitCode: number | null = null;
 
   private readonly listeners: {
     [E in SessionEventName]: Set<SessionListener<E>>;
@@ -66,10 +70,12 @@ class SessionImpl implements Session {
     this.pty.onData((data) => {
       this.scrollback.append(data);
       this.screenState.feed(data);
+      this.lastDataAt = Date.now();
       this.emit('data', { sessionId: this.info.id, data });
     });
     this.pty.onExit(({ exitCode, signal }) => {
       this.state = 'dead';
+      this.exitCode = exitCode;
       this.emit('status', { sessionId: this.info.id, state: 'dead' });
       const exitPayload =
         signal === undefined

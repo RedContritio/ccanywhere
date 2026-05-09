@@ -1,3 +1,4 @@
+import { recordOp } from './state/ops-log.js';
 import type { SessionState } from './state/sessions.js';
 
 export type ServerFrame =
@@ -27,6 +28,17 @@ export type WebSocketFactory = (url: string) => WebSocket;
 const BACKOFF_STEPS_MS = [250, 500, 1_000, 2_000, 4_000, 8_000] as const;
 const MAX_BACKOFF_MS = 8_000;
 
+export interface SocketDiag {
+  readonly readyState: number;
+  readonly lastSeq: number;
+  readonly retryIdx: number;
+  readonly lastFrameTs: number;
+  readonly lastFrameType: string;
+}
+
+const RECONNECT_OP_MIN_INTERVAL_MS = 1000;
+const WS_CLOSED_READY_STATE = 3;
+
 export class TerminalSocket {
   private ws: WebSocket | null = null;
   private closed = false;
@@ -40,6 +52,9 @@ export class TerminalSocket {
    * full snapshot (lastSeq=0 or evicted) or just incremental delta.
    */
   private lastSeq = 0;
+  private lastFrameTs = 0;
+  private lastFrameType = '';
+  private lastReconnectOpTs = 0;
 
   private readonly onOnline = (): void => {
     this.forceReconnect();
@@ -131,6 +146,7 @@ export class TerminalSocket {
 
     ws.onopen = () => {
       this.retryIdx = 0;
+      recordOp('ws.connect', { sessionId: this.sessionId });
       this.handlers.onConnected?.();
     };
 
@@ -140,13 +156,15 @@ export class TerminalSocket {
       try {
         frame = JSON.parse(raw) as ServerFrame;
       } catch {
+        recordOp('ws.frame.error', { reason: 'invalid_json' });
         return;
       }
       this.dispatch(frame);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev: CloseEvent) => {
       this.ws = null;
+      recordOp('ws.close', { code: ev.code, reason: String(ev.reason ?? '').slice(0, 200) });
       if (this.closed || this.dead) return;
       this.scheduleReconnect();
     };
@@ -157,6 +175,8 @@ export class TerminalSocket {
   }
 
   private dispatch(frame: ServerFrame): void {
+    this.lastFrameTs = Date.now();
+    this.lastFrameType = frame.type;
     switch (frame.type) {
       case 'snapshot':
         this.lastSeq = frame.upToSeq;
@@ -181,10 +201,25 @@ export class TerminalSocket {
         return;
       case 'pong':
         return;
+      default: {
+        // Unknown frame type — log to ops once and drop. The discriminated
+        // union exhaustively covers known types, so reaching this branch
+        // means the server speaks a newer protocol version than we do.
+        const t = (frame as { type?: string }).type;
+        recordOp('ws.frame.error', { reason: 'unknown_type', type: String(t ?? '') });
+      }
     }
   }
 
   private scheduleReconnect(): void {
+    // Limit ws.reconnect ops to ≤ 1/s. The 8s backoff cap means the
+    // unrate-limited path can pile up dozens of identical entries during
+    // a long outage and squeeze useful older ops out of the 50-slot ring.
+    const now = Date.now();
+    if (now - this.lastReconnectOpTs >= RECONNECT_OP_MIN_INTERVAL_MS) {
+      recordOp('ws.reconnect', { retryIdx: this.retryIdx });
+      this.lastReconnectOpTs = now;
+    }
     this.handlers.onReconnecting?.();
     const delay = BACKOFF_STEPS_MS[this.retryIdx] ?? MAX_BACKOFF_MS;
     this.retryIdx = Math.min(this.retryIdx + 1, BACKOFF_STEPS_MS.length - 1);
@@ -192,6 +227,20 @@ export class TerminalSocket {
       this.retryTimer = null;
       this.connect();
     }, delay);
+  }
+
+  /**
+   * Snapshot of internal state for feedback diag. Reads of the underlying
+   * WebSocket readyState fall back to CLOSED when the socket is null.
+   */
+  getDiag(): SocketDiag {
+    return {
+      readyState: this.ws?.readyState ?? WS_CLOSED_READY_STATE,
+      lastSeq: this.lastSeq,
+      retryIdx: this.retryIdx,
+      lastFrameTs: this.lastFrameTs,
+      lastFrameType: this.lastFrameType,
+    };
   }
 
   private buildUrl(): string {

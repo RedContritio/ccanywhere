@@ -1,5 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { collectDiag } from '../state/diag.js';
 import { recordOp, snapshotOps } from '../state/ops-log.js';
+import { useSessionsStore } from '../state/sessions.js';
+import { effectiveTheme, useUiStore } from '../state/ui.js';
 
 interface Props {
   readonly children: ReactNode;
@@ -56,6 +59,24 @@ export class ErrorBoundary extends Component<Props, State> {
     const err = this.state.error ?? this.lastError;
     if (!err) return;
     this.setState({ submit: { kind: 'submitting' } });
+    const themeMode = useUiStore.getState().themeMode;
+    const sessionIds = useSessionsStore
+      .getState()
+      .sessions.filter((s) => s.deletedAt === null)
+      .map((s) => s.id);
+    let diag;
+    try {
+      diag = collectDiag({
+        sessionIds,
+        theme: themeMode,
+        effectiveTheme: effectiveTheme(themeMode),
+      });
+    } catch {
+      // Diag collection itself can throw if a downstream dependency is in
+      // a half-disposed state mid-crash. Better to ship the report without
+      // diag than to hide the original error behind a diag-collect error.
+      diag = undefined;
+    }
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
@@ -65,6 +86,7 @@ export class ErrorBoundary extends Component<Props, State> {
           title: (err.message || 'render crash').slice(0, 200),
           body: (err.stack ?? '').slice(0, 9000),
           ops: snapshotOps(),
+          ...(diag !== undefined ? { diag } : {}),
         }),
       });
       if (!res.ok) {
