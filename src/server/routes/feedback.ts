@@ -107,6 +107,11 @@ export async function registerFeedbackRoutes(
         lastDataAt: session.lastDataAt,
         exitCode: session.exitCode,
         deletedAt: session.deletedAt,
+        // Every PTY chunk since session spawn (ts/len/head-32-bytes-hex)
+        // so cc's full streaming behavior is cross-referenceable with
+        // client trace. Append-only — feedback payload grows with
+        // session age, deal with it if a session ever bloats too far.
+        recentDataChunks: session.recentDataChunks,
       };
     }
 

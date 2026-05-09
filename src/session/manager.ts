@@ -25,6 +25,13 @@ export interface SpawnOptions {
   readonly resumeSessionId?: string;
 }
 
+export interface PtyDataChunkRecord {
+  readonly ts: number;
+  readonly len: number;
+  /** First 32 bytes of the chunk hex-escaped; control bytes shown as \xNN. */
+  readonly head: string;
+}
+
 export interface Session {
   readonly info: SessionInfo;
   readonly state: SessionState;
@@ -33,6 +40,8 @@ export interface Session {
   readonly deletedAt: number | null;
   readonly lastDataAt: number | null;
   readonly exitCode: number | null;
+  /** Every PTY data chunk since spawn (append-only) for diagnostic feedback inject. */
+  readonly recentDataChunks: readonly PtyDataChunkRecord[];
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(): Promise<void>;
@@ -44,11 +53,22 @@ export interface Session {
 const KILL_TERM_AFTER_MS = 2_000;
 const KILL_FORCE_AFTER_MS = 7_000;
 
+function escapeHead(data: string, max = 32): string {
+  return data
+    .slice(0, max)
+    .replace(/[\x00-\x1f\x7f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+}
+
 class SessionImpl implements Session {
   state: SessionState = 'starting';
   deletedAt: number | null = null;
   lastDataAt: number | null = null;
   exitCode: number | null = null;
+  private readonly _recentDataChunks: PtyDataChunkRecord[] = [];
+
+  get recentDataChunks(): readonly PtyDataChunkRecord[] {
+    return this._recentDataChunks;
+  }
 
   private readonly listeners: {
     [E in SessionEventName]: Set<SessionListener<E>>;
@@ -71,6 +91,17 @@ class SessionImpl implements Session {
       this.scrollback.append(data);
       this.screenState.feed(data);
       this.lastDataAt = Date.now();
+      // Append-only: every PTY chunk for the lifetime of the session.
+      // Memory bound is the session itself — exit() releases this array
+      // along with the rest of SessionImpl. Worst-case for an idle cc
+      // (~10 chunks/s * 100B head + metadata) is ~5 MB/hour, fine for
+      // dogfood; if a long-lived session bloats it later we can trim
+      // by total bytes here without touching anything downstream.
+      this._recentDataChunks.push({
+        ts: this.lastDataAt,
+        len: data.length,
+        head: escapeHead(data),
+      });
       this.emit('data', { sessionId: this.info.id, data });
     });
     this.pty.onExit(({ exitCode, signal }) => {

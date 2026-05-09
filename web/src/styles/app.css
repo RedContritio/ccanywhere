@@ -95,13 +95,19 @@
 .workspace {
   display: flex;
   flex-direction: column;
-  /* 100vh on iOS Safari includes the URL bar's collapsed height — using
-   * dvh keeps the layout matching the actually-visible viewport so the
-   * MobileToolbar sticks to the bottom edge instead of being pushed off
-   * screen. With `interactive-widget=resizes-content` in the viewport
-   * meta, dvh also shrinks when the soft keyboard opens, so focused
-   * inputs scroll into view automatically. */
-  height: 100dvh;
+  /* `100svh` = small viewport height — anchored to the URL-bar-visible
+   * viewport size and stable across URL-bar / keyboard / drawer toggles.
+   * This is the only unit that satisfies all three constraints:
+   *   - mount measurement is correct (svh ≤ visible)
+   *   - URL bar show/hide doesn't trigger cc SIGWINCH (svh constant)
+   *   - feedback button / mobile-toolbar always visible (svh ≤ visible)
+   * `lvh` failed constraint 3 (button hidden behind URL bar overlap);
+   * `dvh` failed constraint 2 (every URL bar transition repainted cc).
+   * Cost: when the URL bar collapses, layout < visible viewport, leaving
+   * a page-background strip at the top. Accepted. Soft keyboard is then
+   * handled out-of-band via VisualViewport translate, see terminal.tsx.
+   * Decision 1 三次反转 — see openspec/changes/m-mobile-fit-timing/design.md. */
+  height: 100svh;
 }
 
 .workspace-header {
@@ -111,6 +117,13 @@
   padding: 10px 16px;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
+  /* Stack above .terminal-pane: when keyboard pushes terminal-pane up
+   * via translateY, the pane's visible region extends past the header
+   * row (negative y). Without explicit stacking, the pane visually
+   * covers the header. position:relative establishes a stacking
+   * context, z-index puts header on top. Caught in feedback a1a17c0a. */
+  position: relative;
+  z-index: 5;
 }
 
 .header-brand {
@@ -284,6 +297,28 @@
   margin: 0;
   font-size: 12px;
   color: var(--fg-muted);
+}
+
+.home-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.home-cta {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.home-cta.is-secondary {
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
 }
 
 .session-pane-empty,
@@ -631,8 +666,15 @@
   border-color: var(--accent);
 }
 
+.drawer-bottom-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
 .drawer-feedback {
-  margin: 8px;
+  flex: 1;
+  margin: 0;
   padding: 8px 12px;
   background: transparent;
   color: var(--fg-muted);
@@ -792,6 +834,17 @@
   min-width: 0;
 }
 
+/* Sub-container holding ONLY [terminal-host + mobile-toolbar]. The
+ * visual-viewport-driven translateY (keyboard up-shift) targets this,
+ * leaving terminal-header pinned in place. See terminal.tsx
+ * `applyKeyboardOffset`. */
+.terminal-pane-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .terminal-header {
   display: flex;
   align-items: center;
@@ -800,6 +853,16 @@
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
   font-size: 13px;
+  /* Stack above .terminal-pane-content. The latter applies a
+   * transform: translateY(...) when the soft keyboard opens, which
+   * implicitly creates a stacking context (CSS spec: transformed
+   * elements form their own stacking context). Without explicit
+   * stacking on the header, terminal-pane-content paints on top of
+   * it, hiding the header except at the leftmost edge — caught in
+   * dogfood feedback. position:relative + z-index lifts the header
+   * above the transform's stacking context. */
+  position: relative;
+  z-index: 5;
 }
 
 .terminal-header-name {
@@ -811,6 +874,57 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
+}
+
+/* Wraps the xterm host + a placeholder layered above it. The placeholder
+ * is removed (display:none from JS) once the dims state machine reaches
+ * `stable`. Until then it covers any wrong-dims content the xterm would
+ * have rendered from the server's fallback path. */
+.terminal-view-pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-view {
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 1;
+  /* match xterm so the swap is visually quiet */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.terminal-placeholder-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--fg);
+  animation: terminal-placeholder-cursor-blink 1s steps(2) infinite;
+}
+
+.terminal-placeholder-label {
+  margin-left: 12px;
+  color: var(--fg-muted, var(--fg));
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+@keyframes terminal-placeholder-cursor-blink {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* Kill native scroll on xterm's actual scroll container. cc runs in
@@ -1010,7 +1124,10 @@
     position: fixed;
     top: 0;
     left: 0;
-    height: 100dvh;
+    /* Match parent .workspace at `svh` — same rationale: stable layout,
+     * feedback button always visible, no spurious cc repaints from URL
+     * bar transitions. */
+    height: 100svh;
     width: min(85vw, 360px);
     z-index: 10;
     transform: translateX(-100%);

@@ -169,13 +169,23 @@ export function WorkspacePage(): JSX.Element {
           onNew={onOpenNew}
           onDelete={(sid) => void onDelete(sid)}
         />
-        <button
-          type="button"
-          className="drawer-feedback"
-          onClick={() => setFeedbackOpen(true)}
-        >
-          反馈
-        </button>
+        <div className="drawer-bottom-actions">
+          <button
+            type="button"
+            className="drawer-feedback"
+            onClick={() => location.reload()}
+            title="重连当前 session（清掉 cc Ink scrollback 累积的重复内容）"
+          >
+            刷新
+          </button>
+          <button
+            type="button"
+            className="drawer-feedback"
+            onClick={() => setFeedbackOpen(true)}
+          >
+            反馈
+          </button>
+        </div>
       </aside>
       <button
         type="button"
@@ -232,7 +242,29 @@ export function WorkspacePage(): JSX.Element {
               >
                 ☰
               </button>
-              session id 不在列表中（可能已被回收）
+              <div className="home-card">
+                <h2 className="home-title">会话不存在</h2>
+                <p className="home-hint">
+                  该 session id 可能已被回收（超过 deletedSessionTtlMs
+                  之后由 GC 清理）。
+                </p>
+                <div className="home-actions">
+                  <button
+                    type="button"
+                    className="home-cta"
+                    onClick={() => navigate('/workspace', { replace: true })}
+                  >
+                    回到首页
+                  </button>
+                  <button
+                    type="button"
+                    className="home-cta is-secondary"
+                    onClick={onOpenNew}
+                  >
+                    新建会话
+                  </button>
+                </div>
+              </div>
             </div>
           ) : deviceId === null ? (
             <div className="terminal-pane-empty">未登录</div>
@@ -263,20 +295,22 @@ export function WorkspacePage(): JSX.Element {
                   {wsConnLabel(wsConnection)}
                 </span>
               </div>
-              <div className="terminal-host">
-                <TerminalView
-                  key={currentSession.id}
-                  ref={terminalRef}
-                  sessionId={currentSession.id}
-                  onStatus={onWsStatus}
-                  onConnected={onWsConnected}
-                  onReconnecting={onWsReconnecting}
-                  onDead={onWsDead}
+              <div className="terminal-pane-content">
+                <div className="terminal-host">
+                  <TerminalView
+                    key={currentSession.id}
+                    ref={terminalRef}
+                    sessionId={currentSession.id}
+                    onStatus={onWsStatus}
+                    onConnected={onWsConnected}
+                    onReconnecting={onWsReconnecting}
+                    onDead={onWsDead}
+                  />
+                </div>
+                <MobileToolbar
+                  onKey={(data) => terminalRef.current?.input(data)}
                 />
               </div>
-              <MobileToolbar
-                onKey={(data) => terminalRef.current?.input(data)}
-              />
             </>
           )}
         </section>
