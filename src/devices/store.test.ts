@@ -16,6 +16,7 @@ describe('DeviceStore', () => {
     now = 1_000_000;
     store = new DeviceStore({
       statePath,
+      ownerId: 'test-owner-id',
       now: () => now,
       pendingTtlMs: 60_000,
       loginChallengeTtlMs: 10_000,
@@ -51,7 +52,7 @@ describe('DeviceStore', () => {
 
     it('reloads state on construction', () => {
       const { sessionId } = store.__seedActiveDevice('persisted');
-      const fresh = new DeviceStore({ statePath, now: () => now });
+      const fresh = new DeviceStore({ statePath, ownerId: 'test-owner-id', now: () => now });
       expect(fresh.authenticateSession(sessionId)).not.toBeNull();
     });
 
@@ -234,7 +235,7 @@ describe('DeviceStore', () => {
     it('bumpDeviceCounter persists', () => {
       const { device } = store.__seedActiveDevice('lap');
       store.bumpDeviceCounter(device.id, 7, now + 1);
-      const reloaded = new DeviceStore({ statePath, now: () => now });
+      const reloaded = new DeviceStore({ statePath, ownerId: 'test-owner-id', now: () => now });
       const looked = reloaded.getDevice(device.id);
       expect(looked?.counter).toBe(7);
       expect(looked?.lastUsedAt).toBe(now + 1);

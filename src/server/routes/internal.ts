@@ -95,4 +95,5 @@ export async function registerInternalRoutes(
       await reply.code(204).send();
     },
   );
+
 }

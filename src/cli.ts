@@ -4,7 +4,53 @@ import { runApprove } from './cli/approve.js';
 import { runDevices } from './cli/devices.js';
 import { runRevoke } from './cli/revoke.js';
 import { runServe } from './cli/serve.js';
+import { runTokenIssue, runTokenList, runTokenRevoke } from './cli/token.js';
+import { runUserCreate, runUserList, runUserQuotaSet } from './cli/user.js';
 import { logger } from './log.js';
+
+function parseTtlToMs(s: string): number {
+  const m = /^(\d+)([smhd])$/.exec(s);
+  if (!m) throw new Error(`invalid ttl: ${s} (expected e.g. 7d, 24h, 30m, 60s)`);
+  const v = Number.parseInt(m[1]!, 10);
+  switch (m[2]) {
+    case 's':
+      return v * 1000;
+    case 'm':
+      return v * 60 * 1000;
+    case 'h':
+      return v * 60 * 60 * 1000;
+    case 'd':
+      return v * 24 * 60 * 60 * 1000;
+    default:
+      throw new Error(`unreachable`);
+  }
+}
+
+function consumeFlag(args: string[], name: string): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === name) {
+      const v = args[i + 1];
+      args.splice(i, 2);
+      return v;
+    }
+  }
+  return undefined;
+}
+
+function consumeBoolFlag(args: string[], name: string): boolean {
+  const i = args.indexOf(name);
+  if (i < 0) return false;
+  args.splice(i, 1);
+  return true;
+}
+
+function parseQuotaArg(s: string | undefined): number | null | undefined {
+  if (s === undefined) return undefined;
+  if (s === 'null' || s === 'none') return null;
+  const n = Number.parseFloat(s);
+  if (Number.isNaN(n)) throw new Error(`invalid quota value: ${s}`);
+  return n;
+}
 
 const HELP = `ccanywhere — cc CLI exposed over the web
 
@@ -75,6 +121,10 @@ async function dispatch(argv: ReadonlyArray<string>): Promise<void> {
       return runDevices(configPath);
     case 'revoke':
       return runRevoke(positional[0], configPath);
+    case 'user':
+      return runUserSubcommand([...positional], configPath);
+    case 'token':
+      return runTokenSubcommand([...positional], configPath);
     case 'help':
     case '--help':
     case '-h':
@@ -84,6 +134,86 @@ async function dispatch(argv: ReadonlyArray<string>): Promise<void> {
       stdout.write(`unknown subcommand: ${cmd}\n\n${HELP}`);
       process.exit(2);
   }
+}
+
+async function runUserSubcommand(args: string[], configPath: string | undefined): Promise<void> {
+  const sub = args.shift();
+  if (sub === 'create') {
+    const username = args.shift();
+    if (username === undefined) {
+      stdout.write(`usage: ccanywhere user create <username> [--ttl 7d] [--cost-usd N] [--tokens N]\n`);
+      process.exit(2);
+    }
+    const ttl = consumeFlag(args, '--ttl') ?? '7d';
+    const cost = parseQuotaArg(consumeFlag(args, '--cost-usd'));
+    const tokens = parseQuotaArg(consumeFlag(args, '--tokens'));
+    const costLimitUsd = cost === undefined ? null : cost;
+    const tokensLimit = tokens === undefined ? null : tokens === null ? null : Math.trunc(tokens);
+    return runUserCreate(configPath, {
+      username,
+      ttlMs: parseTtlToMs(ttl),
+      costLimitUsd,
+      tokensLimit,
+    });
+  }
+  if (sub === 'list') return runUserList(configPath);
+  if (sub === 'quota') {
+    const sub2 = args.shift();
+    if (sub2 !== 'set') {
+      stdout.write(`usage: ccanywhere user quota set <username> [--cost-usd N] [--tokens N] [--reset]\n`);
+      process.exit(2);
+    }
+    const username = args.shift();
+    if (username === undefined) {
+      stdout.write(`usage: ccanywhere user quota set <username> [--cost-usd N] [--tokens N] [--reset]\n`);
+      process.exit(2);
+    }
+    const cost = parseQuotaArg(consumeFlag(args, '--cost-usd'));
+    const tokens = parseQuotaArg(consumeFlag(args, '--tokens'));
+    const reset = consumeBoolFlag(args, '--reset');
+    return runUserQuotaSet(configPath, {
+      username,
+      ...(cost !== undefined ? { costLimitUsd: cost } : {}),
+      ...(tokens !== undefined
+        ? { tokensLimit: tokens === null ? null : Math.trunc(tokens) }
+        : {}),
+      ...(reset ? { reset: true } : {}),
+    });
+  }
+  stdout.write(`unknown user subcommand: ${sub ?? '(missing)'}\n`);
+  process.exit(2);
+}
+
+async function runTokenSubcommand(args: string[], configPath: string | undefined): Promise<void> {
+  const sub = args.shift();
+  if (sub === 'issue') {
+    const username = args.shift();
+    if (username === undefined) {
+      stdout.write(`usage: ccanywhere token issue <username> [--ttl 7d] [--label <s>]\n`);
+      process.exit(2);
+    }
+    const ttl = consumeFlag(args, '--ttl') ?? '7d';
+    const label = consumeFlag(args, '--label') ?? null;
+    return runTokenIssue(configPath, {
+      username,
+      ttlMs: parseTtlToMs(ttl),
+      label,
+    });
+  }
+  if (sub === 'list') {
+    const username = consumeFlag(args, '--user');
+    return runTokenList(configPath, username);
+  }
+  if (sub === 'revoke') {
+    const tokenId = args.shift();
+    if (tokenId === undefined) {
+      stdout.write(`usage: ccanywhere token revoke <token-id>\n`);
+      process.exit(2);
+    }
+    return runTokenRevoke(configPath, tokenId);
+  }
+  stdout.write(`unknown token subcommand: ${sub ?? '(missing)'}\n`);
+  process.exit(2);
 }
 
 void dispatch(process.argv.slice(2)).catch((err: unknown) => {

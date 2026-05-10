@@ -9,6 +9,8 @@ import { logger } from '../log.js';
 import { ProjectStore, ProjectStoreError, ensureProjectsRoot } from '../projects/store.js';
 import { buildServer } from '../server/server.js';
 import { SessionManager } from '../session/manager.js';
+import { TokenStore } from '../tokens/store.js';
+import { UserStore } from '../users/store.js';
 
 /**
  * Read the cliToken from `<configDir>/cli-token`, or create one if
@@ -65,12 +67,26 @@ export async function runServe(configPathArg?: string): Promise<void> {
     );
   }
 
+  const guestProjectsRoot = resolve(config.guestProjectsRoot);
+  mkdirSync(guestProjectsRoot, { recursive: true, mode: 0o700 });
+
   const projectStore = new ProjectStore({
     projectsRoot,
     statePath: join(configDir, 'projects-state.json'),
   });
+  // m-multi-user dependency note: UserStore MUST init before DeviceStore.
+  // DeviceStore step-2 改造将让老 device record fallback userId=ownerUser.id；
+  // 而 ownerUser 在 UserStore constructor 内 ensureOwner() 时创建。
+  const userStore = new UserStore({
+    statePath: join(configDir, 'users.json'),
+    guestProjectsRoot,
+  });
+  const tokenStore = new TokenStore({
+    statePath: join(configDir, 'tokens.json'),
+  });
   const deviceStore = new DeviceStore({
     statePath: join(configDir, 'devices.json'),
+    ownerId: userStore.getOwner().id,
   });
   const cliToken = ensureCliToken(configDir);
 
@@ -85,6 +101,8 @@ export async function runServe(configPathArg?: string): Promise<void> {
     manager,
     projectStore,
     deviceStore,
+    userStore,
+    tokenStore,
     internalHookToken,
     cliToken,
   });

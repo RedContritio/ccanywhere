@@ -151,7 +151,13 @@ export async function registerWebSocketRoutes(
         { sessionId, deviceId: req.authDevice?.id, ip: req.ip, found: session !== undefined },
         'ws client connected',
       );
-      if (!session) {
+      // m-multi-user: cross-user mismatch masked as 1008 (uniform with
+      // not-found) — see ws-protocol spec on close codes.
+      const userMismatch =
+        session !== undefined &&
+        req.user !== undefined &&
+        session.info.userId !== req.user.id;
+      if (session === undefined || userMismatch) {
         sendFrame(sock, { type: 'error', message: 'session not found' });
         sock.close(1008, 'session not found');
         return;

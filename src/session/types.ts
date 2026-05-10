@@ -12,6 +12,8 @@ export interface SessionInfo {
   readonly mode: SessionMode;
   readonly resumeSessionId?: string;
   readonly createdAt: number;
+  /** m-multi-user: User.id that spawned this PTY session. */
+  readonly userId: string;
 }
 
 export interface DataEvent {

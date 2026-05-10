@@ -3,6 +3,13 @@ export type DeviceStatus = 'active' | 'revoked';
 export interface Device {
   /** UUIDv4. */
   readonly id: string;
+  /**
+   * m-multi-user: owner User.id this device belongs to. v12 invariant:
+   * every device record belongs to the single owner user; limited users
+   * never pair devices. Legacy records (pre-multi-user) load with the
+   * fallback `DeviceStoreOptions.ownerId`.
+   */
+  readonly userId: string;
   /** User-provided label (not unique). */
   readonly label: string;
   /** Base64url-encoded WebAuthn credential id (the "rawId" round-trip). */

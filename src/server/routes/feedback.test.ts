@@ -21,6 +21,7 @@ const baseConfig: Config = {
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
   projectsRoot: '/tmp/ccanywhere-test-placeholder',
+  guestProjectsRoot: '/tmp/ccanywhere-test-guest-placeholder',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
 };
@@ -50,6 +51,7 @@ function setup(): TestEnv {
   });
   const deviceStore = new DeviceStore({
     statePath: join(projectsRoot, '.devices.json'),
+    ownerId: 'test-owner-id',
   });
   const { sessionId } = deviceStore.__seedActiveDevice('test-device');
 
@@ -181,6 +183,7 @@ describe('POST /api/feedback', () => {
       args: [],
       scrollbackBytes: 4096,
       mode: 'create',
+      userId: 'test-owner-id',
     });
     if (spawnResult.kind !== 'created') {
       throw new Error(`expected created spawn, got ${spawnResult.kind}`);

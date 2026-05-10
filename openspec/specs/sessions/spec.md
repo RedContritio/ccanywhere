@@ -8,6 +8,35 @@ session 的生命周期长于浏览器标签页（关闭笔记本上的标签后
 
 ## Requirements
 
+### Requirement: 用户隔离（m-multi-user）
+
+每个 PTY session MUST 在 spawn 时绑当前请求的 `req.user.id`（写入
+`SessionInfo.userId`）。所有 session 操作 MUST 按 user 隔离：
+
+- `POST /api/sessions` MUST 校验请求 project.cwd 落在
+  `userStore.projectsRootFor(req.user, config.projectsRoot)` 子树内
+  （owner = `config.projectsRoot`；limited = `<guestProjectsRoot>/<username>/`）；
+  否则 `403 forbidden`。
+- `GET /api/sessions` MUST 仅返回 `session.info.userId === req.user.id`
+  的条目。
+- `DELETE /api/sessions/:id` MUST 在 `session.info.userId !== req.user.id`
+  时返回 `404 not_found`（与不存在 id 一致，避免泄露 session 归属）。
+- `/ws/sessions/:id` upgrade MUST 在 cross-user 时 `sock.close(1008)`
+  并发 `error` 帧（mask 为 not-found，统一 close code 语义）。
+
+#### Scenario: cwd 不在 user.projectsRoot 子树时 403
+
+- GIVEN limited user alice 已 token 登录，cookie 已带
+- AND   project P 的 cwd 在 owner.projectsRoot 而非 `<guestRoot>/alice/`
+- WHEN  alice `POST /api/sessions { projectId: P.id, mode: create }`
+- THEN  返回 `403` + body `{ error.code: 'forbidden' }`
+
+#### Scenario: 跨 user 不能看到对方的 sessions
+
+- GIVEN alice 创建 sessionA；bob 创建 sessionB
+- WHEN  alice `GET /api/sessions`
+- THEN  仅返回 sessionA
+
 ### Requirement: session 标识与创建
 
 session MUST 拥有：服务端生成的 UUIDv4 `id`、当前可见 `ProjectStore` 中

@@ -23,6 +23,7 @@ describe('loadConfig', () => {
 
   const validBase = {
     projectsRoot: '/tmp/projects-root',
+    guestProjectsRoot: '/tmp/guest-projects-root',
     webOrigin: 'http://localhost:62275',
   };
 
@@ -111,5 +112,29 @@ describe('loadConfig', () => {
   it('rejects non-URL webOrigin', () => {
     write({ ...validBase, webOrigin: 'not-a-url' });
     expect(() => loadConfig(path)).toThrow(/webOrigin/);
+  });
+
+  it('rejects missing guestProjectsRoot', () => {
+    write({ projectsRoot: validBase.projectsRoot, webOrigin: validBase.webOrigin });
+    expect(() => loadConfig(path)).toThrow(/guestProjectsRoot/);
+  });
+
+  it('rejects guestProjectsRoot equal to projectsRoot', () => {
+    write({ ...validBase, guestProjectsRoot: validBase.projectsRoot });
+    expect(() => loadConfig(path)).toThrow(/must differ/);
+  });
+
+  it('rejects guestProjectsRoot nested under projectsRoot', () => {
+    write({ ...validBase, guestProjectsRoot: '/tmp/projects-root/guests' });
+    expect(() => loadConfig(path)).toThrow(/must not nest/);
+  });
+
+  it('rejects projectsRoot nested under guestProjectsRoot', () => {
+    write({
+      projectsRoot: '/tmp/guest-projects-root/owned',
+      guestProjectsRoot: '/tmp/guest-projects-root',
+      webOrigin: validBase.webOrigin,
+    });
+    expect(() => loadConfig(path)).toThrow(/must not nest/);
   });
 });

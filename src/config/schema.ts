@@ -1,3 +1,4 @@
+import { resolve, sep } from 'node:path';
 import { z } from 'zod';
 
 export const WsHeartbeatSchema = z
@@ -33,6 +34,14 @@ export const ConfigSchema = z.object({
    */
   projectsRoot: z.string().min(1, 'projectsRoot must be set'),
   /**
+   * Absolute path to the parent directory under which each limited user
+   * gets `<guestProjectsRoot>/<username>/` as their project sandbox
+   * (m-multi-user). MUST differ from and MUST NOT nest with `projectsRoot`
+   * — owner uses `projectsRoot`, limited users use this. Created (mode
+   * 0700) at startup if missing.
+   */
+  guestProjectsRoot: z.string().min(1, 'guestProjectsRoot must be set'),
+  /**
    * Public URL the web SPA is served from (e.g.
    * "https://ccanywhere.example.com"). Used to derive WebAuthn `rpID` and
    * to validate origin on register/login. Must be a full URL with scheme.
@@ -59,5 +68,25 @@ export const ConfigSchema = z.object({
    * other than the config file's home (rare).
    */
   configDir: z.string().optional(),
+}).superRefine((cfg, ctx) => {
+  const a = resolve(cfg.projectsRoot);
+  const b = resolve(cfg.guestProjectsRoot);
+  if (a === b) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'projectsRoot and guestProjectsRoot must differ',
+      path: ['guestProjectsRoot'],
+    });
+    return;
+  }
+  const aWithSep = a.endsWith(sep) ? a : a + sep;
+  const bWithSep = b.endsWith(sep) ? b : b + sep;
+  if (aWithSep.startsWith(bWithSep) || bWithSep.startsWith(aWithSep)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'projectsRoot and guestProjectsRoot must not nest',
+      path: ['guestProjectsRoot'],
+    });
+  }
 });
 export type Config = z.infer<typeof ConfigSchema>;

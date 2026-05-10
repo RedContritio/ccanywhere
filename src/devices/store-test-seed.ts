@@ -17,6 +17,7 @@ export function seedActiveDevice(
 ): { device: Device; sessionId: string } {
   const device: Device = {
     id: randomUUID(),
+    userId: store.__getOwnerIdForTest(),
     label,
     credentialId,
     publicKey: '',

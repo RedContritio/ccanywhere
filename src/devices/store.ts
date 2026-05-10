@@ -11,15 +11,16 @@ export class DeviceStoreError extends Error {
 }
 
 export interface DeviceStoreOptions {
-  /** Path to the JSON file that persists devices + sessions. */
   readonly statePath: string;
-  /** TTL for a pending pair record (no approval action yet). Default 30 min. */
+  /** m-multi-user: owner User.id, used to tag new devices + fallback legacy records. */
+  readonly ownerId: string;
+  /** Default 30 min. */
   readonly pendingTtlMs?: number;
-  /** TTL for a login challenge between login-init and login-complete. Default 5 min. */
+  /** Default 5 min. */
   readonly loginChallengeTtlMs?: number;
-  /** Idle timeout for a session before pruning. Default 30 days. */
+  /** Default 30 days. */
   readonly sessionTtlMs?: number;
-  /** Clock injection for tests; defaults to `Date.now`. */
+  /** Test clock injection; defaults to `Date.now`. */
   readonly now?: () => number;
 }
 
@@ -29,6 +30,7 @@ const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export class DeviceStore {
   private readonly statePath: string;
+  private readonly ownerId: string;
   private readonly pendingTtlMs: number;
   private readonly loginChallengeTtlMs: number;
   private readonly sessionTtlMs: number;
@@ -40,6 +42,7 @@ export class DeviceStore {
 
   constructor(opts: DeviceStoreOptions) {
     this.statePath = opts.statePath;
+    this.ownerId = opts.ownerId;
     this.pendingTtlMs = opts.pendingTtlMs ?? DEFAULT_PENDING_TTL_MS;
     this.loginChallengeTtlMs = opts.loginChallengeTtlMs ?? DEFAULT_LOGIN_TTL_MS;
     this.sessionTtlMs = opts.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
@@ -136,11 +139,7 @@ export class DeviceStore {
     this.pending.set(pendingId, { ...rec, status: 'awaiting-approval' });
   }
 
-  /**
-   * Approves a pending pair: creates the Device, opens a Session, and
-   * marks the pending record 'approved' so the polling browser picks up
-   * the issued session id.
-   */
+  /** Approves a pending pair: creates Device + Session, marks 'approved'. */
   approvePending(
     pendingId: string,
     deviceInput: { credentialId: string; publicKey: string; counter: number },
@@ -158,6 +157,7 @@ export class DeviceStore {
     const now = this.now();
     const device: Device = {
       id: randomUUID(),
+      userId: this.ownerId,
       label: rec.label,
       credentialId: deviceInput.credentialId,
       publicKey: deviceInput.publicKey,
@@ -219,11 +219,7 @@ export class DeviceStore {
     return sessionId;
   }
 
-  /**
-   * Validates a session id and returns the bound device. Returns null if the
-   * session is unknown, expired, or its device is revoked. Updates lastUsedAt
-   * (in-memory; persistence is lazy to avoid per-request fs writes).
-   */
+  /** Validates session id → bound device; null if unknown/expired/revoked. */
   authenticateSession(sessionId: string): Device | null {
     const sess = this.sessions.get(sessionId);
     if (!sess) return null;
@@ -265,12 +261,18 @@ export class DeviceStore {
     return { device, sessionId };
   }
 
+  /** @internal */
+  __getOwnerIdForTest(): string { return this.ownerId; }
+
   // ------------ persistence + maintenance ------------
 
   private load(): void {
     const state = loadPersistedState(this.statePath);
     if (state === null) return;
-    for (const d of state.devices) this.devices.set(d.id, d);
+    // Legacy records pre-multi-user lack `userId`; fall back to ownerId.
+    for (const d of state.devices) {
+      this.devices.set(d.id, { ...d, userId: d.userId ?? this.ownerId });
+    }
     for (const s of state.sessions) this.sessions.set(s.sessionId, s);
   }
 
@@ -282,16 +284,12 @@ export class DeviceStore {
   }
 
   private evictExpiredPending(): void {
-    const cutoff = this.now() - this.pendingTtlMs;
-    for (const [id, rec] of this.pending) {
-      if (rec.createdAt < cutoff) this.pending.delete(id);
-    }
+    const c = this.now() - this.pendingTtlMs;
+    for (const [id, r] of this.pending) if (r.createdAt < c) this.pending.delete(id);
   }
 
   private evictExpiredLoginChallenges(): void {
-    const cutoff = this.now() - this.loginChallengeTtlMs;
-    for (const [id, rec] of this.loginChallenges) {
-      if (rec.createdAt < cutoff) this.loginChallenges.delete(id);
-    }
+    const c = this.now() - this.loginChallengeTtlMs;
+    for (const [id, r] of this.loginChallenges) if (r.createdAt < c) this.loginChallenges.delete(id);
   }
 }

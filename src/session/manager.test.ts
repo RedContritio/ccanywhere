@@ -6,6 +6,7 @@ const baseSpawn: Omit<SpawnOptions, 'command' | 'args'> = {
   cwd: process.cwd(),
   scrollbackBytes: 4096,
   mode: 'create',
+  userId: 'test-owner-id',
 };
 
 // Adapter for the existing `const session = spawnCreated(mgr,...)` pattern. The

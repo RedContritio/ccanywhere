@@ -9,12 +9,15 @@ import type { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
 import type { ProjectStore } from '../projects/store.js';
 import type { SessionManager } from '../session/manager.js';
+import type { TokenStore } from '../tokens/store.js';
+import type { UserStore } from '../users/store.js';
 import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
 import { IdempotencyStore } from './idempotency.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerInternalRoutes } from './routes/internal.js';
+import { registerInternalMultiUserRoutes } from './routes/internal-multi-user.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerHookRoutes } from './routes/hook.js';
@@ -31,6 +34,13 @@ export interface BuildServerOptions {
   readonly manager: SessionManager;
   readonly projectStore: ProjectStore;
   readonly deviceStore: DeviceStore;
+  /**
+   * m-multi-user (#44). Optional during the multi-step rollout — wired to
+   * routes in step 3 (auth改造). Once wired, fixtures will need to provide
+   * a real instance.
+   */
+  readonly userStore?: UserStore;
+  readonly tokenStore?: TokenStore;
   readonly internalHookToken: string;
   readonly cliToken: string;
   readonly historyRoot?: string;
@@ -74,16 +84,26 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   await app.register(cookiePlugin);
   await registerAuth(app, {
     store: opts.deviceStore,
+    ...(opts.userStore !== undefined && { userStore: opts.userStore }),
+    ...(opts.tokenStore !== undefined && { tokenStore: opts.tokenStore }),
     internalHookToken: opts.internalHookToken,
     cliToken: opts.cliToken,
     cookieName: opts.config.cookieName,
   });
   await registerAuthRoutes(app, {
     store: opts.deviceStore,
+    ...(opts.userStore !== undefined && { userStore: opts.userStore }),
+    ...(opts.tokenStore !== undefined && { tokenStore: opts.tokenStore }),
     webOrigin: opts.config.webOrigin,
     cookieName: opts.config.cookieName,
   });
   await registerInternalRoutes(app, { store: opts.deviceStore });
+  if (opts.userStore !== undefined && opts.tokenStore !== undefined) {
+    await registerInternalMultiUserRoutes(app, {
+      userStore: opts.userStore,
+      tokenStore: opts.tokenStore,
+    });
+  }
   await registerFeedbackRoutes(app, {
     manager: opts.manager,
     serverStartedAt,
@@ -105,8 +125,10 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   const sessionOpts: {
     historyRoot?: string;
     idempotencyStore: IdempotencyStore;
+    userStore?: UserStore;
   } = { idempotencyStore };
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
+  if (opts.userStore !== undefined) sessionOpts.userStore = opts.userStore;
   await registerSessionRoutes(app, opts.config, opts.manager, opts.projectStore, sessionOpts);
   await registerHookRoutes(app, opts.manager);
   await registerWebSocketRoutes(app, opts.manager, {

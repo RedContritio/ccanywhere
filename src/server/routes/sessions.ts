@@ -1,9 +1,11 @@
+import { sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
 import { logger } from '../../log.js';
 import type { ProjectStore } from '../../projects/store.js';
 import type { Session, SessionManager, SpawnOptions } from '../../session/manager.js';
+import type { UserStore } from '../../users/store.js';
 import { listHistory } from '../history.js';
 import type { IdempotencyStore} from '../idempotency.js';
 import { hashBody, isValidIdempotencyKey } from '../idempotency.js';
@@ -11,6 +13,14 @@ import { hashBody, isValidIdempotencyKey } from '../idempotency.js';
 export interface SessionRoutesOptions {
   readonly historyRoot?: string;
   readonly idempotencyStore?: IdempotencyStore;
+  /** m-multi-user: optional during step-4 rollout; required once wired. */
+  readonly userStore?: UserStore;
+}
+
+function isWithinSubtree(child: string, parent: string): boolean {
+  if (child === parent) return true;
+  const parentWithSep = parent.endsWith(sep) ? parent : parent + sep;
+  return child.startsWith(parentWithSep);
 }
 
 const CreateBodySchema = z.discriminatedUnion('mode', [
@@ -54,17 +64,24 @@ export async function registerSessionRoutes(
   projectStore: ProjectStore,
   options: SessionRoutesOptions = {},
 ): Promise<void> {
-  app.get('/api/sessions', () => ({
-    sessions: manager.list().map((s) => ({
-      id: s.info.id,
-      projectId: s.info.projectId,
-      mode: s.info.mode,
-      resumeSessionId: s.info.resumeSessionId ?? null,
-      state: s.state,
-      createdAt: s.info.createdAt,
-      deletedAt: s.deletedAt,
-    })),
-  }));
+  app.get('/api/sessions', (req) => {
+    const userId = req.user?.id;
+    const all = manager.list();
+    // m-multi-user: filter by req.user.id once userStore wired; pre-wiring
+    // (userId undefined) returns all (legacy / test fixtures).
+    const filtered = userId === undefined ? all : all.filter((s) => s.info.userId === userId);
+    return {
+      sessions: filtered.map((s) => ({
+        id: s.info.id,
+        projectId: s.info.projectId,
+        mode: s.info.mode,
+        resumeSessionId: s.info.resumeSessionId ?? null,
+        state: s.state,
+        createdAt: s.info.createdAt,
+        deletedAt: s.deletedAt,
+      })),
+    };
+  });
 
   app.post('/api/sessions', async (req, reply) => {
     const idempotencyKey = (() => {
@@ -88,6 +105,16 @@ export async function registerSessionRoutes(
     const scope = req.authDevice?.id ?? req.authTokenLabel ?? '';
     const bodyHash = idempotencyKey !== null ? hashBody(req.body) : '';
 
+    const sendErr = async (code: number, errCode: string, message: string): Promise<void> => {
+      const errBody = { error: { code: errCode, message } };
+      if (idempotencyKey !== null && store) {
+        store.store(scope, idempotencyKey, bodyHash, code, errBody);
+        void reply.code(code).header('idempotency-stored', 'true').send(errBody);
+      } else {
+        await reply.code(code).send(errBody);
+      }
+    };
+
     if (idempotencyKey !== null && store) {
       const result = store.lookup(scope, idempotencyKey, bodyHash);
       if (result.kind === 'replay') {
@@ -110,37 +137,21 @@ export async function registerSessionRoutes(
 
     const parsed = CreateBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      const errBody = {
-        error: {
-          code: 'invalid_request',
-          message: 'body validation failed',
-          issues: parsed.error.issues,
-        },
-      };
-      if (idempotencyKey !== null && store) {
-        store.store(scope, idempotencyKey, bodyHash, 400, errBody);
-        void reply
-          .code(400)
-          .header('idempotency-stored', 'true')
-          .send(errBody);
-      } else {
-        await reply.code(400).send(errBody);
-      }
+      await sendErr(400, 'invalid_request', 'body validation failed');
       return;
     }
     const body = parsed.data;
     const project = projectStore.get(body.projectId);
-    if (!project) {
-      const errBody = { error: { code: 'not_found', message: 'project not found' } };
-      if (idempotencyKey !== null && store) {
-        store.store(scope, idempotencyKey, bodyHash, 404, errBody);
-        void reply
-          .code(404)
-          .header('idempotency-stored', 'true')
-          .send(errBody);
-      } else {
-        await reply.code(404).send(errBody);
+    // m-multi-user: cwd must live inside the user's effective projectsRoot.
+    if (project && options.userStore !== undefined && req.user !== undefined) {
+      const root = options.userStore.projectsRootFor(req.user, config.projectsRoot);
+      if (!isWithinSubtree(project.cwd, root)) {
+        await sendErr(403, 'forbidden', 'project cwd not in user projects root');
+        return;
       }
+    }
+    if (!project) {
+      await sendErr(404, 'not_found', 'project not found');
       return;
     }
 
@@ -152,27 +163,18 @@ export async function registerSessionRoutes(
           : await listHistory(project.cwd, options.historyRoot);
       const known = history.some((h) => h.sessionId === body.sessionId);
       if (!known) {
-        const errBody = {
-          error: {
-            code: 'invalid_resume',
-            message: `unknown sessionId for project ${project.id}: ${body.sessionId}`,
-          },
-        };
-        if (idempotencyKey !== null && store) {
-          store.store(scope, idempotencyKey, bodyHash, 400, errBody);
-          void reply
-            .code(400)
-            .header('idempotency-stored', 'true')
-            .send(errBody);
-        } else {
-          await reply.code(400).send(errBody);
-        }
+        await sendErr(
+          400,
+          'invalid_resume',
+          `unknown sessionId for project ${project.id}: ${body.sessionId}`,
+        );
         return;
       }
       args.push('--resume', body.sessionId);
     }
 
     const themeEnv = buildThemeEnv(body.webTheme);
+    const userId = req.user?.id ?? 'legacy-no-user';
     const baseSpawn = {
       projectId: project.id,
       cwd: project.cwd,
@@ -180,6 +182,7 @@ export async function registerSessionRoutes(
       args,
       scrollbackBytes: config.scrollbackBytes,
       mode: body.mode,
+      userId,
       ...(Object.keys(themeEnv).length > 0 ? { env: themeEnv } : {}),
     };
     const withSize: Pick<SpawnOptions, 'cols' | 'rows'> = {
@@ -243,6 +246,13 @@ export async function registerSessionRoutes(
     const session = manager.get(req.params.id);
     if (!session) {
       logger.debug({ id: req.params.id }, 'delete session: not found');
+      await reply
+        .code(404)
+        .send({ error: { code: 'not_found', message: 'session not found' } });
+      return;
+    }
+    // m-multi-user: only the owning user may DELETE.
+    if (req.user !== undefined && session.info.userId !== req.user.id) {
       await reply
         .code(404)
         .send({ error: { code: 'not_found', message: 'session not found' } });

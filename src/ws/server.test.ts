@@ -34,6 +34,7 @@ const config: Config = {
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
   projectsRoot: '/tmp/ccanywhere-test-placeholder',
+  guestProjectsRoot: '/tmp/ccanywhere-test-guest-placeholder',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
 };
@@ -55,6 +56,7 @@ async function startServer(): Promise<Harness> {
   });
   const deviceStore = new DeviceStore({
     statePath: join(projectsRoot, '.devices.json'),
+    ownerId: 'test-owner-id',
   });
   const { sessionId } = deviceStore.__seedActiveDevice('test-device');
   const manager = new SessionManager();

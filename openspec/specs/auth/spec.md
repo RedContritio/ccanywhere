@@ -179,3 +179,34 @@ mac CLI `ccanywhere revoke <device-id>` MUST 调用
 - WHEN  CLI 执行 `ccanywhere revoke D.id`
 - AND   浏览器再次 `GET /api/projects`
 - THEN  服务端响应 `401 unauthorized`
+
+### Requirement: 用户与令牌（m-multi-user）
+
+服务端 MUST 实现 owner/limited 二元用户模型 + 令牌登录：
+
+- 用户首次启动时 MUST 自动建一个 owner（`username='owner'`），且 owner 唯一。
+- owner MUST 走 WebAuthn pair → cookie session 流程（同上）；device 全部
+  归属 owner（`device.userId = owner.id`）。
+- limited user MUST 由 owner CLI 显式创建（`ccanywhere user create`），
+  通过 token 登录而非 WebAuthn。
+- `POST /api/auth/token { token }` MUST 用 sha256 hash + constant-time 比对
+  验 token plaintext；成功后 set cookie（value 即 token plaintext，ttl ≤
+  token.expiresAt），返回 `{ ok: true, user: { username, kind } }`；
+  失败 401。
+- `POST /api/auth/webauthn/login-init` MUST 拒绝 device.userId 不指向
+  owner 的请求（403）。limited user 没有 device 走不进该路径，本检查是
+  defensive。
+- 每个 request 的 cookie value MUST 通过 hookEarlyAuth 解析：先 try
+  deviceStore.authenticateSession（device-session）；不命中再 try
+  tokenStore.verify（token-session）。两者都不命中 → 401。`req.user`
+  字段被填充以让下游 handler（sessions / ws / quota）使用。
+- user.quota 字段（`cost.limitUsd` / `cost.usedUsd` / `tokens.limit` /
+  `tokens.used`）owner 端 limits 均为 null（不限）；limited 端至少一个
+  非 null（创建时强制）。`GET /api/me/quota` 返回当前 user 的 quota 状态。
+
+#### Scenario: token login 颁 cookie
+
+- GIVEN limited user alice 已由 owner 创建，token plaintext 已颁
+- WHEN  浏览器 `POST /api/auth/token` body `{ token }`
+- THEN  返回 200 + Set-Cookie 含 token plaintext，maxAge ≤ token.expiresAt
+- AND   后续 `GET /api/me/quota` 返回 alice 的 quota

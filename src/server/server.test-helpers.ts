@@ -19,6 +19,7 @@ export const baseConfig: Config = {
   // Placeholder: each describe block creates a real tmp dir + ProjectStore;
   // buildServer reads from projectStore, not config.projectsRoot.
   projectsRoot: '/tmp/ccanywhere-test-placeholder',
+  guestProjectsRoot: '/tmp/ccanywhere-test-guest-placeholder',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
 };
@@ -42,6 +43,7 @@ export function setupProjects(): TestProjectsEnv {
   const projectStore = new ProjectStore({ projectsRoot, statePath });
   const deviceStore = new DeviceStore({
     statePath: join(projectsRoot, '.devices.json'),
+    ownerId: 'test-owner-id',
   });
   const { sessionId } = deviceStore.__seedActiveDevice('test-device');
   return {

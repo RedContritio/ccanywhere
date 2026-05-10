@@ -10,11 +10,17 @@ import {
   type RpInfo,
 } from '../../devices/credential.js';
 import type { DeviceStore } from '../../devices/store.js';
+import type { TokenStore } from '../../tokens/store.js';
+import type { UserStore } from '../../users/store.js';
+import { registerAuthMultiUserRoutes } from './auth-multi-user.js';
 
 export const SESSION_COOKIE_NAME = 'ccanywhere_session';
 
 export interface AuthRoutesOptions {
   readonly store: DeviceStore;
+  /** m-multi-user: optional during step-3 rollout. */
+  readonly userStore?: UserStore;
+  readonly tokenStore?: TokenStore;
   readonly webOrigin: string;
   /**
    * If true, sets `Secure` on the session cookie. Defaults to true when
@@ -69,9 +75,7 @@ export async function registerAuthRoutes(
   app.post('/api/auth/register-init', async (req, reply) => {
     const parsed = RegisterInitSchema.safeParse(req.body);
     if (!parsed.success) {
-      await reply.code(400).send({
-        error: { code: 'invalid_request', message: 'body validation failed' },
-      });
+      await reply.code(400).send({ error: { code: 'invalid_request', message: 'body validation failed' } });
       return;
     }
     const { options, challenge } = await makeRegistrationOptions({
@@ -103,9 +107,7 @@ export async function registerAuthRoutes(
   app.post('/api/auth/register-complete', async (req, reply) => {
     const parsed = RegisterCompleteSchema.safeParse(req.body);
     if (!parsed.success) {
-      await reply.code(400).send({
-        error: { code: 'invalid_request', message: 'body validation failed' },
-      });
+      await reply.code(400).send({ error: { code: 'invalid_request', message: 'body validation failed' } });
       return;
     }
     const pending = opts.store.getPending(parsed.data.pendingId);
@@ -182,9 +184,7 @@ export async function registerAuthRoutes(
   app.post('/api/auth/login-init', async (req, reply) => {
     const parsed = LoginInitSchema.safeParse(req.body);
     if (!parsed.success) {
-      await reply.code(400).send({
-        error: { code: 'invalid_request', message: 'body validation failed' },
-      });
+      await reply.code(400).send({ error: { code: 'invalid_request', message: 'body validation failed' } });
       return;
     }
     const device = opts.store.getDevice(parsed.data.deviceId);
@@ -193,6 +193,18 @@ export async function registerAuthRoutes(
         .code(404)
         .send({ error: { code: 'not_found', message: 'device not found or revoked' } });
       return;
+    }
+    // m-multi-user: webauthn login only for owner kind. v12 invariant says
+    // every device.userId points at the owner; this check defensively rejects
+    // if a legacy / misowned device record sneaks in.
+    if (opts.userStore !== undefined) {
+      const user = opts.userStore.findById(device.userId);
+      if (user === null || user.kind !== 'owner') {
+        await reply.code(403).send({
+          error: { code: 'forbidden', message: 'webauthn login only for owner' },
+        });
+        return;
+      }
     }
     const { options, challenge } = await makeAuthenticationOptions({
       rp,
@@ -205,9 +217,7 @@ export async function registerAuthRoutes(
   app.post('/api/auth/login-complete', async (req, reply) => {
     const parsed = LoginCompleteSchema.safeParse(req.body);
     if (!parsed.success) {
-      await reply.code(400).send({
-        error: { code: 'invalid_request', message: 'body validation failed' },
-      });
+      await reply.code(400).send({ error: { code: 'invalid_request', message: 'body validation failed' } });
       return;
     }
     const lc = opts.store.consumeLoginChallenge(parsed.data.tempId);
@@ -246,6 +256,15 @@ export async function registerAuthRoutes(
     void reply.setCookie(cookieName, sessionId, cookieOpts);
     await reply.code(200).send({ ok: true, deviceId: device.id });
   });
+
+  if (opts.userStore !== undefined && opts.tokenStore !== undefined) {
+    await registerAuthMultiUserRoutes(app, {
+      userStore: opts.userStore,
+      tokenStore: opts.tokenStore,
+      cookieName,
+      cookieOpts,
+    });
+  }
 
   app.post('/api/auth/logout', async (req, reply) => {
     const sessionId = req.cookies[cookieName];

@@ -19,6 +19,8 @@ export interface SpawnOptions {
   readonly scrollbackBytes: number;
   readonly mode: SessionMode;
   readonly resumeSessionId?: string;
+  /** m-multi-user: User.id that owns this PTY session. */
+  readonly userId: string;
 }
 
 /**
@@ -122,6 +124,7 @@ export class SessionManager {
             cwd: opts.cwd,
             mode: opts.mode,
             createdAt: Date.now(),
+            userId: opts.userId,
           }
         : {
             id,
@@ -130,6 +133,7 @@ export class SessionManager {
             mode: opts.mode,
             resumeSessionId: opts.resumeSessionId,
             createdAt: Date.now(),
+            userId: opts.userId,
           };
 
     const session = new SessionImpl(

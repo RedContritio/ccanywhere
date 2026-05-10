@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import type { Device } from '../devices/types.js';
 import type { DeviceStore } from '../devices/store.js';
+import type { TokenStore } from '../tokens/store.js';
+import type { User } from '../users/types.js';
+import type { UserStore } from '../users/store.js';
 import { logger } from '../log.js';
 import { SESSION_COOKIE_NAME } from './routes/auth.js';
 
@@ -8,6 +11,12 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** Set by the cookie session middleware on /api/* and /ws/* requests. */
     authDevice?: Device;
+    /**
+     * m-multi-user: resolved user behind the request. Set whenever a valid
+     * session cookie (device-issued or token-issued) authenticates the
+     * request. Owner-only for device sessions; limited-only for token.
+     */
+    user?: User;
     /** Legacy: filled when the request's bearer matches an internalHookToken. */
     authTokenLabel?: string;
   }
@@ -15,6 +24,9 @@ declare module 'fastify' {
 
 export interface RegisterAuthOptions {
   readonly store: DeviceStore;
+  /** m-multi-user: required once token-based login is wired (step 3). */
+  readonly userStore?: UserStore;
+  readonly tokenStore?: TokenStore;
   readonly internalHookToken: string;
   readonly cliToken: string;
   /**
@@ -42,6 +54,7 @@ const AUTH_PUBLIC_PREFIXES: ReadonlyArray<string> = [
   '/api/auth/register-status',
   '/api/auth/login-init',
   '/api/auth/login-complete',
+  '/api/auth/token',
 ];
 
 export async function registerAuth(
@@ -121,21 +134,53 @@ export async function registerAuth(
       }
       return;
     }
+    // Try device session first (owner via WebAuthn).
     const device = opts.store.authenticateSession(sessionId);
-    if (!device) {
-      if (isUpgrade) {
-        rejectUpgrade(401, 'invalid or expired session');
-      } else {
-        await reply
-          .code(401)
-          .send({ error: { code: 'unauthorized', message: 'invalid or expired session' } });
+    if (device) {
+      req.authDevice = device;
+      if (opts.userStore !== undefined) {
+        const user = opts.userStore.findById(device.userId);
+        if (user === null || user.kind !== 'owner') {
+          if (isUpgrade) {
+            rejectUpgrade(401, 'device user invalid');
+          } else {
+            await reply
+              .code(401)
+              .send({ error: { code: 'unauthorized', message: 'device user invalid' } });
+          }
+          return;
+        }
+        req.user = user;
       }
+      logger.debug(
+        { url, method: req.method, deviceId: device.id, ip: req.ip },
+        'authed request (device)',
+      );
       return;
     }
-    req.authDevice = device;
-    logger.debug(
-      { url, method: req.method, deviceId: device.id, ip: req.ip },
-      'authed request',
-    );
+
+    // Fall back to token session (limited user via POST /api/auth/token).
+    if (opts.tokenStore !== undefined && opts.userStore !== undefined) {
+      const token = opts.tokenStore.verify(sessionId);
+      if (token) {
+        const user = opts.userStore.findById(token.userId);
+        if (user !== null && user.kind === 'limited') {
+          req.user = user;
+          logger.debug(
+            { url, method: req.method, userId: user.id, ip: req.ip },
+            'authed request (token)',
+          );
+          return;
+        }
+      }
+    }
+
+    if (isUpgrade) {
+      rejectUpgrade(401, 'invalid or expired session');
+    } else {
+      await reply
+        .code(401)
+        .send({ error: { code: 'unauthorized', message: 'invalid or expired session' } });
+    }
   });
 }

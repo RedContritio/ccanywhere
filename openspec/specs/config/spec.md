@@ -8,6 +8,23 @@ ccanywhere 启动时读一个 JSON 配置文件，里面包含运行所需的全
 
 ## Requirements
 
+### Requirement: guestProjectsRoot（m-multi-user）
+
+配置 MUST 含必填字段 `guestProjectsRoot: string`，为 limited user 项目
+沙盒的父目录。owner 用 `projectsRoot`；每个 limited user 的项目根 =
+`<guestProjectsRoot>/<username (NFC)>/`。
+
+加载校验 MUST：
+- `projectsRoot` 与 `guestProjectsRoot` MUST NOT 相同。
+- 两者 MUST NOT 互为父子（任一为另一前缀 + 路径分隔符 → reject）。
+- server 启动时 MUST `mkdir -p guestProjectsRoot`（mode 0o700）。
+
+#### Scenario: 不重叠校验
+
+- GIVEN config `projectsRoot: '/a'`, `guestProjectsRoot: '/a/guests'`
+- WHEN  `loadConfig`
+- THEN  抛 ConfigError 含 `must not nest`
+
 ### Requirement: 配置文件路径
 
 服务端 MUST 按以下顺序解析配置文件路径：
