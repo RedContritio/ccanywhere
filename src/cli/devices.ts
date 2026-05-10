@@ -14,8 +14,8 @@ function fmtTs(epochMs: number | null): string {
   return new Date(epochMs).toISOString();
 }
 
-export async function runDevices(): Promise<void> {
-  const client = makeInternalClient();
+export async function runDevices(configPath?: string): Promise<void> {
+  const client = makeInternalClient(configPath);
   const res = await client.fetch('/api/internal/devices');
   if (!res.ok) {
     stdout.write(`fetch /api/internal/devices failed: ${res.status} ${await res.text()}\n`);

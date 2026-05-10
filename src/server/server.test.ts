@@ -57,6 +57,7 @@ const baseConfig: Config = {
   // buildServer reads from projectStore, not config.projectsRoot.
   projectsRoot: '/tmp/ccanywhere-test-placeholder',
   webOrigin: 'http://localhost:7878',
+  cookieName: 'ccanywhere_session',
 };
 
 describe('REST API', () => {
@@ -102,6 +103,37 @@ describe('REST API', () => {
       headers: { cookie: 'ccanywhere_session=notavalidsession' },
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('honors config.cookieName override (multi-instance same-domain isolation)', async () => {
+    const customApp = await buildServer({
+      config: { ...baseConfig, cookieName: 'ccanywhere_session_e2e' },
+      manager: new SessionManager(),
+      projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
+      internalHookToken,
+      cliToken,
+      webDistDir: null,
+    });
+    try {
+      // Default cookie name no longer authenticates against this server.
+      const wrong = await customApp.inject({
+        method: 'GET',
+        url: '/api/projects',
+        headers: { cookie: env.authCookie }, // 'ccanywhere_session=<id>'
+      });
+      expect(wrong.statusCode).toBe(401);
+
+      // Custom cookie name with the same sessionId does authenticate.
+      const right = await customApp.inject({
+        method: 'GET',
+        url: '/api/projects',
+        headers: { cookie: `ccanywhere_session_e2e=${env.sessionId}` },
+      });
+      expect(right.statusCode).toBe(200);
+    } finally {
+      await customApp.close();
+    }
   });
 
   it('lists projects with a valid session cookie', async () => {

@@ -22,6 +22,7 @@ const baseConfig: Config = {
   outputFps: 60,
   projectsRoot: '/tmp/ccanywhere-test-placeholder',
   webOrigin: 'http://localhost:7878',
+  cookieName: 'ccanywhere_session',
 };
 
 interface TestEnv {

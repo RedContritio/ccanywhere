@@ -17,6 +17,12 @@ export interface RegisterAuthOptions {
   readonly store: DeviceStore;
   readonly internalHookToken: string;
   readonly cliToken: string;
+  /**
+   * Optional override for the session cookie name. Defaults to
+   * `SESSION_COOKIE_NAME`. Override only for multi-instance same-domain
+   * deployments (e.g. staging) — see `config/schema.ts` `cookieName`.
+   */
+  readonly cookieName?: string;
 }
 
 function extractBearer(authHeader: unknown): string | null {
@@ -103,7 +109,8 @@ export async function registerAuth(
     }
 
     // 5) Everything else is gated by cookie session.
-    const sessionId = req.cookies[SESSION_COOKIE_NAME];
+    const cookieName = opts.cookieName ?? SESSION_COOKIE_NAME;
+    const sessionId = req.cookies[cookieName];
     if (typeof sessionId !== 'string' || sessionId.length === 0) {
       if (isUpgrade) {
         rejectUpgrade(401, 'missing session cookie');

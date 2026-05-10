@@ -21,6 +21,13 @@ import { registerHookRoutes } from './routes/hook.js';
 
 export interface BuildServerOptions {
   readonly config: Config;
+  /**
+   * Per-instance state directory (cli-token / devices / projects-state /
+   * feedback). Resolved by caller via `resolveConfigDir(config, configPath)`.
+   * Optional in tests; falls back to a tmp dir when omitted (then the
+   * feedback route writes there too — fine for tests, never for prod).
+   */
+  readonly configDir?: string | undefined;
   readonly manager: SessionManager;
   readonly projectStore: ProjectStore;
   readonly deviceStore: DeviceStore;
@@ -69,13 +76,19 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     store: opts.deviceStore,
     internalHookToken: opts.internalHookToken,
     cliToken: opts.cliToken,
+    cookieName: opts.config.cookieName,
   });
   await registerAuthRoutes(app, {
     store: opts.deviceStore,
     webOrigin: opts.config.webOrigin,
+    cookieName: opts.config.cookieName,
   });
   await registerInternalRoutes(app, { store: opts.deviceStore });
-  await registerFeedbackRoutes(app, { manager: opts.manager, serverStartedAt });
+  await registerFeedbackRoutes(app, {
+    manager: opts.manager,
+    serverStartedAt,
+    configDir: opts.configDir,
+  });
 
   app.get('/healthz', () => ({ ok: true }));
 

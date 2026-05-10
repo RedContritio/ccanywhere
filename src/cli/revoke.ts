@@ -1,13 +1,16 @@
 import { stdout } from 'node:process';
 import { makeInternalClient } from './internal-client.js';
 
-export async function runRevoke(deviceId: string | undefined): Promise<void> {
+export async function runRevoke(
+  deviceId: string | undefined,
+  configPath?: string,
+): Promise<void> {
   if (typeof deviceId !== 'string' || deviceId.length === 0) {
     stdout.write('usage: ccanywhere revoke <device-id>\n');
     stdout.write('       (run `ccanywhere devices` first to find the id)\n');
     process.exit(2);
   }
-  const client = makeInternalClient();
+  const client = makeInternalClient(configPath);
   const res = await client.fetch(`/api/internal/devices/${encodeURIComponent(deviceId)}`, {
     method: 'DELETE',
   });

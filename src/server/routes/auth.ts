@@ -21,6 +21,14 @@ export interface AuthRoutesOptions {
    * webOrigin is https, false otherwise (so 127.0.0.1 dev still works).
    */
   readonly cookieSecure?: boolean;
+  /**
+   * Optional override for the session cookie name. Defaults to
+   * `SESSION_COOKIE_NAME`. Override only for multi-instance same-domain
+   * deployments (e.g. staging on a different port) — RFC 6265 cookies
+   * ignore port, so reusing the prod name would let staging Set-Cookie
+   * evict the user's prod session. See `config/schema.ts` `cookieName`.
+   */
+  readonly cookieName?: string;
 }
 
 const RegisterInitSchema = z.object({
@@ -48,6 +56,7 @@ export async function registerAuthRoutes(
 ): Promise<void> {
   const rp: RpInfo = deriveRpInfo(opts.webOrigin);
   const cookieSecure = opts.cookieSecure ?? new URL(opts.webOrigin).protocol === 'https:';
+  const cookieName = opts.cookieName ?? SESSION_COOKIE_NAME;
   const cookieOpts = {
     httpOnly: true,
     sameSite: 'lax' as const,
@@ -160,7 +169,7 @@ export async function registerAuthRoutes(
         // One-shot: set the cookie and return device id. Subsequent polls
         // will still hit this branch (we don't auto-purge approved records;
         // pendingTtlMs takes care of cleanup).
-        void reply.setCookie(SESSION_COOKIE_NAME, pending.issuedSessionId, cookieOpts);
+        void reply.setCookie(cookieName, pending.issuedSessionId, cookieOpts);
         await reply
           .code(200)
           .send({ status: 'approved', deviceId: pending.issuedDeviceId });
@@ -234,14 +243,14 @@ export async function registerAuthRoutes(
     }
     opts.store.bumpDeviceCounter(device.id, result.newCounter, Date.now());
     const sessionId = opts.store.issueSession(device.id);
-    void reply.setCookie(SESSION_COOKIE_NAME, sessionId, cookieOpts);
+    void reply.setCookie(cookieName, sessionId, cookieOpts);
     await reply.code(200).send({ ok: true, deviceId: device.id });
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
-    const sessionId = req.cookies[SESSION_COOKIE_NAME];
+    const sessionId = req.cookies[cookieName];
     if (typeof sessionId === 'string') opts.store.revokeSession(sessionId);
-    void reply.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
+    void reply.clearCookie(cookieName, { path: '/' });
     await reply.code(204).send();
   });
 

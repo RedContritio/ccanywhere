@@ -39,8 +39,17 @@ const FeedbackBodySchema = z.object({
   diag: DiagSchema.optional(),
 });
 
-function feedbackDir(): string {
-  return join(homedir(), '.config', 'ccanywhere', 'feedback');
+/**
+ * Where feedback JSON files land. Caller (`buildServer`) injects via
+ * deps.configDir, which is resolved from the loaded config (see
+ * `src/config/paths.ts` `resolveConfigDir`). Falls back to the historical
+ * `~/.config/ccanywhere/feedback` only when unset — production wiring
+ * always passes configDir, so the fallback is exercised only in tests
+ * that don't care about feedback file location.
+ */
+function feedbackDir(configDir: string | undefined): string {
+  const base = configDir ?? join(homedir(), '.config', 'ccanywhere');
+  return join(base, 'feedback');
 }
 
 function makeFeedbackId(): string {
@@ -54,6 +63,14 @@ function makeFeedbackId(): string {
 export interface FeedbackRoutesDeps {
   readonly manager: SessionManager;
   readonly serverStartedAt: number;
+  /**
+   * Per-instance state directory, used to derive `<configDir>/feedback/`
+   * for persisted records. Optional in tests (falls back to
+   * ~/.config/ccanywhere/feedback). Production wiring sets it from
+   * `resolveConfigDir(config, configPath)` so prod / staging instances
+   * write to fully separate directories.
+   */
+  readonly configDir?: string | undefined;
 }
 
 export async function registerFeedbackRoutes(
@@ -74,7 +91,7 @@ export async function registerFeedbackRoutes(
     }
 
     const id = makeFeedbackId();
-    const dir = feedbackDir();
+    const dir = feedbackDir(deps.configDir);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
     const diag = parsed.data.diag;

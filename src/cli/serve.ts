@@ -1,26 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { ConfigError, defaultConfigPath, loadConfig } from '../config/loader.js';
+import { resolveConfigDir } from '../config/paths.js';
 import { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
 import { ProjectStore, ProjectStoreError, ensureProjectsRoot } from '../projects/store.js';
 import { buildServer } from '../server/server.js';
 import { SessionManager } from '../session/manager.js';
 
-function configDir(): string {
-  return join(homedir(), '.config', 'ccanywhere');
-}
-
 /**
- * Read the cliToken from ~/.config/ccanywhere/cli-token, or create one if
+ * Read the cliToken from `<configDir>/cli-token`, or create one if
  * missing. The CLI subcommands (approve / devices / revoke) read the same
- * file to authenticate against /api/internal/*.
+ * file (looked up via the same configDir) to authenticate against
+ * `/api/internal/*`.
  */
-function ensureCliToken(): string {
-  const path = join(configDir(), 'cli-token');
+function ensureCliToken(configDir: string): string {
+  const path = join(configDir, 'cli-token');
   if (existsSync(path)) {
     const v = readFileSync(path, 'utf8').trim();
     if (v.length >= 16) return v;
@@ -36,8 +33,8 @@ function ensureCliToken(): string {
   return v;
 }
 
-export async function runServe(): Promise<void> {
-  const configPath = defaultConfigPath();
+export async function runServe(configPathArg?: string): Promise<void> {
+  const configPath = configPathArg !== undefined ? resolve(configPathArg) : defaultConfigPath();
   let config;
   try {
     config = loadConfig(configPath);
@@ -48,6 +45,7 @@ export async function runServe(): Promise<void> {
     }
     throw err;
   }
+  const configDir = resolveConfigDir(config, configPath);
 
   const projectsRoot = resolve(config.projectsRoot);
   let writable = false;
@@ -69,12 +67,12 @@ export async function runServe(): Promise<void> {
 
   const projectStore = new ProjectStore({
     projectsRoot,
-    statePath: join(configDir(), 'projects-state.json'),
+    statePath: join(configDir, 'projects-state.json'),
   });
   const deviceStore = new DeviceStore({
-    statePath: join(configDir(), 'devices.json'),
+    statePath: join(configDir, 'devices.json'),
   });
-  const cliToken = ensureCliToken();
+  const cliToken = ensureCliToken(configDir);
 
   const manager = new SessionManager({
     deletedSessionTtlMs: config.deletedSessionTtlMs,
@@ -83,6 +81,7 @@ export async function runServe(): Promise<void> {
 
   const app = await buildServer({
     config,
+    configDir,
     manager,
     projectStore,
     deviceStore,

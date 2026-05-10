@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { defaultConfigPath, loadConfig } from '../config/loader.js';
+import { resolveConfigDir } from '../config/paths.js';
 
 export interface InternalClientConfig {
   readonly baseUrl: string;
@@ -11,14 +11,22 @@ export interface InternalClientConfig {
 /**
  * Loads the CLI's connection info from disk:
  * - host:port from the same config.json the server uses.
- * - cliToken from ~/.config/ccanywhere/cli-token (written by `serve`).
+ * - cliToken from `<configDir>/cli-token`, where configDir is
+ *   `config.configDir` if set, else the dir containing config.json.
+ *
+ * Mac CLI subcommands accept `--config <path>`; pass it through to
+ * target a non-default instance (e.g. staging). Without `--config` the
+ * usual defaultConfigPath chain (env / XDG / ~/.config) applies.
  *
  * Throws with a hopefully-actionable message if either is missing — the
  * subcommands (approve / devices / revoke) bail out via process.exit(2).
  */
-export function loadInternalClientConfig(): InternalClientConfig {
-  const config = loadConfig(defaultConfigPath());
-  const tokenPath = join(homedir(), '.config', 'ccanywhere', 'cli-token');
+export function loadInternalClientConfig(
+  configPath: string = defaultConfigPath(),
+): InternalClientConfig {
+  const config = loadConfig(configPath);
+  const dir = resolveConfigDir(config, configPath);
+  const tokenPath = join(dir, 'cli-token');
   if (!existsSync(tokenPath)) {
     throw new Error(
       `cli-token not found at ${tokenPath} — start \`ccanywhere serve\` once first to generate it`,
@@ -39,7 +47,17 @@ export interface InternalClient {
   readonly fetch: (path: string, init?: RequestInit) => Promise<Response>;
 }
 
-export function makeInternalClient(cfg: InternalClientConfig = loadInternalClientConfig()): InternalClient {
+export function makeInternalClient(
+  configPathOrCfg?: string | InternalClientConfig,
+): InternalClient {
+  const cfg: InternalClientConfig =
+    typeof configPathOrCfg === 'object'
+      ? configPathOrCfg
+      : loadInternalClientConfig(configPathOrCfg);
+  return makeInternalClientFromConfig(cfg);
+}
+
+function makeInternalClientFromConfig(cfg: InternalClientConfig): InternalClient {
   return {
     cfg,
     fetch: (path, init = {}) => {

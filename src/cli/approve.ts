@@ -21,8 +21,8 @@ function fmtAge(epochMs: number): string {
   return `${Math.round(sec / 3600)}h ago`;
 }
 
-export async function runApprove(): Promise<void> {
-  const client = makeInternalClient();
+export async function runApprove(configPath?: string): Promise<void> {
+  const client = makeInternalClient(configPath);
   const res = await client.fetch('/api/internal/pending');
   if (!res.ok) {
     stdout.write(`fetch /api/internal/pending failed: ${res.status} ${await res.text()}\n`);

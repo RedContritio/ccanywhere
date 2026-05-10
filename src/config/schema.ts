@@ -40,5 +40,24 @@ export const ConfigSchema = z.object({
   webOrigin: z
     .string()
     .url('webOrigin must be a full URL with scheme (e.g. https://...)'),
+  /**
+   * Cookie name for the session credential. Default 'ccanywhere_session'.
+   * Override only when running multiple instances on the same domain (RFC
+   * 6265 cookies ignore port — same-host different-port instances would
+   * otherwise overwrite each other's cookies). Staging instance running
+   * on a different port (e.g. cc.example.com:7443) MUST set this to
+   * something distinct (e.g. 'ccanywhere_session_e2e') to avoid evicting
+   * the user's prod session cookie.
+   */
+  cookieName: z.string().min(1).default('ccanywhere_session'),
+  /**
+   * Optional. Where this instance keeps its per-instance state files
+   * (cli-token, devices.json, projects-state.json, feedback/). When
+   * unset, falls back to the directory containing this config file —
+   * so dropping `config.json` in a fresh dir is enough to spin up an
+   * isolated instance. Set explicitly when state should live somewhere
+   * other than the config file's home (rare).
+   */
+  configDir: z.string().optional(),
 });
 export type Config = z.infer<typeof ConfigSchema>;
