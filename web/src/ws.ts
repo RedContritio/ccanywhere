@@ -13,6 +13,17 @@ export type ClientFrame =
   | { type: 'resize'; cols: number; rows: number }
   | { type: 'ping' };
 
+/**
+ * Why this socket entered terminal "do not reconnect" state. UI uses it
+ * to pick between "会话已结束" / "会话不存在" / "已被删除" labels. See
+ * openspec/specs/ws-protocol/spec.md "Close code 表".
+ */
+export type DeadReason =
+  | 'cc-exit'           // status='dead' frame from server, then close 1000
+  | 'session-gone'      // close 1008 — manager doesn't have this id
+                         // (GC after ttl, server restart, never existed)
+  | 'session-deleted';  // close 4002 — DELETE-driven teardown
+
 export interface SocketHandlers {
   onSnapshot?: (data: string) => void;
   onOutput?: (data: string) => void;
@@ -20,7 +31,7 @@ export interface SocketHandlers {
   onError?: (message: string) => void;
   onConnected?: () => void;
   onReconnecting?: () => void;
-  onDead?: () => void;
+  onDead?: (reason: DeadReason) => void;
 }
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -166,6 +177,23 @@ export class TerminalSocket {
       this.ws = null;
       recordOp('ws.close', { code: ev.code, reason: String(ev.reason ?? '').slice(0, 200) });
       if (this.closed || this.dead) return;
+
+      // Terminal close codes — see openspec/specs/ws-protocol/spec.md
+      // "Close code 表". 1000 'cc-exit' is normally reached via the
+      // status='dead' frame path which already set this.dead; the bare
+      // 1000 close that follows is filtered by the (this.dead) guard
+      // above. The codes here are the ones that arrive WITHOUT a prior
+      // status='dead'.
+      if (ev.code === 1008) {
+        this.dead = true;
+        this.handlers.onDead?.('session-gone');
+        return;
+      }
+      if (ev.code === 4002) {
+        this.dead = true;
+        this.handlers.onDead?.('session-deleted');
+        return;
+      }
       this.scheduleReconnect();
     };
 
@@ -190,7 +218,7 @@ export class TerminalSocket {
         if (frame.state === 'dead') {
           this.dead = true;
           this.handlers.onStatus?.(frame.state);
-          this.handlers.onDead?.();
+          this.handlers.onDead?.('cc-exit');
           this.close();
           return;
         }

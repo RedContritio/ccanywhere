@@ -10,7 +10,7 @@ import { noteTermWrite, setActiveTerm } from '../state/diag.js';
 import { recordOp, recordOpThrottled } from '../state/ops-log.js';
 import type { SessionState } from '../state/sessions.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
-import { TerminalSocket } from '../ws.js';
+import { TerminalSocket, type DeadReason } from '../ws.js';
 import {
   dimsReducer,
   INITIAL_DIMS_STATE,
@@ -61,7 +61,7 @@ interface Props {
   readonly onError?: (msg: string) => void;
   readonly onConnected?: () => void;
   readonly onReconnecting?: () => void;
-  readonly onDead?: () => void;
+  readonly onDead?: (reason: DeadReason) => void;
 }
 
 export interface TerminalHandle {
@@ -384,7 +384,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         handlersRef.current.onConnected?.();
       },
       onReconnecting: () => handlersRef.current.onReconnecting?.(),
-      onDead: () => handlersRef.current.onDead?.(),
+      onDead: (reason: DeadReason) => handlersRef.current.onDead?.(reason),
     });
     sockRef.current = sock;
 

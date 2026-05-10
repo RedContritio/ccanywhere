@@ -9,6 +9,8 @@ import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { FeedbackDialog } from '../components/feedback-dialog.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
+import type { DeadReason } from '../ws.js';
+import { wsConnLabel, type WsConnection } from '../ws-conn-label.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
 import { logoutServer } from '../auth-flow.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
@@ -18,8 +20,6 @@ import { newIdempotencyKey } from '../api.js';
 import { useAuthStore } from '../state/auth.js';
 import { useSessionsStore, type SessionState } from '../state/sessions.js';
 import { useUiStore } from '../state/ui.js';
-
-type WsConnection = 'connecting' | 'connected' | 'reconnecting' | 'dead';
 
 export function WorkspacePage(): JSX.Element {
   const { id } = useParams<{ id?: string }>();
@@ -51,6 +51,11 @@ export function WorkspacePage(): JSX.Element {
 
   // Live status from the WS layer; a per-:id key resets it on session switch.
   const [wsConnection, setWsConnection] = useState<WsConnection>('connecting');
+  // Captured when wsConnection transitions to 'dead' so the chip label can
+  // distinguish cc-exit / session-gone / session-deleted (see ws-protocol
+  // "Close code 表"). Reset whenever the user switches to a different
+  // session or wsConnection leaves 'dead'.
+  const [deadReason, setDeadReason] = useState<DeadReason | null>(null);
   const [liveSessionState, setLiveSessionState] = useState<SessionState | null>(null);
 
   useEffect(() => {
@@ -75,6 +80,7 @@ export function WorkspacePage(): JSX.Element {
   // Reset terminal status indicators when switching sessions.
   useEffect(() => {
     setWsConnection('connecting');
+    setDeadReason(null);
     setLiveSessionState(null);
   }, [id]);
 
@@ -111,9 +117,15 @@ export function WorkspacePage(): JSX.Element {
     }
   };
 
-  const onWsConnected = useCallback(() => setWsConnection('connected'), []);
+  const onWsConnected = useCallback(() => {
+    setWsConnection('connected');
+    setDeadReason(null);
+  }, []);
   const onWsReconnecting = useCallback(() => setWsConnection('reconnecting'), []);
-  const onWsDead = useCallback(() => setWsConnection('dead'), []);
+  const onWsDead = useCallback((reason: DeadReason) => {
+    setWsConnection('dead');
+    setDeadReason(reason);
+  }, []);
   const onWsStatus = useCallback((s: SessionState) => setLiveSessionState(s), []);
 
   const currentSession =
@@ -292,7 +304,7 @@ export function WorkspacePage(): JSX.Element {
                 )}
                 <div className="header-spacer" />
                 <span className={`ws-conn-chip is-${wsConnection}`}>
-                  {wsConnLabel(wsConnection)}
+                  {wsConnLabel(wsConnection, deadReason)}
                 </span>
               </div>
               <div className="terminal-pane-content">
@@ -329,15 +341,3 @@ export function WorkspacePage(): JSX.Element {
   );
 }
 
-function wsConnLabel(c: WsConnection): string {
-  switch (c) {
-    case 'connecting':
-      return '连接中…';
-    case 'connected':
-      return '已连接';
-    case 'reconnecting':
-      return '重连中…';
-    case 'dead':
-      return '会话已结束';
-  }
-}

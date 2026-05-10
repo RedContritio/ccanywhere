@@ -327,7 +327,7 @@ describe('WebSocket /ws/sessions/:id', () => {
     c2.ws.close();
   });
 
-  it('closes all clients when the session dies', async () => {
+  it('closes all clients with 1000 when the session dies (cc self-exit)', async () => {
     const id = await createSession(h);
     const c = connect(h.port, id, h.authCookie);
     await waitOpen(c.ws);
@@ -341,6 +341,24 @@ describe('WebSocket /ws/sessions/:id', () => {
     await session?.kill();
     const code = await closed;
     expect(code).toBe(1000);
+  });
+
+  it('closes with 4002 when teardown is DELETE-driven (markDeleted)', async () => {
+    const id = await createSession(h);
+    const c = connect(h.port, id, h.authCookie);
+    await waitOpen(c.ws);
+    await c.waitFor('snapshot');
+
+    const closed = new Promise<number>((resolve) =>
+      c.ws.once('close', (code: number) => resolve(code)),
+    );
+    const session = h.manager.get(id);
+    expect(session).toBeDefined();
+    // markDeleted sets deletedAt + triggers kill — by the time PTY exit
+    // fires teardown the session.deletedAt !== null, so close code is 4002.
+    session?.markDeleted();
+    const code = await closed;
+    expect(code).toBe(4002);
   });
 
   it('accepts resize without throwing', async () => {

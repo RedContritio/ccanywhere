@@ -97,9 +97,17 @@ export async function registerWebSocketRoutes(
       }
     }
     bundle.disposers = [];
+    // Close code by death cause: DELETE-driven teardown (markDeleted set
+    // deletedAt before the kill that led to this exit) sends 4002 so
+    // clients can distinguish "session was deleted, do not reconnect"
+    // from "cc exited, do not reconnect" (1000) and from "session not
+    // found, do not reconnect" (1008 sent at upgrade time). See
+    // openspec/specs/ws-protocol/spec.md "Close code 表".
+    const closeCode = bundle.session.deletedAt !== null ? 4002 : 1000;
+    const closeReason = bundle.session.deletedAt !== null ? 'session deleted' : 'session ended';
     for (const c of bundle.clients) {
       try {
-        c.close(1000, 'session ended');
+        c.close(closeCode, closeReason);
       } catch {
         // ignore
       }

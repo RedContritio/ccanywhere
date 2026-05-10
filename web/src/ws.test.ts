@@ -30,9 +30,11 @@ class MockWebSocket {
     this.sent.push(data);
   }
 
-  close(): void {
+  close(code?: number, reason?: string): void {
     this.readyState = MockWebSocket.CLOSED;
-    this.onclose?.(new CloseEvent('close'));
+    this.onclose?.(
+      new CloseEvent('close', { code: code ?? 1005, reason: reason ?? '' }),
+    );
   }
 }
 
@@ -147,18 +149,63 @@ describe('TerminalSocket', () => {
     expect(rig.history.length).toBe(8);
   });
 
-  it('stops reconnecting after status=dead', () => {
+  it('stops reconnecting after status=dead with reason cc-exit', () => {
     const rig = makeRig();
     const onDead = vi.fn();
     const onReconnecting = vi.fn();
     new TerminalSocket('s', { onDead, onReconnecting }, rig.factory);
     rig.current!.open();
     rig.current!.receive(JSON.stringify({ type: 'status', state: 'dead' }));
-    expect(onDead).toHaveBeenCalledOnce();
+    expect(onDead).toHaveBeenCalledTimes(1);
+    expect(onDead).toHaveBeenCalledWith('cc-exit');
 
     vi.advanceTimersByTime(10_000);
     expect(rig.history).toHaveLength(1);
     expect(onReconnecting).not.toHaveBeenCalled();
+  });
+
+  it('close code 1008 → onDead(session-gone), no reconnect', () => {
+    const rig = makeRig();
+    const onDead = vi.fn();
+    const onReconnecting = vi.fn();
+    new TerminalSocket('s', { onDead, onReconnecting }, rig.factory);
+    rig.current!.open();
+    rig.current!.close(1008, 'session not found');
+    expect(onDead).toHaveBeenCalledTimes(1);
+    expect(onDead).toHaveBeenCalledWith('session-gone');
+
+    vi.advanceTimersByTime(10_000);
+    expect(rig.history).toHaveLength(1);
+    expect(onReconnecting).not.toHaveBeenCalled();
+  });
+
+  it('close code 4002 → onDead(session-deleted), no reconnect', () => {
+    const rig = makeRig();
+    const onDead = vi.fn();
+    const onReconnecting = vi.fn();
+    new TerminalSocket('s', { onDead, onReconnecting }, rig.factory);
+    rig.current!.open();
+    rig.current!.close(4002, 'session deleted');
+    expect(onDead).toHaveBeenCalledTimes(1);
+    expect(onDead).toHaveBeenCalledWith('session-deleted');
+
+    vi.advanceTimersByTime(10_000);
+    expect(rig.history).toHaveLength(1);
+    expect(onReconnecting).not.toHaveBeenCalled();
+  });
+
+  it('close code 1006 (abnormal) still reconnects', () => {
+    const rig = makeRig();
+    const onDead = vi.fn();
+    const onReconnecting = vi.fn();
+    new TerminalSocket('s', { onDead, onReconnecting }, rig.factory);
+    rig.current!.open();
+    rig.current!.close(1006, '');
+    expect(onDead).not.toHaveBeenCalled();
+    expect(onReconnecting).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(250);
+    expect(rig.history).toHaveLength(2);
   });
 
   it('send() routes to ws when OPEN', () => {
