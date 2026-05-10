@@ -1,17 +1,12 @@
-/* eslint-disable max-lines -- TODO(m-lint-cap phase 2): split PTY lifecycle / scrollback bridge */
 import { randomUUID } from 'node:crypto';
-import { spawn as ptySpawn, type IPty } from 'node-pty';
+import { spawn as ptySpawn } from 'node-pty';
 import { logger } from '../log.js';
 import { ScreenState } from './screen-state.js';
 import { Scrollback } from './scrollback.js';
-import type {
-  SessionEventMap,
-  SessionEventName,
-  SessionInfo,
-  SessionListener,
-  SessionMode,
-  SessionState,
-} from './types.js';
+import { SessionImpl } from './session-impl.js';
+import type { Session, SessionInfo, SessionMode } from './types.js';
+
+export type { Session } from './types.js';
 
 export interface SpawnOptions {
   readonly projectId: string;
@@ -37,185 +32,6 @@ export interface SpawnOptions {
 export type SpawnResult =
   | { readonly kind: 'created'; readonly session: Session }
   | { readonly kind: 'attached'; readonly existingId: string };
-
-export interface PtyDataChunkRecord {
-  readonly ts: number;
-  readonly len: number;
-  /** First 32 bytes of the chunk hex-escaped; control bytes shown as \xNN. */
-  readonly head: string;
-}
-
-export interface Session {
-  readonly info: SessionInfo;
-  readonly state: SessionState;
-  readonly scrollback: Scrollback;
-  readonly screenState: ScreenState;
-  readonly deletedAt: number | null;
-  readonly lastDataAt: number | null;
-  readonly exitCode: number | null;
-  /** Every PTY data chunk since spawn (append-only) for diagnostic feedback inject. */
-  readonly recentDataChunks: readonly PtyDataChunkRecord[];
-  write(data: string): void;
-  resize(cols: number, rows: number): void;
-  kill(): Promise<void>;
-  setState(next: SessionState): void;
-  markDeleted(): void;
-  on<E extends SessionEventName>(event: E, fn: SessionListener<E>): () => void;
-}
-
-const KILL_TERM_AFTER_MS = 2_000;
-const KILL_FORCE_AFTER_MS = 7_000;
-
-function escapeHead(data: string, max = 32): string {
-  return data
-    .slice(0, max)
-    .replace(/[\x00-\x1f\x7f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
-}
-
-class SessionImpl implements Session {
-  state: SessionState = 'starting';
-  deletedAt: number | null = null;
-  lastDataAt: number | null = null;
-  exitCode: number | null = null;
-  private readonly _recentDataChunks: PtyDataChunkRecord[] = [];
-
-  get recentDataChunks(): readonly PtyDataChunkRecord[] {
-    return this._recentDataChunks;
-  }
-
-  private readonly listeners: {
-    [E in SessionEventName]: Set<SessionListener<E>>;
-  } = {
-    data: new Set(),
-    status: new Set(),
-    exit: new Set(),
-  };
-
-  private killing = false;
-  private killResolvers: Array<() => void> = [];
-
-  constructor(
-    public readonly info: SessionInfo,
-    private readonly pty: IPty,
-    public readonly scrollback: Scrollback,
-    public readonly screenState: ScreenState,
-  ) {
-    this.pty.onData((data) => {
-      this.scrollback.append(data);
-      this.screenState.feed(data);
-      this.lastDataAt = Date.now();
-      // Append-only: every PTY chunk for the lifetime of the session.
-      // Memory bound is the session itself — exit() releases this array
-      // along with the rest of SessionImpl. Worst-case for an idle cc
-      // (~10 chunks/s * 100B head + metadata) is ~5 MB/hour, fine for
-      // dogfood; if a long-lived session bloats it later we can trim
-      // by total bytes here without touching anything downstream.
-      this._recentDataChunks.push({
-        ts: this.lastDataAt,
-        len: data.length,
-        head: escapeHead(data),
-      });
-      this.emit('data', { sessionId: this.info.id, data });
-    });
-    this.pty.onExit(({ exitCode, signal }) => {
-      this.state = 'dead';
-      this.exitCode = exitCode;
-      this.emit('status', { sessionId: this.info.id, state: 'dead' });
-      const exitPayload =
-        signal === undefined
-          ? { sessionId: this.info.id, code: exitCode }
-          : { sessionId: this.info.id, code: exitCode, signal };
-      this.emit('exit', exitPayload);
-      const resolvers = this.killResolvers;
-      this.killResolvers = [];
-      for (const r of resolvers) r();
-      // Free the headless terminal — it's process-heavy (~MB on long
-      // sessions) and the dead session lives on in the manager map until
-      // its deletedAt + ttl elapses.
-      try {
-        this.screenState.dispose();
-      } catch {
-        // ignore — best effort
-      }
-    });
-  }
-
-  write(data: string): void {
-    if (this.state === 'dead') return;
-    this.pty.write(data);
-  }
-
-  resize(cols: number, rows: number): void {
-    if (this.state === 'dead') return;
-    if (cols < 1 || rows < 1) {
-      throw new RangeError(`resize requires positive cols/rows, got ${cols}x${rows}`);
-    }
-    this.pty.resize(cols, rows);
-    this.screenState.resize(cols, rows);
-  }
-
-  setState(next: SessionState): void {
-    if (this.state === next) return;
-    if (this.state === 'dead') return;
-    this.state = next;
-    this.emit('status', { sessionId: this.info.id, state: next });
-  }
-
-  markDeleted(): void {
-    if (this.deletedAt !== null) return;
-    this.deletedAt = Date.now();
-    if (this.state !== 'dead') {
-      void this.kill();
-    }
-  }
-
-  kill(): Promise<void> {
-    if (this.state === 'dead') return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      this.killResolvers.push(resolve);
-      if (this.killing) return;
-      this.killing = true;
-      try {
-        this.pty.kill('SIGINT');
-      } catch (err) {
-        logger.warn({ err, sessionId: this.info.id }, 'SIGINT failed');
-      }
-      setTimeout(() => {
-        if (this.state === 'dead') return;
-        try {
-          this.pty.kill('SIGTERM');
-        } catch (err) {
-          logger.warn({ err, sessionId: this.info.id }, 'SIGTERM failed');
-        }
-      }, KILL_TERM_AFTER_MS).unref();
-      setTimeout(() => {
-        if (this.state === 'dead') return;
-        try {
-          this.pty.kill('SIGKILL');
-        } catch (err) {
-          logger.warn({ err, sessionId: this.info.id }, 'SIGKILL failed');
-        }
-      }, KILL_FORCE_AFTER_MS).unref();
-    });
-  }
-
-  on<E extends SessionEventName>(event: E, fn: SessionListener<E>): () => void {
-    this.listeners[event].add(fn);
-    return () => {
-      this.listeners[event].delete(fn);
-    };
-  }
-
-  private emit<E extends SessionEventName>(event: E, payload: SessionEventMap[E]): void {
-    for (const fn of this.listeners[event]) {
-      try {
-        fn(payload);
-      } catch (err) {
-        logger.error({ err, event, sessionId: this.info.id }, 'session listener threw');
-      }
-    }
-  }
-}
 
 function buildEnv(extra: Readonly<Record<string, string>> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
@@ -276,8 +92,7 @@ export class SessionManager {
           return { kind: 'attached', existingId };
         }
         // Stale: candidate has been deleted or its PTY has exited but the
-        // exit listener hasn't fired yet (or it was never registered due
-        // to a prior bug). Drop the stale entry and fall through.
+        // exit listener hasn't fired yet. Drop the stale entry and fall through.
         this._activeResumeTargets.delete(opts.resumeSessionId);
       }
     }
@@ -286,10 +101,9 @@ export class SessionManager {
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
 
-    // Inherit the parent process environment (HOME, PATH, …) so cc reads
-    // the user's ~/.claude/ for auth + settings. We MUST NOT override
-    // CLAUDE_CONFIG_DIR — earlier auto-injection (M5) shadowed user auth
-    // and forced a fresh cc login on every web-spawned session.
+    // Inherit parent process environment (HOME, PATH, …) so cc reads
+    // ~/.claude/ for auth + settings. MUST NOT override CLAUDE_CONFIG_DIR
+    // — earlier auto-injection (M5) shadowed user auth.
     const env = buildEnv(opts.env);
 
     const pty = ptySpawn(opts.command, [...opts.args], {
@@ -329,9 +143,8 @@ export class SessionManager {
     if (opts.mode === 'resume' && opts.resumeSessionId !== undefined) {
       const lockKey = opts.resumeSessionId;
       this._activeResumeTargets.set(lockKey, id);
-      // Identity check on release: if the same lockKey was reclaimed by a
-      // newer web-session in the meantime, this stale exit must not wipe
-      // the new owner's entry.
+      // Identity check on release: if same lockKey was reclaimed by a newer
+      // web-session, this stale exit must not wipe the new owner's entry.
       session.on('exit', () => {
         if (this._activeResumeTargets.get(lockKey) === id) {
           this._activeResumeTargets.delete(lockKey);

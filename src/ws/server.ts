@@ -1,4 +1,3 @@
-/* eslint-disable max-lines -- TODO(m-lint-cap phase 2): trim 18 lines */
 import websocketPlugin from '@fastify/websocket';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
@@ -6,6 +5,7 @@ import { logger } from '../log.js';
 import type { Session, SessionManager } from '../session/manager.js';
 import { attachHeartbeatToWs, type HeartbeatConfig } from './heartbeat.js';
 import { ClientFrameSchema, type ServerFrame } from './protocol.js';
+import { sendFrame } from './send-frame.js';
 
 export interface WebSocketRoutesOptions {
   readonly heartbeat?: HeartbeatConfig;
@@ -16,41 +16,15 @@ export interface WebSocketRoutesOptions {
   readonly outputFlushIntervalMs?: number;
 }
 
-// Default frame-aligned with 60Hz displays so the trailing flush lands
-// on the next paintable tick. Override via config.outputFps (passed
-// through WebSocketRoutesOptions.outputFlushIntervalMs).
+// 17ms ≈ 60Hz; trailing flush lands on next paintable tick. Override via config.outputFps.
 const DEFAULT_FLUSH_INTERVAL_MS = 17;
-const MAX_BUFFERED_BYTES = 1 << 20; // 1 MB
-
-function sendFrame(ws: WebSocket, frame: ServerFrame): void {
-  if (ws.readyState === ws.CLOSING || ws.readyState === ws.CLOSED) return;
-  if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
-    logger.warn(
-      { buffered: ws.bufferedAmount },
-      'ws backpressure exceeded, closing client',
-    );
-    try {
-      ws.close(1009, 'backpressure');
-    } catch {
-      // ignore
-    }
-    return;
-  }
-  try {
-    ws.send(JSON.stringify(frame));
-  } catch (err) {
-    logger.warn({ err, frameType: frame.type }, 'ws send failed');
-  }
-}
 
 interface SessionBundle {
   readonly session: Session;
   readonly clients: Set<WebSocket>;
-  // Per-socket buffer for broadcast frames received before the socket's
-  // sendInitialState ran. Drained at the end of sendInitialState (output
-  // with seq <= snapshot.upToSeq dropped, status dropped). Without this,
-  // PTY data flushed in the [attach, sendInitialState] window arrives
-  // before snapshot, violating "snapshot first then write" client contract.
+  // Buffers broadcast frames in the [attach, sendInitialState] window;
+  // drained at end of sendInitialState (seq <= snapshot.upToSeq dropped,
+  // status dropped) to keep "snapshot first then write" client contract.
   readonly pendingClients: Map<WebSocket, ServerFrame[]>;
   pending: string;
   flushTimer: NodeJS.Timeout | null;

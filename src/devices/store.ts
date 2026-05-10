@@ -1,7 +1,6 @@
-/* eslint-disable max-lines -- TODO(m-lint-cap phase 2): extract persistence helper */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { loadPersistedState, savePersistedState } from './persist.js';
+import { seedActiveDevice } from './store-test-seed.js';
 import type { Device, LoginChallenge, PendingPair, Session } from './types.js';
 
 export class DeviceStoreError extends Error {
@@ -11,29 +10,14 @@ export class DeviceStoreError extends Error {
   }
 }
 
-interface PersistedState {
-  readonly devices: ReadonlyArray<Device>;
-  readonly sessions: ReadonlyArray<Session>;
-}
-
 export interface DeviceStoreOptions {
   /** Path to the JSON file that persists devices + sessions. */
   readonly statePath: string;
-  /**
-   * TTL for a pending pair record (no approval action yet). After expiry the
-   * record is dropped from in-memory storage. Default 30 minutes.
-   */
+  /** TTL for a pending pair record (no approval action yet). Default 30 min. */
   readonly pendingTtlMs?: number;
-  /**
-   * TTL for a login challenge between login-init and login-complete. The
-   * browser is expected to call assertion within seconds; we give 5 minutes
-   * to absorb slow networks. Default 300_000.
-   */
+  /** TTL for a login challenge between login-init and login-complete. Default 5 min. */
   readonly loginChallengeTtlMs?: number;
-  /**
-   * Idle timeout for a session before it's considered expired and pruned.
-   * Default 30 days.
-   */
+  /** Idle timeout for a session before pruning. Default 30 days. */
   readonly sessionTtlMs?: number;
   /** Clock injection for tests; defaults to `Date.now`. */
   readonly now?: () => number;
@@ -87,7 +71,6 @@ export class DeviceStore {
     const d = this.devices.get(id);
     if (!d || d.status === 'revoked') return false;
     this.devices.set(id, { ...d, status: 'revoked' });
-    // Drop any sessions for this device immediately.
     for (const [sid, s] of this.sessions) {
       if (s.deviceId === id) this.sessions.delete(sid);
     }
@@ -133,10 +116,7 @@ export class DeviceStore {
     return this.pending.get(pendingId) ?? null;
   }
 
-  /**
-   * Lists pending pairs awaiting CLI approval (after register-complete).
-   * The mac CLI uses this for `ccanywhere approve`.
-   */
+  /** Lists pending pairs awaiting CLI approval (after register-complete). */
   listPendingForApproval(): PendingPair[] {
     this.evictExpiredPending();
     return Array.from(this.pending.values())
@@ -158,16 +138,12 @@ export class DeviceStore {
 
   /**
    * Approves a pending pair: creates the Device, opens a Session, and
-   * marks the pending record 'approved' so the polling browser can pick
-   * up the issued session id.
+   * marks the pending record 'approved' so the polling browser picks up
+   * the issued session id.
    */
   approvePending(
     pendingId: string,
-    deviceInput: {
-      credentialId: string;
-      publicKey: string;
-      counter: number;
-    },
+    deviceInput: { credentialId: string; publicKey: string; counter: number },
   ): { device: Device; sessionId: string } {
     const rec = this.pending.get(pendingId);
     if (!rec) throw new DeviceStoreError(`pending not found: ${pendingId}`);
@@ -244,9 +220,9 @@ export class DeviceStore {
   }
 
   /**
-   * Validates a session id and returns the bound device. Returns null if
-   * the session is unknown, expired, or its device is revoked. Side effect:
-   * if returned non-null, lastUsedAt is updated and persisted.
+   * Validates a session id and returns the bound device. Returns null if the
+   * session is unknown, expired, or its device is revoked. Updates lastUsedAt
+   * (in-memory; persistence is lazy to avoid per-request fs writes).
    */
   authenticateSession(sessionId: string): Device | null {
     const sess = this.sessions.get(sessionId);
@@ -264,9 +240,6 @@ export class DeviceStore {
       return null;
     }
     this.sessions.set(sessionId, { ...sess, lastUsedAt: now });
-    // Persist lazily — touching every request would be too chatty. Caller
-    // can call persistTouch() periodically; for now we don't auto-persist
-    // on every read.
     return device;
   }
 
@@ -279,71 +252,33 @@ export class DeviceStore {
 
   // ------------ test seed ------------
 
-  /**
-   * Test-only: create an active device + a usable session id without going
-   * through WebAuthn registration. Used by integration tests that need an
-   * authenticated request without simulating attestation. NOT a real HTTP
-   * surface — there's no route that calls this.
-   *
-   * @internal
-   */
-  __seedActiveDevice(label: string, credentialId = `seed-${randomBytes(8).toString('hex')}`): {
-    device: Device;
-    sessionId: string;
-  } {
-    const now = this.now();
-    const device: Device = {
-      id: randomUUID(),
-      label,
-      credentialId,
-      publicKey: '',
-      counter: 0,
-      createdAt: now,
-      lastUsedAt: now,
-      status: 'active',
-    };
+  /** @internal — see store-test-seed.ts */
+  __seedActiveDevice(label: string, credentialId?: string): { device: Device; sessionId: string } {
+    return seedActiveDevice(this, label, credentialId);
+  }
+
+  /** @internal — used by store-test-seed.ts only */
+  __addForTest(device: Device): { device: Device; sessionId: string } {
     this.devices.set(device.id, device);
-    const sessionId = this.issueSessionInternal(device.id, now);
+    const sessionId = this.issueSessionInternal(device.id, this.now());
     this.persist();
     return { device, sessionId };
   }
 
-  // ------------ persistence ------------
+  // ------------ persistence + maintenance ------------
 
   private load(): void {
-    if (!existsSync(this.statePath)) return;
-    let raw: string;
-    try {
-      raw = readFileSync(this.statePath, 'utf8');
-    } catch {
-      return;
-    }
-    let parsed: Partial<PersistedState>;
-    try {
-      parsed = JSON.parse(raw) as Partial<PersistedState>;
-    } catch {
-      return;
-    }
-    if (Array.isArray(parsed.devices)) {
-      for (const d of parsed.devices) {
-        if (typeof d?.id === 'string') this.devices.set(d.id, d);
-      }
-    }
-    if (Array.isArray(parsed.sessions)) {
-      for (const s of parsed.sessions) {
-        if (typeof s?.sessionId === 'string') this.sessions.set(s.sessionId, s);
-      }
-    }
+    const state = loadPersistedState(this.statePath);
+    if (state === null) return;
+    for (const d of state.devices) this.devices.set(d.id, d);
+    for (const s of state.sessions) this.sessions.set(s.sessionId, s);
   }
 
   private persist(): void {
-    const dir = dirname(this.statePath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    const state: PersistedState = {
+    savePersistedState(this.statePath, {
       devices: Array.from(this.devices.values()),
       sessions: Array.from(this.sessions.values()),
-    };
-    writeFileSync(this.statePath, JSON.stringify(state, null, 2), { mode: 0o600 });
+    });
   }
 
   private evictExpiredPending(): void {

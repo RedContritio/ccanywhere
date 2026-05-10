@@ -1,3 +1,6 @@
+import type { ScreenState } from './screen-state.js';
+import type { Scrollback } from './scrollback.js';
+
 export type SessionState = 'starting' | 'idle' | 'busy' | 'dead';
 
 export type SessionMode = 'create' | 'resume';
@@ -36,3 +39,27 @@ export interface SessionEventMap {
 export type SessionEventName = keyof SessionEventMap;
 
 export type SessionListener<E extends SessionEventName> = (event: SessionEventMap[E]) => void;
+
+export interface PtyDataChunkRecord {
+  readonly ts: number;
+  readonly len: number;
+  /** First 32 bytes hex-escaped; control bytes shown as \xNN. */
+  readonly head: string;
+}
+
+export interface Session {
+  readonly info: SessionInfo;
+  readonly state: SessionState;
+  readonly scrollback: Scrollback;
+  readonly screenState: ScreenState;
+  readonly deletedAt: number | null;
+  readonly lastDataAt: number | null;
+  readonly exitCode: number | null;
+  readonly recentDataChunks: readonly PtyDataChunkRecord[];
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+  kill(): Promise<void>;
+  setState(next: SessionState): void;
+  markDeleted(): void;
+  on<E extends SessionEventName>(event: E, fn: SessionListener<E>): () => void;
+}
