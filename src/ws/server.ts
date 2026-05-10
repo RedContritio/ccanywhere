@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(m-lint-cap phase 2): trim 18 lines */
 import websocketPlugin from '@fastify/websocket';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';

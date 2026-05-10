@@ -9,7 +9,7 @@ import {
   verifyRegistration,
   type RpInfo,
 } from '../../devices/credential.js';
-import { DeviceStore } from '../../devices/store.js';
+import type { DeviceStore } from '../../devices/store.js';
 
 export const SESSION_COOKIE_NAME = 'ccanywhere_session';
 

@@ -157,7 +157,7 @@ describe('SessionManager', () => {
       // Force the perceived "now" to be far in the future by directly mutating deletedAt
       // is not possible (readonly via interface); instead we drive via a small ttl + busy wait.
       const start = Date.now();
-      // eslint-disable-next-line no-empty
+       
       while (Date.now() - start < 5) {}
       void before;
       const ids = tiny.list().map((s) => s.info.id);

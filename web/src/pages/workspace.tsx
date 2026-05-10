@@ -142,7 +142,7 @@ export function WorkspacePage(): JSX.Element {
   // Auto-close after picking a session so the terminal isn't hidden by
   // the drawer the whole time.
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     closeDrawer();
   }, [id]);

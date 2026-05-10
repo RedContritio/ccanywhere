@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ProjectStore, ProjectStoreError } from '../../projects/store.js';
+import type { ProjectStore} from '../../projects/store.js';
+import { ProjectStoreError } from '../../projects/store.js';
 import { listHistory } from '../history.js';
 
 const CreateBodySchema = z.object({

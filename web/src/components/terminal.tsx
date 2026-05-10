@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(m-lint-cap phase 4): componentize useTerminalConnection / TerminalHeader */
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
@@ -914,7 +915,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       }
       termRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [props.sessionId]);
 
   // Theme switching without remount.

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(m-lint-cap phase 2): split PTY lifecycle / scrollback bridge */
 import { randomUUID } from 'node:crypto';
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import { logger } from '../log.js';

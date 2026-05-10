@@ -5,7 +5,8 @@ import { logger } from '../../log.js';
 import type { ProjectStore } from '../../projects/store.js';
 import type { Session, SessionManager, SpawnOptions } from '../../session/manager.js';
 import { listHistory } from '../history.js';
-import { hashBody, IdempotencyStore, isValidIdempotencyKey } from '../idempotency.js';
+import type { IdempotencyStore} from '../idempotency.js';
+import { hashBody, isValidIdempotencyKey } from '../idempotency.js';
 
 export interface SessionRoutesOptions {
   readonly historyRoot?: string;

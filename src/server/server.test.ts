@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(m-lint-cap phase 3): split sub-test by capability */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

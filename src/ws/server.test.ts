@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
+ 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { Config } from '../config/schema.js';
@@ -11,6 +12,15 @@ import { ProjectStore } from '../projects/store.js';
 import { SessionManager } from '../session/manager.js';
 import { buildServer } from '../server/server.js';
 import type { ServerFrame } from './protocol.js';
+
+function parseFrame(raw: WebSocket.RawData): ServerFrame {
+  const text = Buffer.isBuffer(raw)
+    ? raw.toString('utf8')
+    : Array.isArray(raw)
+      ? Buffer.concat(raw).toString('utf8')
+      : Buffer.from(raw).toString('utf8');
+  return JSON.parse(text) as ServerFrame;
+}
 
 const internalHookToken = 'h'.repeat(32);
 const cliToken = 'c'.repeat(32);
@@ -119,7 +129,7 @@ function connect(port: number, sessionId: string, cookie: string): TrackedClient
   }> = [];
 
   ws.on('message', (raw: WebSocket.RawData) => {
-    const frame = JSON.parse(raw.toString()) as ServerFrame;
+    const frame = parseFrame(raw);
     const idx = waiters.findIndex((w) => w.type === frame.type);
     if (idx >= 0) {
       const w = waiters[idx];
@@ -397,7 +407,7 @@ describe('WebSocket /ws/sessions/:id', () => {
       headers: { cookie: h.authCookie },
     });
     ws2.on('message', (raw: WebSocket.RawData) => {
-      c2Frames.push(JSON.parse(raw.toString()) as ServerFrame);
+      c2Frames.push(parseFrame(raw));
     });
     await waitOpen(ws2);
     ws2.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
@@ -440,7 +450,7 @@ describe('WebSocket /ws/sessions/:id', () => {
       headers: { cookie: h.authCookie },
     });
     ws2.on('message', (raw: WebSocket.RawData) => {
-      c2Frames.push(JSON.parse(raw.toString()) as ServerFrame);
+      c2Frames.push(parseFrame(raw));
     });
     await waitOpen(ws2);
     ws2.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));

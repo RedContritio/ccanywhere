@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(m-lint-cap phase 2): extract persistence helper */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
