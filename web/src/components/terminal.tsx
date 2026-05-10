@@ -1,13 +1,13 @@
-/* eslint-disable max-lines -- TODO(m-lint-cap phase 4): componentize useTerminalConnection / TerminalHeader */
+/* eslint-disable max-lines -- TODO(m-lint-cap phase 4 sub-step 2-5): extract hooks */
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { Terminal, type ITheme } from '@xterm/xterm';
+import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { noteTermWrite, setActiveTerm } from '../state/diag.js';
+import { setActiveTerm } from '../state/diag.js';
 import { recordOp, recordOpThrottled } from '../state/ops-log.js';
 import type { SessionState } from '../state/sessions.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
@@ -18,43 +18,18 @@ import {
   type DimsEvent,
   type DimsState,
 } from './dims-state.js';
-
-type RendererKind = 'webgl' | 'canvas' | 'dom';
-
-/**
- * Pick the xterm renderer. Default 'webgl':
- *
- * 1. DOM renderer rebuilds all cell <span> children on every row paint
- *    (~1500 DOM mutations × 30-80 ms on mobile = 700 ms touchmove stalls
- *    during fast scrollback drag). Caught in feedback 2d2f1c7d.
- * 2. Canvas addon (`@xterm/addon-canvas`) is deprecated upstream and
- *    has known atlas / sub-pixel issues at high dpr. Feedback 0d84f615
- *    confirmed: smooth performance but visually corrupted output ("渲染
- *    全乱了") — a paint-layer bug we don't own.
- * 3. WebGL is the actively maintained path; uses GPU atlas without DOM
- *    mutations and gets correctness fixes upstream.
- *
- * Earlier feedback (e409ec50, 1a1fd3d7) recorded `_isDisposed undef`
- * crashes on webgl. Those traces predate the current code paths
- * (dims-state lifecycle + visualViewport channel + cleaner dispose
- * order — we removed the manual `webgl?.dispose()` chain a few commits
- * ago specifically because it double-freed). If crashes resurface,
- * they signal a remaining state-management bug to fix, not a reason
- * to fall back.
- *
- * Devs can override per-navigation with `?renderer=canvas|webgl|dom`.
- * The choice is NOT persisted to localStorage — a one-shot URL knob
- * for forcing dom/canvas on a problem device, not a sticky preference.
- */
-function pickRenderer(): RendererKind {
-  try {
-    const q = new URLSearchParams(location.search).get('renderer');
-    if (q === 'canvas' || q === 'dom' || q === 'webgl') return q;
-  } catch {
-    // URL parse failure; fall through
-  }
-  return 'webgl';
-}
+import {
+  chunkedWrite,
+  FONT_SIZE_DEFAULT,
+  FONT_SIZE_LS_KEY,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  loadStoredFontSize,
+  MAX_WAIT_MS,
+  pickRenderer,
+  QUIESCENCE_MS,
+  THEMES,
+} from './terminal-config.js';
 
 interface Props {
   readonly sessionId: string;
@@ -70,139 +45,6 @@ export interface TerminalHandle {
   input(data: string): void;
   /** Force-focus the underlying xterm. */
   focus(): void;
-}
-
-const THEMES: Record<'light' | 'dark', ITheme> = {
-  dark: {
-    background: '#0a0a0a',
-    foreground: '#e6e6e6',
-    cursor: '#e6e6e6',
-    selectionBackground: '#3a3a3a',
-  },
-  light: {
-    background: '#ffffff',
-    foreground: '#1a1a1a',
-    cursor: '#1a1a1a',
-    selectionBackground: '#cfd8e3',
-  },
-};
-
-// Font size bounds for pinch-zoom. References:
-//   - 8 px is the smallest size where monospace glyphs (especially CJK
-//     box drawing) remain legible without sub-pixel hinting.
-//   - 32 px caps zoom to roughly 4× default (13 → 32 ≈ 2.5× linear),
-//     beyond which the terminal grid shrinks to so few rows/cols that
-//     cc TUI breaks layout.
-//   - 13 px default = browser body default 14 px font – 1 to make
-//     monospace match surrounding UI text height visually.
-const FONT_SIZE_MIN = 8;
-const FONT_SIZE_MAX = 32;
-const FONT_SIZE_DEFAULT = 13;
-const FONT_SIZE_LS_KEY = 'ccanywhere.fontSize';
-
-// Quiescence threshold derivation — see
-// openspec/changes/m-mobile-fit-timing/design.md "QUIESCENCE_MS 推导".
-// Don't tune the constant directly; adjust the inputs.
-const LAYOUT_TRANSITION_UPPER_BOUND_MS = 250;
-const QUIESCENCE_SAFETY = 1.2;
-const QUIESCENCE_MS = Math.ceil(LAYOUT_TRANSITION_UPPER_BOUND_MS * QUIESCENCE_SAFETY); // 300
-
-// Aligned with server-side `fallbackTimer` (1500 ms in src/ws/server.ts).
-// Why 5 × QUIESCENCE_MS: the dims state machine retries quiescence on
-// every layout pulse; if 5 quiescence windows pass without ever
-// reaching `stable`, the layout is genuinely pathological (continuous
-// jitter > 1.2 s) and we should fall back to a direct measurement.
-// 5× also matches the server's safety margin: server gives the client
-// 5 quiescence windows worth of time to settle before sending its own
-// fallback initial state.
-const MAX_WAIT_MS = QUIESCENCE_MS * 5;
-
-function loadStoredFontSize(): number {
-  try {
-    const v = localStorage.getItem(FONT_SIZE_LS_KEY);
-    if (v === null) return FONT_SIZE_DEFAULT;
-    const n = Number.parseInt(v, 10);
-    if (Number.isNaN(n)) return FONT_SIZE_DEFAULT;
-    return Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, n));
-  } catch {
-    return FONT_SIZE_DEFAULT;
-  }
-}
-
-// Chunk size for chunkedWrite's RAF-paced writes. Picked at 4 KiB
-// because:
-//   - The longest plausible single ANSI escape sequence (e.g. SGR with
-//     RGB color, sub-string OSC) is well under 256 bytes; 4 KiB makes
-//     escape splitting across chunks vanishingly rare.
-//   - 4 KiB written into xterm's dom renderer + parser stays well
-//     under one frame at 60 fps (~16 ms budget) on mid-range mobile,
-//     so the RAF cadence keeps main thread responsive.
-//   - Smaller (1 KiB) costs more RAF round-trips for the same data;
-//     larger (16 KiB+) starts to risk frame drops on slower devices.
-const SNAPSHOT_CHUNK_BYTES = 4096;
-
-function chunkedWrite(term: Terminal, data: string, source: 'snapshot' | 'output'): void {
-  if (data.length === 0) return;
-  const bufType = term.buffer.active.type;
-  if (data.length <= SNAPSHOT_CHUNK_BYTES) {
-    const t0 = performance.now();
-    recordOp('term.write', { source, buf: bufType, len: data.length });
-    try {
-      term.write(data);
-      noteTermWrite();
-    } catch (err) {
-      recordOp('term.write.error', {
-        message: err instanceof Error ? err.message : String(err),
-        len: data.length,
-      });
-    }
-    recordOp('term.write.done', {
-      source,
-      len: data.length,
-      ms: Math.round(performance.now() - t0),
-    });
-    return;
-  }
-  let i = 0;
-  const t0 = performance.now();
-  recordOp('term.write', {
-    source,
-    buf: bufType,
-    len: data.length,
-    chunked: true,
-  });
-  const step = (): void => {
-    if (i >= data.length) return;
-    const end = Math.min(i + SNAPSHOT_CHUNK_BYTES, data.length);
-    const tickT0 = performance.now();
-    try {
-      term.write(data.slice(i, end));
-      noteTermWrite();
-    } catch (err) {
-      recordOp('term.write.error', {
-        message: err instanceof Error ? err.message : String(err),
-        offset: i,
-        len: data.length,
-      });
-      return;
-    }
-    recordOp('term.write.raf', {
-      source,
-      offset: i,
-      chunkLen: end - i,
-      ms: Math.round(performance.now() - tickT0),
-    });
-    i = end;
-    if (i < data.length) requestAnimationFrame(step);
-    else {
-      recordOp('term.write.done', {
-        source,
-        len: data.length,
-        ms: Math.round(performance.now() - t0),
-      });
-    }
-  };
-  step();
 }
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
