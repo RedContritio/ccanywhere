@@ -18,11 +18,8 @@ const LIMITS = [
   { pattern: /\.md$/, max: 300 },
 ];
 
-// Phase-1 carve-out for legacy oversized files; cleared in phase 5/6.
-const SKIP_LIST = new Set([
-  'docs/deployment.md',
-  'openspec/specs/web-frontend/spec.md',
-]);
+// Phase-1 carve-out for legacy oversized files (cleared in phase 5).
+const SKIP_LIST = new Set();
 
 function gatherFiles() {
   if (process.argv.length > 2) return process.argv.slice(2);
