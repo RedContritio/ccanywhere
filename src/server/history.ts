@@ -50,6 +50,53 @@ export async function listHistory(
 
 const PREVIEW_MAX = 200;
 
+/**
+ * cc CLI emits `type: user` messages whose `content` carries its own
+ * system tags. Two flavors:
+ *
+ *   - Unwrap (keep inner text): `<command-name>` only — preserves the
+ *     slash command itself (`/clear` `/init` etc.) as user-driven
+ *     intent worth surfacing in the preview.
+ *
+ *   - Strip (remove block entirely): the rest — `command-message` and
+ *     `command-args` are redundant with command-name; caveat / reminder
+ *     / stdout / stderr / hook / bash tool I/O are model-facing system
+ *     noise with no preview value.
+ *
+ * Whitespace collapse after both passes so unwrap doesn't leave gaping
+ * blank runs. If post-processing leaves an empty string, caller skips
+ * this user line and tries the next.
+ */
+const CC_UNWRAP_TAGS = ['command-name'] as const;
+
+const CC_STRIP_TAGS = [
+  'command-message',
+  'command-args',
+  'local-command-caveat',
+  'command-stdout',
+  'command-stderr',
+  'local-command-stdout',
+  'local-command-stderr',
+  'system-reminder',
+  'user-prompt-submit-hook',
+  'bash-input',
+  'bash-stdout',
+  'bash-stderr',
+] as const;
+
+export function stripCcSystemTags(text: string): string {
+  let out = text;
+  for (const tag of CC_UNWRAP_TAGS) {
+    const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g');
+    out = out.replace(re, ' $1 ');
+  }
+  for (const tag of CC_STRIP_TAGS) {
+    const re = new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, 'g');
+    out = out.replace(re, '');
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 async function readFirstUserMessage(file: string): Promise<string> {
   let content: string;
   try {
@@ -57,6 +104,12 @@ async function readFirstUserMessage(file: string): Promise<string> {
   } catch {
     return '';
   }
+  // Collect a leading run of slash-command-only user lines, then the
+  // first real user input after them. So `/clear` alone → "/clear",
+  // `/clear` followed by "如何 X" → "/clear · 如何 X", "如何 X" alone
+  // → "如何 X". User intent: see what the session actually starts with
+  // when the literal first message is just a command invocation.
+  const collected: string[] = [];
   for (const rawLine of content.split('\n')) {
     const line = rawLine.trim();
     if (line.length === 0) continue;
@@ -67,9 +120,14 @@ async function readFirstUserMessage(file: string): Promise<string> {
       continue;
     }
     const text = extractUserText(obj);
-    if (text !== null) return text.slice(0, PREVIEW_MAX);
+    if (text === null) continue;
+    const stripped = stripCcSystemTags(text);
+    if (stripped.length === 0) continue;
+    collected.push(stripped);
+    if (!stripped.startsWith('/')) break;
   }
-  return '';
+  if (collected.length === 0) return '';
+  return collected.join(' · ').slice(0, PREVIEW_MAX);
 }
 
 function extractUserText(obj: unknown): string | null {

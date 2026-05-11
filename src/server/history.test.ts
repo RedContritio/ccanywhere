@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { encodeProjectCwd, listHistory } from './history.js';
+import { encodeProjectCwd, listHistory, stripCcSystemTags } from './history.js';
 
 describe('encodeProjectCwd', () => {
   it('replaces slashes with dashes after resolve', () => {
@@ -104,5 +104,161 @@ describe('listHistory', () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.sessionId).toBe('malformed');
     expect(result[0]?.preview).toBe('good');
+  });
+
+  it('keeps slash command (command-name) as preview when session starts with /clear only', async () => {
+    writeSession('with-clear', [
+      {
+        type: 'user',
+        message: {
+          content:
+            '<command-name>/clear</command-name><command-message>clear</command-message><command-args></command-args>',
+        },
+      },
+    ]);
+    const [first] = await listHistory(cwd, root);
+    expect(first?.preview).toBe('/clear');
+  });
+
+  it('appends user-typed prompt after a leading /clear', async () => {
+    // User invoked /clear then asked a real question. Preview should show
+    // both, joined by " · " so list readers see the actual subject.
+    writeSession('clear-then-ask', [
+      {
+        type: 'user',
+        message: {
+          content:
+            '<command-name>/clear</command-name><command-message>clear</command-message><command-args></command-args>',
+        },
+      },
+      {
+        type: 'user',
+        message: { content: '<local-command-stdout></local-command-stdout>' },
+      },
+      { type: 'user', message: { content: '如何实现 X' } },
+    ]);
+    const [first] = await listHistory(cwd, root);
+    expect(first?.preview).toBe('/clear · 如何实现 X');
+  });
+
+  it('chains multiple leading slash commands before real input', async () => {
+    writeSession('multi-cmd', [
+      {
+        type: 'user',
+        message: {
+          content: '<command-name>/clear</command-name>',
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          content: '<command-name>/init</command-name>',
+        },
+      },
+      { type: 'user', message: { content: 'do the thing' } },
+    ]);
+    const [first] = await listHistory(cwd, root);
+    expect(first?.preview).toBe('/clear · /init · do the thing');
+  });
+
+  it('skips pure-noise user lines (caveat/reminder/stdout) to find real text', async () => {
+    writeSession('with-noise', [
+      {
+        type: 'user',
+        message: { content: '<system-reminder>x</system-reminder>' },
+      },
+      {
+        type: 'user',
+        message: {
+          content: '<local-command-stdout></local-command-stdout>',
+        },
+      },
+      { type: 'user', message: { content: 'real question' } },
+    ]);
+    const [first] = await listHistory(cwd, root);
+    expect(first?.preview).toBe('real question');
+  });
+
+  it('strips cc system tag block leading the real user text', async () => {
+    writeSession('with-caveat', [
+      {
+        type: 'user',
+        message: {
+          content:
+            '<local-command-caveat>Caveat: The messages below were generated...</local-command-caveat>\n实际问题在这',
+        },
+      },
+    ]);
+    const [first] = await listHistory(cwd, root);
+    expect(first?.preview).toBe('实际问题在这');
+  });
+});
+
+describe('stripCcSystemTags', () => {
+  it('strips noise tag block (local-command-caveat)', () => {
+    expect(
+      stripCcSystemTags(
+        '<local-command-caveat>Caveat: ...</local-command-caveat>hello',
+      ),
+    ).toBe('hello');
+  });
+
+  it('unwraps command-name keeping the slash command as preview', () => {
+    expect(
+      stripCcSystemTags(
+        '<command-name>/clear</command-name><command-message>clear</command-message><command-args></command-args>',
+      ),
+    ).toBe('/clear');
+  });
+
+  it('strips command-message and command-args as redundant with command-name', () => {
+    expect(
+      stripCcSystemTags(
+        '<command-name>/cd</command-name><command-message>cd ~/proj</command-message><command-args>~/proj</command-args>',
+      ),
+    ).toBe('/cd');
+  });
+
+  it('strips system-reminder block across multiple lines', () => {
+    const input =
+      '<system-reminder>\nline 1\nline 2\n</system-reminder>after';
+    expect(stripCcSystemTags(input)).toBe('after');
+  });
+
+  it('leaves unknown tags untouched', () => {
+    expect(stripCcSystemTags('<div>real html</div>')).toBe(
+      '<div>real html</div>',
+    );
+  });
+
+  it('preserves user text after stripping a noise block', () => {
+    expect(
+      stripCcSystemTags(
+        'before<local-command-caveat>noise</local-command-caveat>after',
+      ),
+    ).toBe('beforeafter');
+  });
+
+  it('mixes unwrap + strip + plain text in one input', () => {
+    // /init slash, plus a caveat, plus the real follow-up question.
+    expect(
+      stripCcSystemTags(
+        '<command-name>/init</command-name><local-command-caveat>noise</local-command-caveat> 然后请帮我...',
+      ),
+    ).toBe('/init 然后请帮我...');
+  });
+
+  it('collapses whitespace introduced by unwrap padding', () => {
+    expect(
+      stripCcSystemTags(
+        '<command-name>/clear</command-name>     <command-args></command-args>',
+      ),
+    ).toBe('/clear');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(
+      stripCcSystemTags('  <system-reminder>x</system-reminder>  text  '),
+    ).toBe('text');
   });
 });
