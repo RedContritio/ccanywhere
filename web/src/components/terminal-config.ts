@@ -45,12 +45,15 @@ export const THEMES: Record<'light' | 'dark', ITheme> = {
 };
 
 // Font size bounds for pinch-zoom.
-//   - 8 px: smallest where monospace glyphs (CJK box drawing) remain legible
-//     without sub-pixel hinting.
+//   - 4 px: minimum requested by mobile users on high-dpr screens (Xiaomi
+//     17 Pro at dpr ≈ 2.75 keeps 4-css-px glyphs readable — device-px
+//     is still ~11 px on the panel). Sub-pixel hinting is lost below 6
+//     css-px on standard-dpr screens but the user-side trade-off is
+//     "show more cc TUI content per pane".
 //   - 32 px: caps zoom to roughly 4×; beyond this the grid shrinks so much
 //     cc TUI breaks layout.
 //   - 13 px default = body 14 px – 1, monospace matches surrounding UI height.
-export const FONT_SIZE_MIN = 8;
+export const FONT_SIZE_MIN = 4;
 export const FONT_SIZE_MAX = 32;
 export const FONT_SIZE_DEFAULT = 13;
 export const FONT_SIZE_LS_KEY = 'ccanywhere.fontSize';

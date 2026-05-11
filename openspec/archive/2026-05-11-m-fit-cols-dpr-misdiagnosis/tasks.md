@@ -35,7 +35,8 @@
 
 ## Phase 3: 验证
 
-- [ ] T8. 在 iPhone 375 上 dogfood 反馈一次，cols ≈ 47 / rows ≈ 53
+- [ ] T8. 在 Xiaomi 17 Pro（375 css-px 视宽）dogfood 反馈一次，
+       cols ≈ 47 / rows ≈ 53
 - [ ] T9. PC 1920 × 1080 上反馈一次，cols 仍正确（无回归）
 - [ ] T10. 切 renderer 三遍验证一致
 

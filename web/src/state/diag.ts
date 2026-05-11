@@ -55,8 +55,39 @@ interface DiagViewport {
   rows?: number;
   windowW: number;
   windowH: number;
+  /** visualViewport 实测尺寸；与 windowW/H 在键盘升起 / 浏览器 UI bar
+   *  滑动时会偏离。triage 排版 / 键盘相关 bug 必备。 */
+  vvW?: number;
+  vvH?: number;
+  vvOffsetTop?: number;
+  vvOffsetLeft?: number;
+  vvPageTop?: number;
+  vvPageLeft?: number;
+  /** 物理屏幕尺寸（含状态栏 / 导航条），辅助识别设备型号。 */
+  screenW: number;
+  screenH: number;
   devicePixelRatio: number;
   orientation?: string;
+}
+
+interface DiagEnv {
+  /** UA string — 浏览器 / OS / 版本一锅端，triage 设备能力首要数据。 */
+  userAgent: string;
+  language: string;
+  /** Intl 解析的时区名，例如 'Asia/Shanghai'。 */
+  timezone?: string;
+  /** 用户系统主题偏好（非应用层的 useUiStore；OS 级）。 */
+  prefersColorScheme?: 'light' | 'dark' | 'no-preference';
+  prefersReducedMotion?: boolean;
+  visibilityState?: string;
+  hasFocus?: boolean;
+}
+
+interface DiagPage {
+  /** 不含 origin（避免日志泄露 staging hostname），仅 path + search。 */
+  pathname: string;
+  search: string;
+  referrer: string;
 }
 interface DiagNet {
   online: boolean;
@@ -79,6 +110,18 @@ interface DiagWs {
 }
 interface DiagTerm {
   rendererKind?: string;
+  /** xterm fontSize in css-px. Pinch-zoom-mutable (4..32). Critical for
+   *  triage: cellWidth/cellHeight derive from this, cols × cellW is
+   *  what cc receives — any "排版乱 / cols off-by-one" feedback needs
+   *  fontSize reconstructable. */
+  fontSize?: number;
+  fontFamily?: string;
+  scrollback?: number;
+  cursorBlink?: boolean;
+  /** xterm 实际渲染的 cell 尺寸（css-px）。`cellWidth × cols` 与
+   *  `containerWidth` 的差就是 fit-addon off-by-one bug 的判据 */
+  cellWidth?: number;
+  cellHeight?: number;
   lastWriteTs?: number;
   screen?: string[];
 }
@@ -89,6 +132,8 @@ interface DiagMemory {
 }
 export interface Diag {
   activeSessionId?: string;
+  env?: DiagEnv;
+  page?: DiagPage;
   viewport?: DiagViewport;
   net?: DiagNet;
   app?: DiagApp;
@@ -110,15 +155,65 @@ export function collectDiag(extra: DiagExtra = {}): Diag {
     out.activeSessionId = active.sessionId;
   }
 
+  // env
+  const env: DiagEnv = {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+  };
+  try {
+    env.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    // some restricted contexts deny Intl access; skip
+  }
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      env.prefersColorScheme = 'dark';
+    } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+      env.prefersColorScheme = 'light';
+    } else {
+      env.prefersColorScheme = 'no-preference';
+    }
+    env.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+  if (typeof document.visibilityState === 'string') {
+    env.visibilityState = document.visibilityState;
+  }
+  if (typeof document.hasFocus === 'function') {
+    try {
+      env.hasFocus = document.hasFocus();
+    } catch {
+      // ignore (cross-origin frame edge)
+    }
+  }
+  out.env = env;
+
+  // page
+  out.page = {
+    pathname: location.pathname,
+    search: location.search,
+    referrer: document.referrer,
+  };
+
   // viewport
   const viewport: DiagViewport = {
     windowW: window.innerWidth,
     windowH: window.innerHeight,
+    screenW: window.screen.width,
+    screenH: window.screen.height,
     devicePixelRatio: window.devicePixelRatio,
   };
   if (active !== null) {
     viewport.cols = active.term.cols;
     viewport.rows = active.term.rows;
+  }
+  const vv = window.visualViewport;
+  if (vv) {
+    viewport.vvW = vv.width;
+    viewport.vvH = vv.height;
+    viewport.vvOffsetTop = vv.offsetTop;
+    viewport.vvOffsetLeft = vv.offsetLeft;
+    viewport.vvPageTop = vv.pageTop;
+    viewport.vvPageLeft = vv.pageLeft;
   }
   const orient = (window.screen as Screen & { orientation?: { type?: string } })
     .orientation?.type;
@@ -164,6 +259,24 @@ export function collectDiag(extra: DiagExtra = {}): Diag {
   // term
   if (active !== null) {
     const term: DiagTerm = { rendererKind: active.rendererKind };
+    const opts = active.term.options;
+    if (typeof opts.fontSize === 'number') term.fontSize = opts.fontSize;
+    if (typeof opts.fontFamily === 'string') term.fontFamily = opts.fontFamily;
+    if (typeof opts.scrollback === 'number') term.scrollback = opts.scrollback;
+    if (typeof opts.cursorBlink === 'boolean') term.cursorBlink = opts.cursorBlink;
+    // xterm's _renderService exposes the actually-rendered cell dims.
+    // Reach through the private-named `_core` to read them; they're the
+    // only authoritative source (FitAddon uses the same field).
+    const core = (active.term as Terminal & {
+      _core?: {
+        _renderService?: { dimensions?: { css?: { cell?: { width?: number; height?: number } } } };
+      };
+    })._core;
+    const cell = core?._renderService?.dimensions?.css?.cell;
+    if (cell !== undefined) {
+      if (typeof cell.width === 'number') term.cellWidth = cell.width;
+      if (typeof cell.height === 'number') term.cellHeight = cell.height;
+    }
     if (active.lastWriteTs > 0) term.lastWriteTs = active.lastWriteTs;
     try {
       term.screen = captureScreen(active.term);

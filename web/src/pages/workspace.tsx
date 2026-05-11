@@ -187,14 +187,6 @@ export function WorkspacePage(): JSX.Element {
           <button
             type="button"
             className="drawer-feedback"
-            onClick={() => location.reload()}
-            title="重连当前 session（清掉 cc Ink scrollback 累积的重复内容）"
-          >
-            刷新
-          </button>
-          <button
-            type="button"
-            className="drawer-feedback"
             onClick={() => setFeedbackOpen(true)}
           >
             反馈
@@ -313,6 +305,15 @@ export function WorkspacePage(): JSX.Element {
                   aria-label="查看配额"
                 >
                   💰
+                </button>
+                <button
+                  type="button"
+                  className="terminal-header-reload"
+                  onClick={() => location.reload()}
+                  title="重连当前 session（清掉 cc Ink scrollback 累积的重复内容）"
+                  aria-label="刷新页面"
+                >
+                  ↻
                 </button>
                 <span className={`ws-conn-chip is-${wsConnection}`}>
                   {wsConnLabel(wsConnection, deadReason)}

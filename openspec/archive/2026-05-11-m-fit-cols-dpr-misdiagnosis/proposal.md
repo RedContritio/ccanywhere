@@ -1,16 +1,62 @@
+# ❌ MISDIAGNOSIS — closed 2026-05-11
+
+**原 proposal 的假设错了**：cols=78 / rows=61 是用户主动设字号 8
+（`FONT_SIZE_MIN`，pinch-zoom 最小值）下的正确测量结果，不是 dpr 测算 bug。
+
+但 **fit-cols 真实 bug 仍然存在**——只是症状完全不同：
+
+- 真实症状：偶发 `cols` 多 1，cc 按 N 列布局 / xterm 实际只能渲染 N-1 列，
+  最后一列被切或换行，TUI 排版乱
+- 触发：非稳定（"偶尔会显示比实际多一列"），与字号 / renderer / 视宽都不
+  必然相关
+- 关联 task：见 `openspec/changes/m-fit-cols-off-by-one/` proposal（独立
+  追踪）
+
+下面 cellWidth / cellHeight 数值核对仍然有效：
+
+| 项 | 期望（字号 8）| 实测 | 结论 |
+|---|---|---|---|
+| cellWidth (css-px) | 8 × 0.6 = 4.8 | 4.81 (webgl) / 5.0 (dom) | ✓ |
+| cellHeight (css-px) | 8 × 1.2 ≈ 9.6 | 9.3 | ✓ |
+| cols @ vvW=375 | 375 / 4.8 ≈ 78 | 78 / 75 | ✓ |
+| rows @ hostH=567 | 567 / 9.6 ≈ 59 | 61 | ✓ |
+
+我之前用 `FONT_SIZE_DEFAULT = 13` 反推期望 cols ≈ 47-48，把用户的字号设置
+当成了系统默认 → 整个 root cause hypothesis 错配。
+
+**Lesson**：feedback `ops` log 当时没记 `fontSize`，导致服务端 + 我的分析
+都看不到这个关键变量。后续应该在 mount 时 recordOp('terminal.config',
+{ fontSize, dpr, renderer })，trace 才完整。这条留作独立小 task（不再开
+新 proposal）。
+
+用户实际诉求是 "希望支持更小字号"（4 px），这是单独改动：commit 同笔把
+`FONT_SIZE_MIN` 从 8 改到 4。
+
+---
+
+下面是原 proposal 内容，保留作 lesson 上下文（结论已被推翻）：
+
+---
+
 # Proposal: M-fit-cols-dpr — 高 dpr 下 cols / rows 算错
 
 ## Intent
 
-iPhone 375 × 699 视宽下 mobile dogfood 长期 cols=78 / rows=61，与 13px
-monospace font 在该视宽期望（cols ≈ 47-48 / rows ≈ 53）严重偏离。
-cellWidth 被算成 ≈ 4.8 css-px（应 ≈ 7.8），cellHeight ≈ 11.5（应 ≈ 13×1.2 = 15.6）。
+mobile dogfood 长期反馈 cols=78 / rows=61，与 13px monospace font 在 375
+css-px 视宽下的期望（cols ≈ 47-48 / rows ≈ 53）严重偏离。cellWidth 被算成
+≈ 4.8 css-px（应 ≈ 7.8），cellHeight ≈ 11.5（应 ≈ 13×1.2 = 15.6）。
 受影响的实际效果：cc TUI 多列布局错位 / 文本视觉换行点偏移。
+
+**当前 dogfood 设备**：Xiaomi 17 Pro（feedback `2026-05-10T19-47-55Z-90302927`
+deviceLabel 字段证实）。视宽 vvW=375.38 / innerW=375 / hostH=567（pane 高度，
+减去 terminal-header + workspace-header）。renderer=webgl。早期我以"iPhone 375"
+归类是从视宽反推错——symptom 相同，root cause 假设不变。
 
 ## 证据：非 m-lint-cap phase 4 引入的回归
 
-8 笔反馈（`~/.config/ccanywhere/feedback/`）显示 cols=78 / rows=61 在
-phase 4 ship（2026-05-11 03:14 commit 97761cb）之前 8 天就一直如此：
+8 笔反馈（`~/.config/ccanywhere/feedback/`，均自同台 Xiaomi 17 Pro）显示
+cols=78 / rows=61 在 phase 4 ship（2026-05-11 03:14 commit 97761cb）之前
+8 天就一直如此：
 
 | 时间 (UTC) | 反馈 title | cols | rows | 距 phase 4 |
 |---|---|---|---|---|
@@ -73,6 +119,6 @@ A 是最可能的——cols 偏多 30（67% 多），不是简单的 padding ove
 
 | 性质 | 保证机制 |
 |---|---|
-| cols 算对 | iPhone 375 / 13px font cols ≈ 47-48（dom 与 webgl 一致） |
+| cols 算对 | 375 css-px 视宽 / 13px font cols ≈ 47-48（dom 与 webgl 一致） |
 | dpr 与 cell 测量解耦 | actualCellWidth 在不同 dpr 下保持 fontSize × ratio，不被 atlas 影响 |
 | phase 4 行为等价 | 上面 7 笔历史反馈 + 1 笔最新反馈 cols=78 完全一致，无回归 |

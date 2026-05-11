@@ -866,7 +866,8 @@
   font-weight: 500;
 }
 
-.terminal-header-quota {
+.terminal-header-quota,
+.terminal-header-reload {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -876,8 +877,15 @@
   line-height: 1;
 }
 
-.terminal-header-quota:hover {
+.terminal-header-quota:hover,
+.terminal-header-reload:hover {
   background: var(--bg-hover, rgba(127, 127, 127, 0.08));
+}
+
+.terminal-header-reload {
+  /* ↻ glyph baseline sits low; nudge for vertical centering. */
+  font-size: 14px;
+  padding: 1px 6px;
 }
 
 .quota-panel .quota-body {
