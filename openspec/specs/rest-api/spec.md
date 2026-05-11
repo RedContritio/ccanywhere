@@ -316,6 +316,11 @@ mac CLI 子命令通过 cliToken 调以下端点：
 cliToken 在 `~/.config/ccanywhere/cli-token`（mode 0600）；首次 `ccanywhere
 serve` 启动时自动生成，后续重启沿用。
 
+multi-user / quota 相关的 internal 路由（`/api/internal/users`、
+`/api/internal/tokens`）以及 cookie-public 登录路径 `POST /api/auth/token`
+与 `GET /api/me/quota` 见 sibling spec
+[`multi-user.spec.md`](./multi-user.spec.md)。
+
 ### Requirement: POST /api/feedback
 
 接收 web 客户端的用户反馈，落盘到 `~/.config/ccanywhere/feedback/<id>.json`

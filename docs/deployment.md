@@ -41,6 +41,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 | `claudeBin` | 写**绝对路径**。LaunchAgent 的 PATH 不含 `~/.local/bin`，相对名 `claude` 会找不到导致 spawn 立即 dead |
 | `webOrigin` | web SPA 实际服务的 origin（如 `https://ccanywhere.example.com`）。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；改这一项会让所有已配对设备失效 |
 | `projectsRoot` | 项目集合根目录（绝对路径），其直接子目录被自动列为可选项目；启动时不存在会自动 mkdir，不可读直接 fatal，不可写则只能列/选不能新建 |
+| `guestProjectsRoot` | **必填**（m-multi-user）。limited user 项目沙盒父目录（绝对路径），其下每个 limited user 拿到一个 `<username>/` 子目录作 cwd 根。**MUST NOT** 与 `projectsRoot` 相同，**MUST NOT** 互为父子。启动时自动 `mkdir -p` (mode 0700)。详见 §7 |
 | `outputFps` | WS 输出最大帧率，1..240 默认 60。带宽紧张可调到 24 |
 | `deletedSessionTtlMs` | 软删除保留时长，默认 600_000（10 分钟）|
 | `wsHeartbeat.timeoutMs` | 必须严格大于 `intervalMs`，默认 60000/30000 |
@@ -171,5 +172,106 @@ pnpm install
 pnpm build:all
 launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
 ```
+
+### ⚠️ 从 quota 之前的版本升级（重要）
+
+m-quota-cost-tracking ship 后 `buildHookSettings` 的 `UserPromptSubmit`
+事件的 curl 命令改成保留 stdout（旧版用 `>/dev/null 2>&1` 丢掉 stdout）。
+服务端在配额耗尽时返回 cc 协议 JSON `{ decision: 'block', reason: ... }`
+让 cc 停 prompt——前提是 hook command 把这段 JSON 透传给 cc。
+
+如果你以前手动贴过 `~/.claude/settings.json` hook 段，配额功能上线后
+**必须** 重新生成并替换。否则 limited user 超限时 cc 收不到 block 决策
+（hook 静默 fire-and-forget），prompt 照常发送 → 上限失效。
+
+重生成方法：
+
+```bash
+# 拉一下当前实例的 internalHookToken（每次 serve 启动重新生成）
+launchctl print gui/$(id -u)/com.<you>.ccanywhere | grep internalHookToken
+# 或看启动日志：
+log show --predicate 'process == "node" AND eventMessage CONTAINS "internalHookToken"' --last 5m
+
+# 用 ccanywhere CLI 生成新 hook 段（待实现：本工程暂时通过 ccanywhere
+# 启动日志读 `internalHookToken` 后手动替换 settings.json 对应字段）
+```
+
+owner 不受影响（owner 全程 quota skip）。
+
+## 7. multi-user 配置（m-multi-user）
+
+ccanywhere 支持单 owner + N 个 limited user。owner 走 WebAuthn 配对，
+limited user 通过 token 登录（owner CLI 颁发）。每个 limited user 的项目
+沙盒在 `<guestProjectsRoot>/<username>/` 下，不可访问 owner 的 `projectsRoot`。
+
+### 7.1 config 必填字段
+
+```json
+{
+  "projectsRoot": "/Users/<you>/Projects/cc",
+  "guestProjectsRoot": "/Users/<you>/Projects/cc-guests",
+  ...
+}
+```
+
+`guestProjectsRoot` 与 `projectsRoot` MUST 不相同 + MUST 不互为父子。
+启动时自动 `mkdir -p` (mode 0700)。
+
+### 7.2 创建第一个 limited user
+
+```bash
+# 颁额度 + 颁初始 token
+ccanywhere user create alice \
+  --cost-usd 10 \
+  --ttl 7d
+
+# 输出形如：
+# user.id: 8d5e...
+# token.plaintext: <64-char hex>   ← 一次性显示，保存好
+# 复制 token plaintext 发给 alice
+
+# 查列表
+ccanywhere user list
+
+# 后续重新颁 token（旧 token 仍有效直到 ttl 结束或 revoke）
+ccanywhere token issue alice --ttl 7d --label "iphone"
+
+# 调整 limit / 重置 used
+ccanywhere user quota set alice --cost-usd 20 --reset
+
+# 撤 token
+ccanywhere token list --user alice
+ccanywhere token revoke <token-id>
+```
+
+### 7.3 limited user 浏览器登录
+
+alice 拿到 token plaintext 后，浏览器访问 `https://<webOrigin host>/`
+→ 切换到 "token 登录" → 粘贴 token → 服务端校验 + 颁 cookie。后续刷新自动用 cookie。
+
+token 失效（revoke 或 expire）后 cookie 立即失效，回到登录页。
+
+### 7.4 quota 行为
+
+- limited user 超 `cost.limitUsd` 或 `tokens.limit` 任一时，下一次
+  `UserPromptSubmit` 会被服务端拦截：cc 收到 `{ decision: 'block',
+  reason: '...' }` JSON，停止 prompt 并在 terminal 显示 reason。
+- 浏览器 terminal-header 的 💰 button 打开 quota panel，看 cost / tokens
+  实时进度（30s 轮询）。
+- quota 累加自 `user.createdAt`，token 轮换 / revoke / re-issue 不重置。
+- 当轮 in-flight 不打断：拦截在下一次 prompt 提交时触发。
+
+### 7.5 限制
+
+- limited user 暂不能通过 web 创建项目（POST /api/projects 限 owner）。
+  alice 的 cwd 必须由 owner 在 `<guestProjectsRoot>/alice/` 下预创建项目
+  目录。
+- limited user 无 WebAuthn 配对路径（仅 owner）；POST `/api/auth/webauthn/login-init`
+  对 limited user 直接 403。
+- token ttl ≤ 7d 硬限。要长期使用，owner 定期 re-issue。
+
+详细 REST API 契约见 [`openspec/specs/rest-api/multi-user.spec.md`](../openspec/specs/rest-api/multi-user.spec.md)。
+hook quota enforcement 见 [`openspec/specs/hooks/spec.md`](../openspec/specs/hooks/spec.md)
+"UserPromptSubmit 是 quota 单一 enforcement 点"。
 
 config 不动，前端构建产出会被 fastify-static 即时服务。
