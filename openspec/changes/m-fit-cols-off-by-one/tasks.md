@@ -4,13 +4,15 @@
 
 ## Phase 1: trace 补强（~30 LOC）
 
-- [x] T1. diag.term 加 fontSize（feedback 自动带 — done 本笔同 ship）
-- [ ] T2. `web/src/components/terminal-dims.ts` `dims.callback` payload
-  扩展含 `cellWidth` / `cellHeight` / `paddingX` / `scrollBarWidth` /
-  `containerWidth` (fractional)，从 xterm `_core._renderService.dimensions`
-  + getComputedStyle 取
-- [ ] T3. 新 ops-log event `fit.applied` 每次 `fit.fit()` 后调，含
-  `{ cols, rows, cellWidth, containerW, computedOverflow }`
+- [x] T1. diag.term 加 fontSize / fontFamily / scrollback / cursorBlink /
+  cellWidth / cellHeight（feedback 自动带 — 96a02b1）
+- [x] T2. `terminal-dims.ts` `dims.callback` payload 扩展含 fitInputs
+  (cellW/cellH/containerW/containerH/padX/padY/scrollBarW)，从 xterm
+  `_core._renderService.dimensions` + getComputedStyle 取
+- [x] T3. 新 ops-log event `fit.applied` 在 `fit.fit()` 后（becameStable /
+  resizedWhileStable 两处）触发，含 cols/rows/fitInputs/usableW/usableH/
+  computedOverflowW/computedOverflowH。`computedOverflowW > 0` 即 off-by-one
+  发生信号
 - [ ] T4. 验证 trace：feedback 一次 reload 后 ops-log 含上述字段
 
 ## Phase 2: 复现等待（user 操作）

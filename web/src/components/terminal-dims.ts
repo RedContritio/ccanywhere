@@ -11,6 +11,84 @@ import {
 import type { ViewportMetrics } from './terminal-keyboard-overlay.js';
 import { MAX_WAIT_MS, QUIESCENCE_MS } from './terminal-config.js';
 
+interface FitInputs {
+  /** xterm-internal css cell metrics (matches what FitAddon divides). */
+  readonly cellW: number;
+  readonly cellH: number;
+  /** parentElement.clientWidth/Height — the same element FitAddon reads
+   *  getComputedStyle on. Fractional in some browsers / dpr settings. */
+  readonly containerW: number;
+  readonly containerH: number;
+  /** Inner padding subtracted by FitAddon before dividing. */
+  readonly padX: number;
+  readonly padY: number;
+  /** Scrollbar reserve subtracted by FitAddon (0 if scrollback=0). */
+  readonly scrollBarW: number;
+}
+
+/**
+ * Mirror FitAddon's measurement inputs so trace data lets us reconstruct
+ * what cols/rows would have been computed. Reads xterm's private `_core`
+ * because that's the same struct FitAddon uses internally — no public API
+ * surface exists. Brittle to xterm-major-version bumps; defensive nulls.
+ */
+function captureFitInputs(term: Terminal): FitInputs | null {
+  const t = term as Terminal & {
+    element?: HTMLElement;
+    _core?: {
+      _renderService?: { dimensions?: { css?: { cell?: { width?: number; height?: number } } } };
+      viewport?: { scrollBarWidth?: number };
+    };
+  };
+  const cell = t._core?._renderService?.dimensions?.css?.cell;
+  if (cell === undefined || typeof cell.width !== 'number' || typeof cell.height !== 'number') {
+    return null;
+  }
+  const elem = t.element;
+  const parent = elem?.parentElement;
+  if (elem === undefined || parent === null || parent === undefined) {
+    return null;
+  }
+  const parentStyle = window.getComputedStyle(parent);
+  const innerStyle = window.getComputedStyle(elem);
+  return {
+    cellW: cell.width,
+    cellH: cell.height,
+    containerW: parseFloat(parentStyle.width) || parent.clientWidth,
+    containerH: parseFloat(parentStyle.height) || parent.clientHeight,
+    padX: parseFloat(innerStyle.paddingLeft) + parseFloat(innerStyle.paddingRight),
+    padY: parseFloat(innerStyle.paddingTop) + parseFloat(innerStyle.paddingBottom),
+    scrollBarW: t._core?.viewport?.scrollBarWidth ?? 0,
+  };
+}
+
+/**
+ * After a fit.fit() runs, record the inputs and check whether the post-fit
+ * cols × cellW exceeds the usable width — that's the off-by-one signature
+ * (cc draws into N columns but xterm physically renders into N-1 because
+ * the Nth overflows the container). m-fit-cols-off-by-one Phase 1 trace.
+ */
+function recordFitApplied(term: Terminal, source: string): void {
+  const inputs = captureFitInputs(term);
+  if (inputs === null) {
+    recordOp('fit.applied', { source, cols: term.cols, rows: term.rows, inputs: null });
+    return;
+  }
+  const usableW = inputs.containerW - inputs.padX - inputs.scrollBarW;
+  const usableH = inputs.containerH - inputs.padY;
+  recordOp('fit.applied', {
+    source,
+    cols: term.cols,
+    rows: term.rows,
+    ...inputs,
+    usableW,
+    usableH,
+    /** > 0 means cols × cellW exceeds available width — the bug. */
+    computedOverflowW: inputs.cellW * term.cols - usableW,
+    computedOverflowH: inputs.cellH * term.rows - usableH,
+  });
+}
+
 export interface DimsControllerOptions {
   container: HTMLElement;
   term: Terminal;
@@ -70,6 +148,7 @@ export function setupDimsStateMachine(opts: DimsControllerOptions): DimsControll
       } catch {
         // ignore
       }
+      recordFitApplied(term, 'stable');
       sock.send({ type: 'resize', cols: term.cols, rows: term.rows });
       placeholder.style.display = 'none';
       refreshCellHeight();
@@ -80,6 +159,7 @@ export function setupDimsStateMachine(opts: DimsControllerOptions): DimsControll
       } catch {
         // ignore
       }
+      recordFitApplied(term, 'resized');
       sock.send({ type: 'resize', cols: term.cols, rows: term.rows });
       recordOp('dims.resize', effects.resizedWhileStable);
       refreshCellHeight();
@@ -92,11 +172,15 @@ export function setupDimsStateMachine(opts: DimsControllerOptions): DimsControll
       return;
     }
     // Full metrics every callback (not throttled) — lets trace correlate
-    // ResizeObserver fires with visualViewport / window resize.
+    // ResizeObserver fires with visualViewport / window resize. fitInputs
+    // captures the same measurement FitAddon would consume, so a feedback
+    // can replay "what cols/rows would have been picked given this geometry".
+    const fitInputs = captureFitInputs(term);
     recordOp('dims.callback', {
       cols: proposed.cols,
       rows: proposed.rows,
       ...captureViewportMetrics(),
+      ...(fitInputs ?? {}),
     });
     dispatch({ kind: 'measurement', cols: proposed.cols, rows: proposed.rows });
   });
