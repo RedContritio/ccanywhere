@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import type { Project, Session } from '../state/sessions.js';
+import type { Project } from '../state/projects.js';
+import type { Session } from '../state/sessions.js';
 
 interface Props {
   readonly sessions: readonly Session[];

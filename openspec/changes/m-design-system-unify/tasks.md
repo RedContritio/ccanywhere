@@ -24,16 +24,22 @@
 
 ## Phase 2 — C2 abstractions + store 拆分
 
-- [ ] T2.1. `web/src/components/dialog-base.tsx`（统一 header / close /
-  footer pattern）
-- [ ] T2.2. `web/src/components/list-base.tsx`（紧凑 list view）
-- [ ] T2.3. `web/src/components/status-badge.tsx`（SessionState 4 状态映射）
-- [ ] T2.4. `web/src/state/projects.ts` 拆出（保持 `useSessionsStore`
-  hook 入口 API 不变）
-- [ ] T2.5. 调用方迁移（grep 找所有 `useSessionsStore` 直接读 projects
-  的处，导入新 hook）
-- [ ] T2.6. 单元测试（DialogBase / ListBase / StatusBadge / projects
-  store）
+- [x] T2.1. `web/src/components/dialog-base.tsx`（统一 header / close /
+  footer pattern；sr-only description fallback 解 Radix a11y warning；
+  DP8 autoFocus 默认 off）
+- [x] T2.2. `web/src/components/list-base.tsx`（紧凑 list view；
+  primary/secondary 双 slot；secondary 强制 mono 字体 per F1；interactive
+  vs static 两形态）
+- [x] T2.3. `web/src/components/status-badge.tsx`（SessionState 4 状态
+  映射，纯 mono 文字，颜色 starting=brand/idle=fg-muted/busy=warning/
+  dead=danger per DP7）
+- [x] T2.4. `web/src/state/projects.ts` 拆出（Project/HistorySummary 类
+  型 + useProjectsStore + 4 action：fetchProjects / fetchHistory /
+  createProject / hideProject + resetProjectsStoreForTest）
+- [x] T2.5. 调用方迁移：use-completion-notify.ts / workspace.tsx /
+  new-session-dialog.tsx / session-list.tsx 共 4 处 grep + 改 import
+- [x] T2.6. 单元测试：projects.test.ts (7 case) / status-badge.test.tsx
+  (4 case) / list-base.test.tsx (6 case) / dialog-base.test.tsx (6 case)
 - [ ] T2.7. C2 commit + 全测试通过
 
 ## Phase 3 — C3 dialogs

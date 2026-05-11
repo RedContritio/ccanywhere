@@ -2,14 +2,6 @@ import { create } from 'zustand';
 import { api } from '../api.js';
 import { recordOp } from './ops-log.js';
 
-export interface Project {
-  id: string;
-  name: string;
-  cwd: string;
-  /** epoch-ms; directory mtime on the server side. */
-  modifiedAt: number;
-}
-
 export type SessionState = 'starting' | 'idle' | 'busy' | 'dead';
 
 export interface Session {
@@ -20,12 +12,6 @@ export interface Session {
   state: SessionState;
   createdAt: number;
   deletedAt: number | null;
-}
-
-export interface HistorySummary {
-  sessionId: string;
-  modifiedAt: number;
-  preview: string;
 }
 
 export interface CreateSessionRequest {
@@ -42,25 +28,20 @@ export interface CreateSessionRequest {
 }
 
 interface SessionsStore {
-  projects: Project[];
   sessions: Session[];
   loading: boolean;
   error: string | null;
-  fetchProjects: () => Promise<void>;
   fetchSessions: () => Promise<void>;
-  fetchHistory: (projectId: string) => Promise<HistorySummary[]>;
-  createSession: (req: CreateSessionRequest, idempotencyKey: string) => Promise<Session>;
+  createSession: (
+    req: CreateSessionRequest,
+    idempotencyKey: string,
+  ) => Promise<Session>;
   deleteSession: (id: string) => Promise<void>;
   /** Optimistic local mark — server is source of truth. */
   markSessionDeletedLocal: (id: string) => void;
-  /** Create a new project subdir under the server's projectsRoot. */
-  createProject: (name: string) => Promise<Project>;
-  /** Hide a project (server-side soft-delete; directory remains on disk). */
-  hideProject: (id: string) => Promise<void>;
 }
 
 const initial = {
-  projects: [] as Project[],
   sessions: [] as Session[],
   loading: false,
   error: null as string | null,
@@ -68,15 +49,6 @@ const initial = {
 
 export const useSessionsStore = create<SessionsStore>((set) => ({
   ...initial,
-  fetchProjects: async () => {
-    set({ loading: true, error: null });
-    try {
-      const { projects } = await api<{ projects: Project[] }>('/api/projects');
-      set({ projects, loading: false });
-    } catch (err) {
-      set({ error: (err as Error).message, loading: false });
-    }
-  },
   fetchSessions: async () => {
     set({ loading: true, error: null });
     try {
@@ -85,12 +57,6 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
     } catch (err) {
       set({ error: (err as Error).message, loading: false });
     }
-  },
-  fetchHistory: async (projectId) => {
-    const { history } = await api<{ history: HistorySummary[] }>(
-      `/api/projects/${encodeURIComponent(projectId)}/history`,
-    );
-    return history;
   },
   createSession: async (req, idempotencyKey) => {
     const themeHint =
@@ -152,7 +118,9 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
     return created;
   },
   deleteSession: async (id) => {
-    await api<void>(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await api<void>(`/api/sessions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
     recordOp('session.delete', { id });
     set((s) => ({
       sessions: s.sessions.map((x) =>
@@ -166,24 +134,6 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
         x.id === id ? { ...x, deletedAt: x.deletedAt ?? Date.now() } : x,
       ),
     })),
-  createProject: async (name) => {
-    const created = await api<Project>('/api/projects', {
-      method: 'POST',
-      body: { name },
-    });
-    recordOp('project.create', { id: created.id });
-    set((s) => ({
-      projects: s.projects.some((p) => p.id === created.id)
-        ? s.projects
-        : [...s.projects, created].sort((a, b) => a.id.localeCompare(b.id)),
-    }));
-    return created;
-  },
-  hideProject: async (id) => {
-    await api<void>(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    recordOp('project.hide', { id });
-    set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
-  },
 }));
 
 /** Tests only. */

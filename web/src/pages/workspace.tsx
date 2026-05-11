@@ -21,6 +21,7 @@ import { useCompletionNotify } from '../state/use-completion-notify.js';
 import { newIdempotencyKey } from '../api.js';
 import { useAuthStore } from '../state/auth.js';
 import { useActiveSessionStore } from '../state/prefs.js';
+import { useProjectsStore } from '../state/projects.js';
 import { useSessionsStore, type SessionState } from '../state/sessions.js';
 import { useUiStore } from '../state/ui.js';
 
@@ -28,9 +29,9 @@ export function WorkspacePage(): JSX.Element {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
-  const projects = useSessionsStore((s) => s.projects);
+  const projects = useProjectsStore((s) => s.projects);
   const sessions = useSessionsStore((s) => s.sessions);
-  const fetchProjects = useSessionsStore((s) => s.fetchProjects);
+  const fetchProjects = useProjectsStore((s) => s.fetchProjects);
   const fetchSessions = useSessionsStore((s) => s.fetchSessions);
   const createSession = useSessionsStore((s) => s.createSession);
   const deleteSession = useSessionsStore((s) => s.deleteSession);

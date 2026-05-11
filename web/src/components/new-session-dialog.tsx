@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { HistorySummary, Project } from '../state/sessions.js';
-import { useSessionsStore } from '../state/sessions.js';
+import {
+  useProjectsStore,
+  type HistorySummary,
+  type Project,
+} from '../state/projects.js';
 import { SelectableList } from './selectable-list.js';
 
 export interface CreateRequest {
@@ -36,8 +39,8 @@ export function NewSessionDialog({
   onClose,
   onCreate,
 }: Props): JSX.Element | null {
-  const fetchHistory = useSessionsStore((s) => s.fetchHistory);
-  const createProject = useSessionsStore((s) => s.createProject);
+  const fetchHistory = useProjectsStore((s) => s.fetchHistory);
+  const createProject = useProjectsStore((s) => s.createProject);
 
   const [step, setStep] = useState<Step>(1);
   const [projectId, setProjectId] = useState<string>('');

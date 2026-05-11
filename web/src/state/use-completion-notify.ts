@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
+import { useProjectsStore } from './projects.js';
 import { useSessionsStore, type SessionState } from './sessions.js';
 import { useUiStore } from './ui.js';
 
@@ -10,7 +11,7 @@ import { useUiStore } from './ui.js';
  */
 export function useCompletionNotify(navigate: NavigateFunction): void {
   const sessions = useSessionsStore((s) => s.sessions);
-  const projects = useSessionsStore((s) => s.projects);
+  const projects = useProjectsStore((s) => s.projects);
   const currentId = useUiStore((s) => s.currentSessionId);
   const prevStates = useRef<Map<string, SessionState>>(new Map());
 
