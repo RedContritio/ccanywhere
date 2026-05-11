@@ -390,14 +390,33 @@ MUST 附加：
 缺失（不写 null 占位）；反馈 record 仍正常落盘，反馈不因 server inject
 失败而拒收。
 
-`diag` 字段（请求 body 提供时透传到 record）：
+`diag` 字段（请求 body 提供时透传到 record；m-diag-enrich-v2 已扩 11
+字段，全部 optional 不破坏老 client）：
 
 ```ts
 {
   activeSessionId?: string;
+  env?: {                                  // m-diag-enrich-v2
+    userAgent: string;                     // navigator.userAgent
+    language: string;                      // navigator.language
+    timezone?: string;                     // Intl.DateTimeFormat().resolvedOptions().timeZone
+    prefersColorScheme?: 'light' | 'dark' | 'no-preference';
+    prefersReducedMotion?: boolean;
+    visibilityState?: string;              // document.visibilityState
+    hasFocus?: boolean;
+  };
+  page?: {                                 // m-diag-enrich-v2
+    pathname: string;                      // location.pathname
+    search: string;                        // location.search
+    referrer: string;                      // document.referrer
+  };
   viewport?: {
     cols?: number; rows?: number;        // xterm 维度
     windowW: number; windowH: number;     // window.innerWidth / Height
+    screenW: number; screenH: number;     // 物理 screen.width / Height (m-diag-enrich-v2)
+    vvW?: number; vvH?: number;           // visualViewport.width / height (m-diag-enrich-v2)
+    vvOffsetTop?: number; vvOffsetLeft?: number;
+    vvPageTop?: number; vvPageLeft?: number;
     devicePixelRatio: number;
     orientation?: string;
   };
@@ -422,6 +441,12 @@ MUST 附加：
   };
   term?: {
     rendererKind?: string;                // 'dom' | 'canvas' | 'webgl'
+    fontSize?: number;                    // xterm fontSize (m-diag-enrich-v2)
+    fontFamily?: string;                  // (m-diag-enrich-v2)
+    scrollback?: number;                  // (m-diag-enrich-v2)
+    cursorBlink?: boolean;                // (m-diag-enrich-v2)
+    cellWidth?: number;                   // css-px from _renderService.dimensions (m-diag-enrich-v2)
+    cellHeight?: number;                  // (m-diag-enrich-v2)
     lastWriteTs?: number;
     screen?: string[];                    // 行级纯文本，可见区 + 上方 ~20 行
   };

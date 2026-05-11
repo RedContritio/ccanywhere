@@ -3,6 +3,43 @@
 跨项目通用工作风格在 `~/.claude/CLAUDE.md`。本文件只放 ccanywhere 特有的
 强制约束。
 
+## OpenSpec 是工作 source of truth
+
+ccanywhere 所有工作（已 ship / 在做 / 待办 / 设计决策）都走 `openspec/`：
+
+- **进行中**：`openspec/changes/<slug>/{proposal,tasks}.md`
+- **已完成**：`openspec/archive/<YYYY-MM-DD>-<slug>/{proposal,tasks}.md`
+- **稳定 spec**：`openspec/specs/<area>/spec.md`（Requirement + Scenario）
+
+### 必跑流程（新 feature / bugfix）
+
+1. **开工前**：建 `openspec/changes/<slug>/{proposal,tasks}.md`
+   - proposal 含：Intent + 决策摘要 + 落地点 + 形式化保证 + 不做
+   - tasks 含：可勾 checkbox + 关联 commit hash（ship 时回填）
+2. **ship 时**：相关 spec area 同步 delta（Requirement + Scenario）
+3. **完成后**：`mv openspec/changes/<slug> openspec/archive/<date>-<slug>`
+4. **commit message body** 含 archive 路径 + spec delta 摘要
+
+### 例外（可省 openspec）
+
+- 纯 UX 小 fix（如删 autoFocus / CSS 微调）
+- 测试代码 only（trace / regression test）
+- 文档 typo / 格式
+- CLAUDE.md / memory 调整
+
+但**新功能 / 行为变更 / 破坏性改动**没 openspec = 缺陷。回顾发现遗漏要
+立即 backfill archive（如 m-keyboard-resize / m-feedback-cli 归档补做）。
+
+### 不要在 memory / 散文中维护
+
+- 待办 backlog → `openspec/changes/` active 列出
+- 已 ship 列表 → `openspec/archive/` + `git log`
+- 设计决策 → archive proposal "决策"段
+- 形式化保证 → archive proposal "形式化保证"段
+- 关键合约 → 对应 area 的 `specs/<area>/spec.md` Requirement
+
+memory 仅保留**无法从 openspec/git 推导**的协作约定（feedback type rules）。
+
 ## 在告诉用户 commit 之前，必须自己确认部署可用
 
 ccanywhere 是 user 本机 LaunchAgent。web 改动 + cli 改动都要走完整部署

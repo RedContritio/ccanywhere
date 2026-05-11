@@ -219,65 +219,68 @@ placeholder 而非空白，避免用户误以为页面卡死。Placeholder MUST�
 - THEN  容器先显 placeholder，随后被真实 xterm 替换
 - AND   总切换时间感 < 500 ms（无明显阻塞）
 
-### Requirement: 软键盘视觉上移
+### Requirement: 软键盘 cc 必须收到 resize（m-keyboard-resize）
 
-软键盘弹起 / 收起 MUST NOT 触发 cc SIGWINCH（即不调用 `fit.fit()`、不
-send `resize` 帧）。键盘事件是 visual viewport overlay 而非 layout
-viewport 变化，处理通道与 `客户端尺寸生命周期` 状态机正交。
+软键盘弹起 / 收起 MUST 触发 cc SIGWINCH（fit.fit() + send `resize`），让
+cc 收到收缩后的 `rows`，绘制限制在可见区域内。
+
+旧方案 `transform: translateY(-keyboardH)` 已弃：视觉抬升但 cc 不知 rows
+被遮，持续向键盘盖住的物理行写输出 → 新输出落键盘后看不见 + scrollback
+被推一行出去（dogfood `0d84f615` 实证；归档 `2026-05-11-m-keyboard-resize`）。
 
 实现 MUST：
 
-- workspace 容器及 terminal 容器 MUST 用 `100svh`（small viewport height）
-  锚定 layout，使 URL bar / 键盘弹起 / 收起均不改变 layout viewport，
-  ResizeObserver 不在键盘事件下 fire。
-  - 不用 `100lvh`：URL bar 显示状态下超出 visible viewport，底部按钮
-    被遮挡。
-  - 不用 `100dvh`：URL bar / 键盘事件都触发 layout 变化，cc 被迫 SIGWINCH。
-- viewport meta MUST NOT 含 `interactive-widget=resizes-content` ——保持
-  浏览器默认 `resizes-visual`（layout viewport 不缩、visual viewport 缩）。
-  meta 形如 `width=device-width, initial-scale=1.0, viewport-fit=cover`。
-- 监听 `window.visualViewport.resize` 与 `window.visualViewport.scroll`：
+- workspace / terminal 容器用 `100svh`（small viewport height）锚 layout，
+  使 URL bar 显示状态切换不改 layout viewport
+  - 不用 `100lvh` / `100dvh`（前者超 visible，后者与 vv 路径双重 fire）
+- viewport meta MUST NOT 含 `interactive-widget=resizes-content`——保持
+  默认 `resizes-visual`
+- 监听 `window.visualViewport.resize` + `scroll`：
   ```
   keyboardH = max(0, document.documentElement.clientHeight
                      - visualViewport.height
                      - visualViewport.offsetTop)
   ```
-  公式 iOS Safari (`offsetTop > 0`，visual viewport 整体下移) 与 Android
-  Chrome `resizes-visual` (`offsetTop = 0`，`height` 缩) 两侧通用。
-- `transform: translateY(${-keyboardH}px)` 应用在 `.terminal-pane-content`
-  上（不是 `.terminal-pane`）—— `.terminal-pane-content` 仅包含
-  `[terminal-host + MobileToolbar]`，让 `.terminal-header` 留在原 layout
-  位置，header 在键盘弹起时不跟随上移。
-- `.terminal-header` 与 `.workspace-header` MUST 显式 `position: relative;
-  z-index: 5` —— `transform` 在 `.terminal-pane-content` 上隐式建
-  stacking context，否则该子树视觉上覆盖 `.terminal-header`，header
-  在 mobile top 区域被遮（dogfood 反馈"top bar 不停住"实证）。
-- VisualViewport API 不可用时（iOS 12 / 老 WebView）降级：保持 layout
-  不上移，键盘可能遮挡 cursor 行，记 `recordOp('kbd.fallback')`，不阻塞
-  其它路径。
+  公式覆盖 iOS Safari (`offsetTop > 0`) + Android Chrome (`offsetTop = 0`)
+- **`.terminal-pane-content` 应用 `padding-bottom: ${keyboardH}px`**——
+  flex content area 物理收缩 → `.terminal-host` (`flex: 1`) 实高变小 →
+  注册在 host 上的 ResizeObserver fire → dims state machine
+  `resizedWhileStable` 分支 → fit.fit() + send `resize` 帧
+  - **不用 transform: translateY**：cc rows 信号路径会断
+  - **不改 layout viewport 全局高度**：与 dims state machine 冲突
+- `.terminal-pane-content` 仅含 `[terminal-host + MobileToolbar]`，
+  padding 推 toolbar 上移；`.terminal-header` 在 `.terminal-pane-content`
+  **外**不受 padding 影响，保留原位置
+- `.workspace-header` 应用 `transform: translateY(${vv.pageTop}px)` 反向
+  counter 浏览器对焦点 input 的 auto-scroll（独立通道）
+- `.terminal-header position: relative; z-index: 5` 保留——workspace-header
+  的 transform 仍创建 stacking context
+- VisualViewport API 不可用（iOS 12 / 老 WebView）降级：保持 layout 不
+  调整 + 记 `recordOp('kbd.fallback')`
 
-#### Scenario: 键盘弹起 cc 不重画
+#### Scenario: 键盘弹起 cc 收 resize
 
-- GIVEN xterm 已 stable，cc 处于 idle 等待输入
-- WHEN  软键盘弹起，`visualViewport.resize` 触发
-- THEN  `.terminal-pane-content` `transform: translateY(-keyboardH)` 即时生效
-- AND   `.terminal-header` 留在原 layout 位置，未被 translate
-- AND   `fit.fit()` MUST NOT 被调用
-- AND   `resize` 帧 MUST NOT 被发送给服务端
+- GIVEN xterm 已 stable，rows = 60
+- WHEN  软键盘弹起，`visualViewport.resize` 触发，keyboardH ≈ 23 行高
+- THEN  `.terminal-pane-content padding-bottom = ${keyboardH}px`
+- AND   `.terminal-host` 物理收缩 → ResizeObserver fire
+- AND   dims state machine 进 `resizedWhileStable` → `fit.fit()` 调用
+- AND   `sock.send({ type: 'resize', cols, rows: ~37 })` 发出
+- AND   cc 新输出落可见区域；`.terminal-header` 位置不变
 
 #### Scenario: 键盘收起恢复
 
-- GIVEN 键盘已弹起，`.terminal-pane-content` 已上移
+- GIVEN 键盘已弹起，padding-bottom > 0，rows ≈ 37
 - WHEN  键盘收起，`visualViewport.height` 恢复满高
-- THEN  `.terminal-pane-content` `transform` 回归 `translateY(0)`
-- AND   `fit.fit()` MUST NOT 被调用，`resize` 帧 MUST NOT 被发送
+- THEN  `.terminal-pane-content padding-bottom = 0`
+- AND   `.terminal-host` 恢复满高 → ResizeObserver fire → 新 `resize`
+  帧 rows 恢复 60
 
 #### Scenario: header 在键盘弹起时不动
 
 - GIVEN 移动端 workspace，键盘已弹起
-- WHEN  观察 `.terminal-header` 在屏幕上的位置
-- THEN  其 top 与键盘弹起前一致（未被 transform 覆盖、未被遮）
-- AND   汉堡菜单按钮在原位可点击
+- WHEN  观察 `.terminal-header` 屏幕位置
+- THEN  与弹起前一致；汉堡菜单按钮在原位可点击
 
 ### Requirement: 终端文本选择与触摸滚动接管
 

@@ -240,6 +240,77 @@ drawer 底部 MUST 同时提供"刷新"按钮（除"反馈"按钮之外），点
 - AND   重新进入同一 `/workspace/<S>` 路由
 - AND   server 端 manager 中 `S` 行未被删除（重连同一 ws 通道）
 
+### Requirement: Mobile 虚拟工具栏数据驱动 + 自定义（m-user-prefs）
+
+`MobileToolbar` 渲染 MUST 从 `usePrefsStore.toolbar` 读 `ToolbarLayout`，
+缺省时 fall back 到 `DEFAULT_TOOLBAR_LAYOUT` 常量。layout 形状见
+`openspec/specs/auth/spec.md` "用户级偏好与活跃 session" Requirement。
+
+- mount 时 MUST 调 `usePrefsStore.load()`（GET /api/me/preferences）一
+  次；返回的 toolbar 替换默认渲染
+- 每个 cell 按 `ToolbarKey.action` 派发：
+  - `plain`：onKey(payload)；消费粘性 Ctrl
+  - `ctrl-letter`：校验 a..z → `byte & 0x1f`；非法 payload defensive
+    fallback 直接 onKey(payload)
+  - `toggle-sticky-ctrl`：翻 aria-pressed，不发字节
+- empty cell（null）渲染 `<span class="mt-empty">` 占位，保持 grid track
+- grid 尺寸由 inline style `--mt-cols` / `--mt-rows` 控制，CSS 通过
+  `repeat(var(--mt-cols, 6), 1fr)` 等动态映射，**不**为每个 layout 配
+  专用 class
+
+terminal-header MUST 提供 ⚙ 入口按钮（`.terminal-header-prefs`）打开
+`ToolbarEditDialog`：
+
+- dialog 含 rows / cols select（1..3 / 3..8）+ grid 预览
+- cell click 打开 key picker，picker MUST 分组显示内置 catalog（nav /
+  mod / control），用户可清空 cell（cell → null）
+- 保存调 `usePrefsStore.saveToolbar(draft)` → PUT /api/me/preferences
+- 重置默认调 `saveToolbar(null)` → PUT body `{ toolbar: null }`
+- 取消按钮直接关闭，draft 丢弃；下次打开 re-seed from store
+
+#### Scenario: 默认渲染
+
+- GIVEN 新设备首次登录，server 未存 toolbar prefs
+- WHEN  浏览器加载 /workspace
+- THEN  `MobileToolbar` 渲染 `DEFAULT_TOOLBAR_LAYOUT`（12 cells，
+  termux 风格 ctrl 左 / nav 右）
+- AND   `GET /api/me/preferences` 调用一次返 `{}`
+
+#### Scenario: 跨设备同步
+
+- GIVEN 设备 A 通过 dialog 保存了 6×2 自定义 toolbar
+- WHEN  设备 B 登录同一 user 打开 /workspace
+- THEN  `GET /api/me/preferences` 返新 layout
+- AND   MobileToolbar 渲染设备 A 自定义内容（mounted-once load 之后）
+
+#### Scenario: 重置回默认
+
+- GIVEN 已存自定义 toolbar
+- WHEN  dialog 点"重置默认"
+- THEN  `PUT /api/me/preferences { toolbar: null }`
+- AND   server 返 `{}`；MobileToolbar 后续 render 用 DEFAULT_TOOLBAR_LAYOUT
+
+### Requirement: 活跃 session 跨设备同步（m-user-prefs）
+
+前端 MUST 通过 `useActiveSessionStore` 同步当前选中 session id：
+
+- mount 时调 `load()` （GET /api/me/active-session）拉服务端最近选择
+- URL 含 `/workspace/:id` 时，MUST `setRemote(id)` 上报服务端（fire-
+  and-forget；PUT 失败本地仍保持 intent，下次 page load `load()` 兜底）
+- URL 无 `:id` 时，优先级：
+  1. 本机 `useUiStore.currentSessionId` (localStorage per-tab 连续)
+  2. `useActiveSessionStore.sessionId` (服务端 last active；仅当
+     `loaded=true` 才用，避免首帧 bounce)
+  候选 id 必须在 live sessions list（非 deleted）才 navigate；否则停
+  /workspace 不选中
+
+#### Scenario: 手机选了 session 桌面看到同一 session
+
+- GIVEN 用户在手机 /workspace 点 session S1
+- WHEN  桌面浏览器登录同 user 打开根域名
+- THEN  桌面前端 `GET /api/me/active-session` 返 `{ sessionId: S1 }`
+- AND   桌面前端 navigate `/workspace/S1`（S1 仍 live）
+
 ### Requirement: 主题（auto / light / dark）
 
 前端 MUST 提供三态主题：
