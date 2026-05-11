@@ -867,7 +867,8 @@
 }
 
 .terminal-header-quota,
-.terminal-header-reload {
+.terminal-header-reload,
+.terminal-header-prefs {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -878,7 +879,8 @@
 }
 
 .terminal-header-quota:hover,
-.terminal-header-reload:hover {
+.terminal-header-reload:hover,
+.terminal-header-prefs:hover {
   background: var(--bg-hover, rgba(127, 127, 127, 0.08));
 }
 
@@ -1137,6 +1139,134 @@
 .mt-empty {
   /* Inert grid placeholder — preserves the track but isn't focusable. */
   display: block;
+}
+
+/* ───── toolbar edit dialog (m-user-prefs chunk C) ───── */
+
+.toolbar-edit-dialog {
+  max-width: min(520px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.toolbar-edit-controls {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.toolbar-edit-controls .dialog-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--mt-cols, 6), 1fr);
+  grid-template-rows: repeat(var(--mt-rows, 2), 40px);
+  gap: 4px;
+  margin: 12px 0;
+}
+
+.toolbar-edit-cell {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+  min-width: 0;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbar-edit-cell.is-empty {
+  color: var(--text-secondary, #888);
+  border-style: dotted;
+}
+
+.toolbar-edit-cell:hover {
+  border-color: var(--accent);
+}
+
+.toolbar-edit-picker {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0 12px;
+  background: var(--bg-elevated);
+}
+
+.toolbar-edit-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.toolbar-edit-clear {
+  background: transparent;
+  color: var(--text-secondary, #888);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.toolbar-edit-group {
+  border: none;
+  margin: 6px 0;
+  padding: 0;
+}
+
+.toolbar-edit-group legend {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  padding-bottom: 4px;
+}
+
+.toolbar-edit-group-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 4px;
+}
+
+.toolbar-edit-catalog-key {
+  height: 32px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbar-edit-catalog-key:hover {
+  border-color: var(--accent);
+}
+
+.toolbar-edit-picker-cancel {
+  margin-top: 6px;
+  background: transparent;
+  color: var(--text-secondary, #888);
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dialog-actions-spacer {
+  flex: 1;
 }
 
 .mt-key {

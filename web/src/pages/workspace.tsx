@@ -9,6 +9,7 @@ import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { FeedbackDialog } from '../components/feedback-dialog.js';
 import { QuotaPanel } from '../components/quota-panel.js';
+import { ToolbarEditDialog } from '../components/toolbar-edit-dialog.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import type { DeadReason } from '../ws.js';
 import { wsConnLabel, type WsConnection } from '../ws-conn-label.js';
@@ -50,6 +51,7 @@ export function WorkspacePage(): JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [quotaOpen, setQuotaOpen] = useState(false);
+  const [toolbarEditOpen, setToolbarEditOpen] = useState(false);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
 
@@ -340,6 +342,15 @@ export function WorkspacePage(): JSX.Element {
                 </button>
                 <button
                   type="button"
+                  className="terminal-header-prefs"
+                  onClick={() => setToolbarEditOpen(true)}
+                  title="自定义快捷栏"
+                  aria-label="自定义快捷栏"
+                >
+                  ⚙
+                </button>
+                <button
+                  type="button"
                   className="terminal-header-reload"
                   onClick={() => location.reload()}
                   title="重连当前 session（清掉 cc Ink scrollback 累积的重复内容）"
@@ -382,6 +393,10 @@ export function WorkspacePage(): JSX.Element {
         onClose={() => setFeedbackOpen(false)}
       />
       <QuotaPanel open={quotaOpen} onClose={() => setQuotaOpen(false)} />
+      <ToolbarEditDialog
+        open={toolbarEditOpen}
+        onClose={() => setToolbarEditOpen(false)}
+      />
     </div>
   );
 }
