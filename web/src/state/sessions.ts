@@ -104,15 +104,45 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
             ...themeHint,
           }
         : { projectId: req.projectId, mode: req.mode, ...themeHint };
+    // Capture server's distinction between 200 (resume-singleton attach to
+    // existing web session) vs 201 (fresh PTY spawn), and whether the
+    // idempotency cache replayed. Both signals are critical to diagnose
+    // "two windows for the same resume" complaints — they differentiate
+    // a missing attach (bug) from a successful attach (a tab is just
+    // showing the same session.id twice).
+    let meta: { status: number; replayed: boolean; stored: boolean } = {
+      status: 0,
+      replayed: false,
+      stored: false,
+    };
     const created = await api<Session>('/api/sessions', {
       method: 'POST',
       body,
       idempotencyKey,
+      onMeta: (m) => {
+        meta = {
+          status: m.status,
+          replayed: m.idempotencyReplayed,
+          stored: m.idempotencyStored,
+        };
+      },
     });
     recordOp('session.create', {
       id: created.id,
       projectId: created.projectId,
       mode: created.mode,
+      status: meta.status,
+      // 200 + !replayed = server-side resume-singleton attach (same cc
+      // sessionId already had an active web session; we got pointed to it)
+      // 201 = fresh spawn
+      // 200 + replayed = client-side idempotency replay (same Idempotency-Key
+      // sent twice)
+      attached: meta.status === 200 && !meta.replayed,
+      idempotencyReplayed: meta.replayed,
+      idempotencyStored: meta.stored,
+      ...(req.mode === 'resume' && 'sessionId' in req
+        ? { resumeSessionId: req.sessionId }
+        : {}),
     });
     set((s) => ({
       sessions: s.sessions.some((x) => x.id === created.id)

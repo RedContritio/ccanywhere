@@ -72,4 +72,43 @@ describe('REST API with historyRoot for resume validation', () => {
     expect(res.statusCode).toBe(400);
     expect((res.json() as { error: { code: string } }).error.code).toBe('invalid_resume');
   });
+
+  /**
+   * #38 resume-singleton (5cbed9f) HTTP contract:
+   * second `POST /api/sessions { mode: 'resume', sessionId: 'X' }` while
+   * an active web-session is already driving cc-X MUST attach to the
+   * existing web-session (status 200, same body.id) rather than spawn a
+   * second cc process for the same jsonl history.
+   *
+   * Feedback 2026-05-09 "两次 resume 同 session 但有两个窗口" — pre-fix
+   * report. This test guards the fix from regressing.
+   */
+  it('second resume of same sessionId attaches (200) to existing web session', async () => {
+    // First resume spawned by hand with a long-lived sleep so the lock
+    // entry persists across the second POST. injectCcSessionId is false
+    // (default in this fixture), so cc-id == resumeSessionId.
+    const first = mgr.spawn({
+      projectId: 'demo',
+      cwd: env.demoCwd,
+      command: '/bin/sleep',
+      args: ['30'],
+      scrollbackBytes: 4096,
+      mode: 'resume',
+      resumeSessionId: 'known-session',
+      userId: 'legacy-no-user',
+    });
+    if (first.kind !== 'created') throw new Error('expected created');
+    const webIdA = first.session.info.id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
+      payload: { projectId: 'demo', mode: 'resume', sessionId: 'known-session' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { id: string }).id).toBe(webIdA);
+    // Still only one session in the manager — no second cc process.
+    expect(mgr.list()).toHaveLength(1);
+  });
 });

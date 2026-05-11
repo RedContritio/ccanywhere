@@ -6,11 +6,22 @@ export interface ApiError extends Error {
   details?: unknown;
 }
 
+export interface ResponseMeta {
+  readonly status: number;
+  readonly idempotencyReplayed: boolean;
+  readonly idempotencyStored: boolean;
+}
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: object;
   idempotencyKey?: string;
   signal?: AbortSignal;
+  /** Called once with response status + ccanywhere idempotency headers
+   *  before the body is decoded. Lets callers record trace context
+   *  (POST /api/sessions in particular needs to know whether the request
+   *  was a 200 attach vs 201 created — both look the same in the body). */
+  onMeta?: (meta: ResponseMeta) => void;
 }
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -41,6 +52,14 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   if (res.status === 401) {
     useAuthStore.getState().logout();
     throw makeError('unauthorized', 401, 'session expired');
+  }
+
+  if (opts.onMeta !== undefined) {
+    opts.onMeta({
+      status: res.status,
+      idempotencyReplayed: res.headers.get('idempotency-replayed') === 'true',
+      idempotencyStored: res.headers.get('idempotency-stored') === 'true',
+    });
   }
 
   const ct = res.headers.get('content-type') ?? '';
