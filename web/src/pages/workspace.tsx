@@ -19,6 +19,7 @@ import { useBackgroundPoll } from '../state/use-background-poll.js';
 import { useCompletionNotify } from '../state/use-completion-notify.js';
 import { newIdempotencyKey } from '../api.js';
 import { useAuthStore } from '../state/auth.js';
+import { useActiveSessionStore } from '../state/prefs.js';
 import { useSessionsStore, type SessionState } from '../state/sessions.js';
 import { useUiStore } from '../state/ui.js';
 
@@ -36,6 +37,10 @@ export function WorkspacePage(): JSX.Element {
 
   const currentSessionId = useUiStore((s) => s.currentSessionId);
   const selectSession = useUiStore((s) => s.selectSession);
+  const remoteActiveSessionId = useActiveSessionStore((s) => s.sessionId);
+  const remoteActiveLoaded = useActiveSessionStore((s) => s.loaded);
+  const loadActiveSession = useActiveSessionStore((s) => s.load);
+  const setRemoteActiveSession = useActiveSessionStore((s) => s.setRemote);
 
   const label = useAuthStore((s) => s.label);
   const deviceId = useAuthStore((s) => s.deviceId);
@@ -63,21 +68,48 @@ export function WorkspacePage(): JSX.Element {
   useEffect(() => {
     void fetchProjects();
     void fetchSessions();
-  }, [fetchProjects, fetchSessions]);
+    void loadActiveSession();
+  }, [fetchProjects, fetchSessions, loadActiveSession]);
 
-  // URL → store. Restore last-selected when URL has no :id.
+  // URL → store, plus cross-device sync.
+  //
+  // When URL has :id, pick that — it's the most explicit signal (paste a
+  // link, deep-link from another device). Mirror to local ui store AND
+  // PUT to /api/me/active-session so the next device sees the same pick.
+  //
+  // When URL has no :id, prefer in order:
+  //   1. local ui store's last-selected (per-tab continuity inside same browser)
+  //   2. server's lastActiveSessionId (cross-device hydration; gated on
+  //      remoteActiveLoaded so first paint doesn't bounce away)
+  // The picked id is only honored if a live (non-deleted) session matches —
+  // otherwise we land on /workspace without a session pane.
   useEffect(() => {
     if (id !== undefined) {
       if (currentSessionId !== id) selectSession(id);
+      if (remoteActiveSessionId !== id) {
+        void setRemoteActiveSession(id);
+      }
       return;
     }
+    const candidate =
+      (currentSessionId !== null && currentSessionId) ||
+      (remoteActiveLoaded ? remoteActiveSessionId : null);
     if (
-      currentSessionId !== null &&
-      sessions.some((s) => s.id === currentSessionId && s.deletedAt === null)
+      candidate !== null &&
+      sessions.some((s) => s.id === candidate && s.deletedAt === null)
     ) {
-      navigate(`/workspace/${currentSessionId}`, { replace: true });
+      navigate(`/workspace/${candidate}`, { replace: true });
     }
-  }, [id, currentSessionId, sessions, selectSession, navigate]);
+  }, [
+    id,
+    currentSessionId,
+    remoteActiveSessionId,
+    remoteActiveLoaded,
+    sessions,
+    selectSession,
+    setRemoteActiveSession,
+    navigate,
+  ]);
 
   // Reset terminal status indicators when switching sessions.
   useEffect(() => {

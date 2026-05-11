@@ -1,4 +1,10 @@
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
+import { usePrefsStore } from '../state/prefs.js';
+import {
+  DEFAULT_TOOLBAR_LAYOUT,
+  type ToolbarKey,
+  type ToolbarLayout,
+} from './toolbar-layout.js';
 
 interface Props {
   /**
@@ -8,52 +14,34 @@ interface Props {
   readonly onKey: (data: string) => void;
 }
 
-const ARROW_UP = '\x1b[A';
-const ARROW_DOWN = '\x1b[B';
-const ARROW_LEFT = '\x1b[D';
-const ARROW_RIGHT = '\x1b[C';
-const SHIFT_TAB = '\x1b[Z';
-
 /**
- * Termux-inspired 3×2 + 3×2 layout. Ctrl-prefixed shortcuts on the left;
- * arrows occupy a numpad-style inverted-T (8=↑, 4=←, 5=↓, 6=→ in numpad
- * terms) on the right with Esc / Tab filling the corners around ↑. Arrows
- * on the right matches the on-screen keyboard's natural thumb-zone for
- * right-handed users, and keeps Ctrl / Tab reachable on the opposite side.
+ * Renders a `ToolbarLayout` as a grid of buttons. Layout source order:
+ *   1. user preference (`usePrefsStore.toolbar`) when loaded
+ *   2. fall back to DEFAULT_TOOLBAR_LAYOUT
  *
- *   ^C   ^D   ⇧Tab      Esc   ↑    Tab
- *   ^L   ^R   Ctrl       ←    ↓    →
+ * The store loads on mount so a freshly-logged-in client doesn't show the
+ * default for a frame before snapping to the user's saved layout. Cells
+ * are dispatched by `ToolbarKey.action`:
+ *   - plain:              forward `payload` to PTY (consumes sticky Ctrl)
+ *   - ctrl-letter:        translate payload (a..z) to its 0x01..0x1A byte
+ *   - toggle-sticky-ctrl: toggle the next-key Ctrl-prefix flag
  *
- * Equal cell width across both halves keeps the row visually balanced.
+ * Grid dims (cols/rows) drive CSS via the `--mt-cols` / `--mt-rows` custom
+ * properties, so user-customized layouts render without a CSS rebuild.
  */
 export function MobileToolbar({ onKey }: Props): JSX.Element {
-  // Sticky Ctrl: when set, the next key emits its Ctrl-modified byte.
-  // Tapping Ctrl again toggles it off.
+  const storeLayout = usePrefsStore((s) => s.toolbar);
+  const loaded = usePrefsStore((s) => s.loaded);
+  const load = usePrefsStore((s) => s.load);
+  const layout: ToolbarLayout = storeLayout ?? DEFAULT_TOOLBAR_LAYOUT;
+
+  useEffect(() => {
+    if (!loaded) {
+      void load();
+    }
+  }, [loaded, load]);
+
   const [pendingCtrl, setPendingCtrl] = useState(false);
-
-  const sendPlain = (data: string): void => {
-    if (pendingCtrl) {
-      onKey(data);
-      setPendingCtrl(false);
-      return;
-    }
-    onKey(data);
-  };
-
-  const sendCtrlLetter = (letter: string): void => {
-    const code = letter.toLowerCase().charCodeAt(0);
-    if (code >= 0x60 && code <= 0x7a) {
-      onKey(String.fromCharCode(code & 0x1f));
-    } else {
-      onKey(letter);
-    }
-    setPendingCtrl(false);
-  };
-
-  const onCtrlClick = (e: MouseEvent<HTMLButtonElement>): void => {
-    e.preventDefault();
-    setPendingCtrl((p) => !p);
-  };
 
   /**
    * Block default mousedown so xterm keeps focus and the on-screen
@@ -63,116 +51,77 @@ export function MobileToolbar({ onKey }: Props): JSX.Element {
     e.preventDefault();
   };
 
+  const dispatchKey = (key: ToolbarKey): void => {
+    switch (key.action) {
+      case 'plain':
+        onKey(key.payload);
+        if (pendingCtrl) setPendingCtrl(false);
+        return;
+      case 'ctrl-letter': {
+        const code = key.payload.toLowerCase().charCodeAt(0);
+        // Valid 'a'..'z' guaranteed by server schema; defensive guard for
+        // older clients receiving a malformed custom payload.
+        if (code >= 0x61 && code <= 0x7a) {
+          onKey(String.fromCharCode(code & 0x1f));
+        } else {
+          onKey(key.payload);
+        }
+        setPendingCtrl(false);
+        return;
+      }
+      case 'toggle-sticky-ctrl':
+        setPendingCtrl((p) => !p);
+        return;
+    }
+  };
+
+  const onCtrlClick = (e: MouseEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+  };
+
+  const style = {
+    ['--mt-cols' as string]: String(layout.cols),
+    ['--mt-rows' as string]: String(layout.rows),
+  } as React.CSSProperties;
+
   return (
-    <div className="mobile-toolbar" role="toolbar" aria-label="virtual keys">
-      <div className="mt-ctrl-grid">
-        <button
-          type="button"
-          className="mt-key"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendCtrlLetter('c')}
-        >
-          ^C
-        </button>
-        <button
-          type="button"
-          className="mt-key"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendCtrlLetter('d')}
-        >
-          ^D
-        </button>
-        <button
-          type="button"
-          className="mt-key"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendPlain(SHIFT_TAB)}
-          title="cc 切换 plan / accept 模式"
-        >
-          ⇧Tab
-        </button>
-        <button
-          type="button"
-          className="mt-key"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendCtrlLetter('l')}
-        >
-          ^L
-        </button>
-        <button
-          type="button"
-          className="mt-key"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendCtrlLetter('r')}
-          title="cc verbose toggle"
-        >
-          ^R
-        </button>
-        <button
-          type="button"
-          className={`mt-key mt-ctrl ${pendingCtrl ? 'is-active' : ''}`}
-          onMouseDown={keepXtermFocus}
-          onClick={onCtrlClick}
-          aria-pressed={pendingCtrl}
-          title="按一下 Ctrl，下一键发 Ctrl+key"
-        >
-          Ctrl
-        </button>
-      </div>
-      <div className="mt-nav-grid">
-        <button
-          type="button"
-          className="mt-key"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendPlain('\x1b')}
-        >
-          Esc
-        </button>
-        <button
-          type="button"
-          className="mt-key mt-arrow"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendPlain(ARROW_UP)}
-          aria-label="Up"
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          className="mt-key"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendPlain('\t')}
-        >
-          Tab
-        </button>
-        <button
-          type="button"
-          className="mt-key mt-arrow"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendPlain(ARROW_LEFT)}
-          aria-label="Left"
-        >
-          ←
-        </button>
-        <button
-          type="button"
-          className="mt-key mt-arrow"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendPlain(ARROW_DOWN)}
-          aria-label="Down"
-        >
-          ↓
-        </button>
-        <button
-          type="button"
-          className="mt-key mt-arrow"
-          onMouseDown={keepXtermFocus}
-          onClick={() => sendPlain(ARROW_RIGHT)}
-          aria-label="Right"
-        >
-          →
-        </button>
-      </div>
+    <div
+      className="mobile-toolbar"
+      role="toolbar"
+      aria-label="virtual keys"
+      style={style}
+    >
+      {layout.cells.map((cell, idx) => {
+        if (cell === null) {
+          // Empty cell — render an inert spacer so the grid template fills.
+          return <span key={`empty-${idx}`} className="mt-empty" aria-hidden="true" />;
+        }
+        const isStickyCtrl = cell.action === 'toggle-sticky-ctrl';
+        const className = [
+          'mt-key',
+          isStickyCtrl ? 'mt-ctrl' : '',
+          isStickyCtrl && pendingCtrl ? 'is-active' : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
+        return (
+          <button
+            key={cell.id}
+            type="button"
+            className={className}
+            onMouseDown={keepXtermFocus}
+            onClick={(e) => {
+              if (isStickyCtrl) onCtrlClick(e);
+              dispatchKey(cell);
+            }}
+            aria-label={cell.ariaLabel}
+            aria-pressed={isStickyCtrl ? pendingCtrl : undefined}
+            title={cell.title}
+          >
+            {cell.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

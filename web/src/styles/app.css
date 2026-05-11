@@ -1121,9 +1121,12 @@
 /* ───── mobile toolbar ───── */
 
 .mobile-toolbar {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
+  display: grid;
+  /* m-user-prefs: --mt-cols / --mt-rows come from MobileToolbar inline
+   * style so user-customized layouts render without a CSS rebuild. */
+  grid-template-columns: repeat(var(--mt-cols, 6), 1fr);
+  grid-template-rows: repeat(var(--mt-rows, 2), 36px);
+  gap: 4px;
   padding: 6px 8px;
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
@@ -1131,17 +1134,9 @@
   touch-action: manipulation;
 }
 
-/* Two 3×2 grids side-by-side. Left = arrows in numpad-inverted-T (Esc/Tab
- * fill the corners around the up arrow). Right = Ctrl-prefixed shortcuts.
- * Both halves use `flex: 1` so cell width stays equal across the toolbar. */
-.mt-nav-grid,
-.mt-ctrl-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 36px);
-  gap: 4px;
-  min-width: 0;
+.mt-empty {
+  /* Inert grid placeholder — preserves the track but isn't focusable. */
+  display: block;
 }
 
 .mt-key {
