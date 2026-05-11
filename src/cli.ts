@@ -2,6 +2,7 @@
 import { stdout } from 'node:process';
 import { runApprove } from './cli/approve.js';
 import { runDevices } from './cli/devices.js';
+import { runFeedbackList, runFeedbackShow } from './cli/feedback.js';
 import { runRevoke } from './cli/revoke.js';
 import { runServe } from './cli/serve.js';
 import { runTokenIssue, runTokenList, runTokenRevoke } from './cli/token.js';
@@ -60,6 +61,10 @@ usage:
   ccanywhere devices [--config <path>]    list registered devices
   ccanywhere revoke [--config <path>] <device-id>
                                           revoke a device (drops sessions, blocks future logins)
+  ccanywhere feedback list [--verbose] [--json]
+                                          list submitted feedback (newest first)
+  ccanywhere feedback show <id-prefix> [--full]
+                                          show one feedback (summary by default; --full = pretty JSON)
   ccanywhere help                         show this help
 
 Multi-instance same-host deployments (e.g. prod + staging) just hand each
@@ -125,6 +130,8 @@ async function dispatch(argv: ReadonlyArray<string>): Promise<void> {
       return runUserSubcommand([...positional], configPath);
     case 'token':
       return runTokenSubcommand([...positional], configPath);
+    case 'feedback':
+      return runFeedbackSubcommand([...positional], configPath);
     case 'help':
     case '--help':
     case '-h':
@@ -213,6 +220,29 @@ async function runTokenSubcommand(args: string[], configPath: string | undefined
     return runTokenRevoke(configPath, tokenId);
   }
   stdout.write(`unknown token subcommand: ${sub ?? '(missing)'}\n`);
+  process.exit(2);
+}
+
+async function runFeedbackSubcommand(args: string[], configPath: string | undefined): Promise<void> {
+  const sub = args.shift();
+  if (sub === 'list') {
+    const verbose = consumeBoolFlag(args, '--verbose') || consumeBoolFlag(args, '-v');
+    const json = consumeBoolFlag(args, '--json');
+    return runFeedbackList(configPath, {
+      ...(verbose ? { verbose: true } : {}),
+      ...(json ? { json: true } : {}),
+    });
+  }
+  if (sub === 'show') {
+    const idPrefix = args.shift();
+    if (idPrefix === undefined) {
+      stdout.write(`usage: ccanywhere feedback show <id-prefix> [--full]\n`);
+      process.exit(2);
+    }
+    const full = consumeBoolFlag(args, '--full');
+    return runFeedbackShow(configPath, idPrefix, { ...(full ? { full: true } : {}) });
+  }
+  stdout.write(`unknown feedback subcommand: ${sub ?? '(missing)'}\n`);
   process.exit(2);
 }
 
