@@ -287,7 +287,6 @@ export function NewSessionDialog({
                     value={newProjectName}
                     onChange={(e) => setNewProjectName(e.target.value)}
                     disabled={newProjectBusy}
-                    autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();

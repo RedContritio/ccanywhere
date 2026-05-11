@@ -99,7 +99,6 @@ export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={200}
                 required
-                autoFocus
                 disabled={mode.kind === 'submitting'}
               />
             </label>
