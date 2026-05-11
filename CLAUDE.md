@@ -50,13 +50,24 @@ follow-up — 全部**立即**落到：
 - **小项 / 散点**（≤80 LOC，单笔可做）→ 在 `openspec/BACKLOG.md` append 一
   条，含**出处** / **scope 估算** / **优先级**
 
-落地是规则不是建议——禁止用 "我记得有 X" / "之前提过 Y" 类依赖记忆的回答。
-列 backlog 时直接 `ls openspec/changes/` + `cat openspec/BACKLOG.md`，
-不靠 grep archive 散段 / git log / 我回忆。
+落地是规则不是建议。列 backlog 时直接 `ls openspec/changes/` +
+`cat openspec/BACKLOG.md`，不靠 grep archive 散段 / git log / 我回忆。
 
 启动 BACKLOG.md 里某项时，把它从 BACKLOG.md 删 + 建 `changes/<slug>/`（即便
-~30 LOC 也建 proposal，统一流程；proposal 可以很薄，只要有 intent + 决
-策点 + scope）。
+~30 LOC 也建 proposal，统一流程）。
+
+### 工具层硬约束：commit hook 强制 openspec 改动
+
+`.husky/commit-msg` hook 强制每个 src/ 或 web/src/ 代码改动 commit
+**必须**同笔含 openspec/ 改动（proposal / archive / spec delta / BACKLOG
+任一）。**无 override，无 marker，无 test-only 豁免**。如果改动小到不
+值得 spec edit，应折进对应的 proposal / archive / BACKLOG 条目说明为什么
+落地。
+
+软约束（CLAUDE.md 几条）已被工具化的：
+- "未启动项必须落 OpenSpec" → commit hook 拦
+- "spec drift 必须同步" → commit hook 拦
+- "memory 不维护 backlog" → 仍是软约定（hook 不能查 memory）
 
 ## 在告诉用户 commit 之前，必须自己确认部署可用
 
