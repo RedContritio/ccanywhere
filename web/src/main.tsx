@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app.js';
 import { ErrorBoundary } from './components/error-boundary.js';
 import { recordOp } from './state/ops-log.js';
+import './styles/tokens.css';
 import './styles/reset.css';
 import './styles/themes.css';
 import './styles/app.css';
