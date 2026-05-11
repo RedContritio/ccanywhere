@@ -157,4 +157,40 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     const res = await app.inject({ method: 'GET', url: '/api/me/quota' });
     expect(res.statusCode).toBe(401);
   });
+
+  it('GET /api/auth/me with limited cookie → 200 + kind=limited', async () => {
+    const { user, authCookie } = env.createLimitedUserWithToken('alice');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      id: string;
+      label: string;
+      kind: string;
+      lastUsedAt: number | null;
+    };
+    expect(body.kind).toBe('limited');
+    expect(body.id).toBe(user.id);
+    expect(body.label).toBe('alice');
+  });
+
+  it('GET /api/auth/me with owner cookie → 200 + kind=owner', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: env.authCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { kind: string; label: string };
+    expect(body.kind).toBe('owner');
+    expect(body.label).toBe('test-device');
+  });
+
+  it('GET /api/auth/me without cookie → 401', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/auth/me' });
+    expect(res.statusCode).toBe(401);
+  });
 });

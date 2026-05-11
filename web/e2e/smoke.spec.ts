@@ -1,17 +1,13 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * API-level smoke against prod (https://cc.recoco.xyz). globalSetup planted
- * a token cookie for the e2e limited user; `request` inherits storageState
- * so cookie auth works on the HTTP boundary.
+ * Smoke against prod (https://cc.recoco.xyz). globalSetup planted a token
+ * cookie for the e2e limited user; `request` and `page` both inherit
+ * storageState so cookie auth works on the HTTP/UI boundary.
  *
- * UI-level smoke is intentionally NOT here yet. The web /login page only
- * surfaces WebAuthn login at the moment (gap from m-multi-user); a token
- * cookie authenticates the HTTP/WS layer but RequireAuth in the React app
- * doesn't recognise a limited-user session and bounces to /login. Fixing
- * that gap is a separate follow-up (frontend needs to fetch /api/me/quota
- * on mount and accept "kind ∈ {owner, limited}" as logged-in). Once that
- * lands, restore the workspace/dialog smoke.
+ * Covers:
+ *   - API surface (healthz / me/quota / projects list / cwd guard / 401)
+ *   - UI flow that limited users can actually use (no webauthn needed)
  */
 
 test.describe('ccanywhere smoke (prod URL, API surface)', () => {
@@ -62,6 +58,15 @@ test.describe('ccanywhere smoke (prod URL, API surface)', () => {
     expect(res.status()).toBe(403);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe('forbidden');
+  });
+
+  test('storageState lands limited user on /workspace (no /login bounce)', async ({
+    page,
+  }) => {
+    // RequireAuth + token cookie should let limited user reach /workspace
+    // after probeSession fills the store from /api/auth/me.
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/workspace/, { timeout: 10_000 });
   });
 
   test('cookieless request → 401', async ({ playwright }) => {

@@ -80,9 +80,7 @@ export async function registerAuthRoutes(
     }
     const { options, challenge } = await makeRegistrationOptions({
       rp,
-      // userId is the pendingId once we create it; generate options first
-      // with a placeholder, then create pending, then re-emit. Simpler: use
-      // a freshly-generated pendingId baked into the options' userID.
+      // placeholder swapped for pendingId below
       userId: 'placeholder',
       userName: parsed.data.label,
     });
@@ -92,8 +90,6 @@ export async function registerAuthRoutes(
       remoteAddr: req.ip,
       userAgent: req.headers['user-agent'] ?? null,
     });
-    // Replace the placeholder user.id in options with pendingId so the
-    // browser ties the WebAuthn user record to this pair attempt.
     const optsWithUserId = {
       ...options,
       user: {
@@ -141,10 +137,8 @@ export async function registerAuthRoutes(
       }
       throw err;
     }
-    // Stash credential on pending (so approve doesn't have to re-verify).
-    // We persist by re-creating pending with these fields, but our types
-    // don't include them; do it by closing over via approvePending args.
-    // Simpler: store on the pending object using a side map.
+    // Side map keeps credential keyed by pendingId so CLI approve doesn't
+    // re-verify attestation.
     pendingCredentials.set(pending.pendingId, credential);
     opts.store.markPendingAwaitingApproval(pending.pendingId);
     await reply.code(200).send({ status: 'awaiting-approval' });
@@ -273,15 +267,24 @@ export async function registerAuthRoutes(
     await reply.code(204).send();
   });
 
+  // owner returns device shape; limited returns user shape; same envelope
+  // so web client treats either as logged-in (m-multi-user).
   app.get('/api/auth/me', async (req, reply) => {
     const device = req.authDevice;
-    if (!device) {
-      await reply.code(401).send({ error: { code: 'unauthorized', message: 'not logged in' } });
+    if (device) {
+      await reply
+        .code(200)
+        .send({ id: device.id, label: device.label, kind: 'owner', lastUsedAt: device.lastUsedAt });
       return;
     }
-    await reply
-      .code(200)
-      .send({ id: device.id, label: device.label, lastUsedAt: device.lastUsedAt });
+    const user = req.user;
+    if (user && user.kind === 'limited') {
+      await reply
+        .code(200)
+        .send({ id: user.id, label: user.username, kind: 'limited', lastUsedAt: user.lastLoginAt });
+      return;
+    }
+    await reply.code(401).send({ error: { code: 'unauthorized', message: 'not logged in' } });
   });
 }
 

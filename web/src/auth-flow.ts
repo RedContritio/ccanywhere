@@ -91,15 +91,62 @@ export async function loginComplete(
  * Probes the cookie session: returns the device summary if logged in, null
  * if not. Used on app boot to decide whether to render workspace or login.
  */
-export async function probeSession(): Promise<{ id: string; label: string } | null> {
+export interface SessionProbe {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: 'owner' | 'limited';
+}
+
+export async function probeSession(): Promise<SessionProbe | null> {
   try {
     const res = await fetch('/api/auth/me', { credentials: 'include' });
     if (res.status === 401) return null;
     if (!res.ok) return null;
-    return (await res.json()) as { id: string; label: string };
+    const body = (await res.json()) as {
+      id: string;
+      label: string;
+      kind?: 'owner' | 'limited';
+    };
+    // Default to 'owner' for backward-compat when talking to a pre-multi-user
+    // server (shouldn't happen in prod, but defensive).
+    return { id: body.id, label: body.label, kind: body.kind ?? 'owner' };
   } catch {
     return null;
   }
+}
+
+/**
+ * Limited-user login: POST a plaintext token plaintext to
+ * `/api/auth/token`, server sets the session cookie. Returns the user
+ * info (username + kind) on success, throws on failure.
+ */
+export async function runTokenLogin(
+  plaintext: string,
+): Promise<{ username: string; kind: 'limited' }> {
+  const res = await fetch('/api/auth/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token: plaintext }),
+  });
+  if (res.status === 401) {
+    throw new Error('token 无效或已过期');
+  }
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: { message?: string } };
+      if (body.error?.message) detail = body.error.message;
+    } catch {
+      // body not JSON; keep generic message
+    }
+    throw new Error(detail);
+  }
+  const body = (await res.json()) as {
+    ok: boolean;
+    user: { username: string; kind: 'limited' };
+  };
+  return body.user;
 }
 
 export async function logoutServer(): Promise<void> {

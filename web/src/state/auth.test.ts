@@ -15,22 +15,34 @@ describe('useAuthStore', () => {
     const s = useAuthStore.getState();
     expect(s.deviceId).toBeNull();
     expect(s.label).toBeNull();
+    expect(s.kind).toBeNull();
     expect(s.verifiedAt).toBeNull();
   });
 
-  it('setPaired sets deviceId, label, verifiedAt; logout clears all', () => {
+  it('setPaired sets owner kind + deviceId + label + verifiedAt; logout clears all', () => {
     const before = Date.now() - 1;
     useAuthStore.getState().setPaired('dev-abc', 'laptop');
     const after = useAuthStore.getState();
     expect(after.deviceId).toBe('dev-abc');
     expect(after.label).toBe('laptop');
+    expect(after.kind).toBe('owner');
     expect(after.verifiedAt).toBeGreaterThan(before);
 
     useAuthStore.getState().logout();
     const cleared = useAuthStore.getState();
     expect(cleared.deviceId).toBeNull();
     expect(cleared.label).toBeNull();
+    expect(cleared.kind).toBeNull();
     expect(cleared.verifiedAt).toBeNull();
+  });
+
+  it('setLimitedSession sets limited kind + deviceId(=userId) + label(=username)', () => {
+    useAuthStore.getState().setLimitedSession('user-uuid-alice', 'alice');
+    const s = useAuthStore.getState();
+    expect(s.kind).toBe('limited');
+    expect(s.deviceId).toBe('user-uuid-alice');
+    expect(s.label).toBe('alice');
+    expect(s.verifiedAt).toBeGreaterThan(0);
   });
 
   it('markVerified bumps verifiedAt without touching deviceId/label', () => {

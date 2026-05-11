@@ -203,6 +203,13 @@ mac CLI `ccanywhere revoke <device-id>` MUST 调用
 - user.quota 字段（`cost.limitUsd` / `cost.usedUsd` / `tokens.limit` /
   `tokens.used`）owner 端 limits 均为 null（不限）；limited 端至少一个
   非 null（创建时强制）。`GET /api/me/quota` 返回当前 user 的 quota 状态。
+- `GET /api/auth/me` MUST 返回统一形状 `{ id, label, kind, lastUsedAt }`
+  让 web 客户端不区分身份层判定登录态：
+  - owner cookie → `{ id: device.id, label: device.label,
+    kind: 'owner', lastUsedAt: device.lastUsedAt }`
+  - limited cookie → `{ id: user.id, label: user.username,
+    kind: 'limited', lastUsedAt: user.lastLoginAt }`
+  - 无 cookie → 401
 
 #### Scenario: token login 颁 cookie
 
