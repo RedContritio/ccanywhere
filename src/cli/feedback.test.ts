@@ -1,8 +1,14 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runFeedbackList, runFeedbackShow } from './feedback.js';
+import {
+  runFeedbackForget,
+  runFeedbackList,
+  runFeedbackMarkAllSeen,
+  runFeedbackMarkSeen,
+  runFeedbackShow,
+} from './feedback.js';
 
 interface FixtureFeedback {
   id: string;
@@ -48,8 +54,14 @@ describe('runFeedbackList / runFeedbackShow', () => {
     vi.restoreAllMocks();
   });
 
-  it('list empty feedback dir → "(no feedback)"', async () => {
+  it('list empty feedback dir → "(no unread feedback)"', async () => {
     await runFeedbackList(configPath);
+    // Default list filters to unread; phrasing reflects that.
+    expect(captured.join('')).toContain('(no unread feedback)');
+  });
+
+  it('list --all on empty dir → "(no feedback)"', async () => {
+    await runFeedbackList(configPath, { unreadOnly: false });
     expect(captured.join('')).toContain('(no feedback)');
   });
 
@@ -182,5 +194,76 @@ describe('runFeedbackList / runFeedbackShow', () => {
     expect(out).toContain('dupe11');
     expect(out).toContain('dupe22');
     exitSpy.mockRestore();
+  });
+
+  describe('seen-set / dedup', () => {
+    function writeOne(id: string, title: string): void {
+      writeFixture(join(configDir, 'feedback'), {
+        id,
+        submittedAt: 1778500000000,
+        deviceLabel: 'phone',
+        title,
+      });
+    }
+
+    it('show auto-marks seen; subsequent default list excludes it', async () => {
+      writeOne('2026-05-11T05-00-00-000Z-aaa111', 'will-be-seen');
+      writeOne('2026-05-11T05-00-01-000Z-bbb222', 'stays-unread');
+
+      await runFeedbackShow(configPath, 'aaa111');
+      captured.length = 0;
+      await runFeedbackList(configPath);
+      const out = captured.join('');
+      expect(out).not.toContain('will-be-seen');
+      expect(out).toContain('stays-unread');
+    });
+
+    it('show --no-mark leaves it unread', async () => {
+      writeOne('2026-05-11T06-00-00-000Z-cafe11', 'peek-only');
+      await runFeedbackShow(configPath, 'cafe11', { markSeen: false });
+      captured.length = 0;
+      await runFeedbackList(configPath);
+      expect(captured.join('')).toContain('peek-only');
+    });
+
+    it('list --all includes seen entries with marker', async () => {
+      writeOne('2026-05-11T07-00-00-000Z-old111', 'was-read');
+      await runFeedbackMarkSeen(configPath, 'old111');
+      captured.length = 0;
+      await runFeedbackList(configPath, { unreadOnly: false });
+      expect(captured.join('')).toContain('was-read');
+    });
+
+    it('mark-seen + forget toggles back to unread', async () => {
+      writeOne('2026-05-11T08-00-00-000Z-fff111', 'flap');
+      await runFeedbackMarkSeen(configPath, 'fff111');
+      captured.length = 0;
+      await runFeedbackList(configPath);
+      expect(captured.join('')).not.toContain('flap');
+
+      await runFeedbackForget(configPath, 'fff111');
+      captured.length = 0;
+      await runFeedbackList(configPath);
+      expect(captured.join('')).toContain('flap');
+    });
+
+    it('mark-all-seen empties the unread list in one shot', async () => {
+      writeOne('2026-05-11T09-00-00-000Z-bulk11', 'a');
+      writeOne('2026-05-11T09-00-01-000Z-bulk22', 'b');
+      writeOne('2026-05-11T09-00-02-000Z-bulk33', 'c');
+      await runFeedbackMarkAllSeen(configPath);
+      captured.length = 0;
+      await runFeedbackList(configPath);
+      expect(captured.join('')).toContain('(no unread feedback)');
+    });
+
+    it('seen state persists to feedback-seen.json next to config', async () => {
+      writeOne('2026-05-11T10-00-00-000Z-disk11', 'persist');
+      await runFeedbackMarkSeen(configPath, 'disk11');
+      const raw = JSON.parse(
+        readFileSync(join(configDir, 'feedback-seen.json'), 'utf8'),
+      ) as { seen: string[] };
+      expect(raw.seen).toContain('2026-05-11T10-00-00-000Z-disk11');
+    });
   });
 });

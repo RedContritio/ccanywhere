@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { stdout } from 'node:process';
 import { ConfigError, defaultConfigPath, loadConfig } from '../config/loader.js';
 import { resolveConfigDir } from '../config/paths.js';
+import { loadSeenSet, persistSeenSet } from './feedback-seen-store.js';
 
 interface FeedbackEnvelope {
   readonly id: string;
@@ -44,14 +45,20 @@ interface FeedbackSummary {
   };
 }
 
-function feedbackDir(configPath: string | undefined): string {
+interface FeedbackPaths {
+  readonly dir: string;
+  readonly seenPath: string;
+}
+
+function feedbackPaths(configPath: string | undefined): FeedbackPaths {
   const path = configPath !== undefined ? resolve(configPath) : defaultConfigPath();
   const config = loadConfig(path);
-  const dir = join(resolveConfigDir(config, path), 'feedback');
+  const configDir = resolveConfigDir(config, path);
+  const dir = join(configDir, 'feedback');
   if (!existsSync(dir)) {
     throw new ConfigError(`feedback dir does not exist: ${dir}`, path);
   }
-  return dir;
+  return { dir, seenPath: join(configDir, 'feedback-seen.json') };
 }
 
 function listFeedbackFiles(dir: string): string[] {
@@ -112,17 +119,25 @@ function pad(s: string, n: number): string {
 export interface FeedbackListOpts {
   readonly verbose?: boolean;
   readonly json?: boolean;
+  /** Default true. --all flag flips to false. */
+  readonly unreadOnly?: boolean;
 }
 
 export async function runFeedbackList(
   configPath: string | undefined,
   opts: FeedbackListOpts = {},
 ): Promise<void> {
-  const dir = feedbackDir(configPath);
-  const summaries: FeedbackSummary[] = [];
+  const { dir, seenPath } = feedbackPaths(configPath);
+  const seen = loadSeenSet(seenPath);
+  const unreadOnly = opts.unreadOnly ?? true;
+
+  const summaries: Array<FeedbackSummary & { isSeen: boolean }> = [];
   for (const f of listFeedbackFiles(dir)) {
     const env = readEnvelope(dir, f);
-    if (env !== null) summaries.push(summarize(env));
+    if (env === null) continue;
+    const isSeen = seen.has(env.id);
+    if (unreadOnly && isSeen) continue;
+    summaries.push({ ...summarize(env), isSeen });
   }
 
   if (opts.json === true) {
@@ -130,11 +145,12 @@ export async function runFeedbackList(
     return;
   }
   if (summaries.length === 0) {
-    stdout.write('(no feedback)\n');
+    stdout.write(unreadOnly ? '(no unread feedback)\n' : '(no feedback)\n');
     return;
   }
   for (const s of summaries) {
-    const head = `${pad(formatTimeAgo(s.submittedAt), 8)} ${pad(s.device, 18)} ${pad(s.id.slice(0, 24), 26)} ${s.title}`;
+    const marker = unreadOnly ? '' : s.isSeen ? '   ' : '★  ';
+    const head = `${marker}${pad(formatTimeAgo(s.submittedAt), 8)} ${pad(s.device, 18)} ${pad(s.id.slice(0, 24), 26)} ${s.title}`;
     if (opts.verbose === true) {
       const v = s.verbose;
       const verboseParts: string[] = [`ops=${s.opsCount}`];
@@ -154,6 +170,8 @@ export async function runFeedbackList(
 
 export interface FeedbackShowOpts {
   readonly full?: boolean;
+  /** Default true. show <id> implicitly marks the feedback seen. */
+  readonly markSeen?: boolean;
 }
 
 export async function runFeedbackShow(
@@ -161,7 +179,7 @@ export async function runFeedbackShow(
   idPrefix: string,
   opts: FeedbackShowOpts = {},
 ): Promise<void> {
-  const dir = feedbackDir(configPath);
+  const { dir, seenPath } = feedbackPaths(configPath);
   const files = listFeedbackFiles(dir);
   const matches = files.filter((f) => f.includes(idPrefix));
   if (matches.length === 0) {
@@ -184,6 +202,14 @@ export async function runFeedbackShow(
   if (env === null) {
     stdout.write(`failed to parse: ${fileName}\n`);
     process.exit(1);
+  }
+
+  if (opts.markSeen !== false) {
+    const seen = loadSeenSet(seenPath);
+    if (!seen.has(env.id)) {
+      seen.add(env.id);
+      persistSeenSet(seenPath, seen);
+    }
   }
 
   if (opts.full === true) {
@@ -237,3 +263,9 @@ export async function runFeedbackShow(
     }
   }
 }
+
+export {
+  runFeedbackForget,
+  runFeedbackMarkAllSeen,
+  runFeedbackMarkSeen,
+} from './feedback-mark.js';

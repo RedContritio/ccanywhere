@@ -2,7 +2,13 @@
 import { stdout } from 'node:process';
 import { runApprove } from './cli/approve.js';
 import { runDevices } from './cli/devices.js';
-import { runFeedbackList, runFeedbackShow } from './cli/feedback.js';
+import {
+  runFeedbackForget,
+  runFeedbackList,
+  runFeedbackMarkAllSeen,
+  runFeedbackMarkSeen,
+  runFeedbackShow,
+} from './cli/feedback.js';
 import { runRevoke } from './cli/revoke.js';
 import { runServe } from './cli/serve.js';
 import { runTokenIssue, runTokenList, runTokenRevoke } from './cli/token.js';
@@ -61,10 +67,15 @@ usage:
   ccanywhere devices [--config <path>]    list registered devices
   ccanywhere revoke [--config <path>] <device-id>
                                           revoke a device (drops sessions, blocks future logins)
-  ccanywhere feedback list [--verbose] [--json]
-                                          list submitted feedback (newest first)
-  ccanywhere feedback show <id-prefix> [--full]
-                                          show one feedback (summary by default; --full = pretty JSON)
+  ccanywhere feedback list [--verbose] [--json] [--all]
+                                          list submitted feedback (newest first; default skips seen)
+  ccanywhere feedback show <id-prefix> [--full] [--no-mark]
+                                          show one feedback (summary by default; --full = pretty JSON;
+                                          --no-mark skips marking it seen)
+  ccanywhere feedback mark-seen <id-prefix>
+                                          mark a feedback as seen (excluded from default list)
+  ccanywhere feedback mark-all-seen       mark every feedback file as seen
+  ccanywhere feedback forget <id-prefix>  remove from seen set (re-appears in default list)
   ccanywhere help                         show this help
 
 Multi-instance same-host deployments (e.g. prod + staging) just hand each
@@ -228,19 +239,44 @@ async function runFeedbackSubcommand(args: string[], configPath: string | undefi
   if (sub === 'list') {
     const verbose = consumeBoolFlag(args, '--verbose') || consumeBoolFlag(args, '-v');
     const json = consumeBoolFlag(args, '--json');
+    const all = consumeBoolFlag(args, '--all');
     return runFeedbackList(configPath, {
       ...(verbose ? { verbose: true } : {}),
       ...(json ? { json: true } : {}),
+      unreadOnly: !all,
     });
   }
   if (sub === 'show') {
     const idPrefix = args.shift();
     if (idPrefix === undefined) {
-      stdout.write(`usage: ccanywhere feedback show <id-prefix> [--full]\n`);
+      stdout.write(`usage: ccanywhere feedback show <id-prefix> [--full] [--no-mark]\n`);
       process.exit(2);
     }
     const full = consumeBoolFlag(args, '--full');
-    return runFeedbackShow(configPath, idPrefix, { ...(full ? { full: true } : {}) });
+    const noMark = consumeBoolFlag(args, '--no-mark');
+    return runFeedbackShow(configPath, idPrefix, {
+      ...(full ? { full: true } : {}),
+      ...(noMark ? { markSeen: false } : {}),
+    });
+  }
+  if (sub === 'mark-seen') {
+    const idPrefix = args.shift();
+    if (idPrefix === undefined) {
+      stdout.write(`usage: ccanywhere feedback mark-seen <id-prefix>\n`);
+      process.exit(2);
+    }
+    return runFeedbackMarkSeen(configPath, idPrefix);
+  }
+  if (sub === 'mark-all-seen') {
+    return runFeedbackMarkAllSeen(configPath);
+  }
+  if (sub === 'forget') {
+    const idPrefix = args.shift();
+    if (idPrefix === undefined) {
+      stdout.write(`usage: ccanywhere feedback forget <id-prefix>\n`);
+      process.exit(2);
+    }
+    return runFeedbackForget(configPath, idPrefix);
   }
   stdout.write(`unknown feedback subcommand: ${sub ?? '(missing)'}\n`);
   process.exit(2);
