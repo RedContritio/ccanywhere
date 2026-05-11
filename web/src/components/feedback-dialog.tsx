@@ -1,9 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { api } from '../api.js';
 import { collectDiag } from '../state/diag.js';
 import { snapshotOps } from '../state/ops-log.js';
 import { useSessionsStore } from '../state/sessions.js';
 import { effectiveTheme, useUiStore } from '../state/ui.js';
+import { DialogBase } from './dialog-base.js';
 
 interface Props {
   readonly open: boolean;
@@ -16,7 +21,7 @@ type Mode =
   | { kind: 'submitted'; id: string }
   | { kind: 'error'; message: string };
 
-export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
+export function FeedbackDialog({ open, onClose }: Props): JSX.Element {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [mode, setMode] = useState<Mode>({ kind: 'compose' });
@@ -28,8 +33,6 @@ export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
       setMode({ kind: 'compose' });
     }
   }, [open]);
-
-  if (!open) return null;
 
   const submit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
@@ -46,8 +49,6 @@ export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
         method: 'POST',
         body: {
           title: t,
-          // body is optional on the server; only send when non-empty so
-          // the receipt JSON stays clean instead of carrying empty strings
           ...(body.trim().length > 0 ? { body: body.trim() } : {}),
           ops: snapshotOps(),
           diag: collectDiag({
@@ -66,82 +67,88 @@ export function FeedbackDialog({ open, onClose }: Props): JSX.Element | null {
     }
   };
 
-  return (
-    <div className="dialog-backdrop" onClick={onClose} role="presentation">
-      <form
-        className="dialog"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => void submit(e)}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="feedback-title"
-      >
-        <h2 id="feedback-title" className="dialog-title">
-          反馈
-        </h2>
+  const isSubmitted = mode.kind === 'submitted';
+  const isSubmitting = mode.kind === 'submitting';
 
-        {mode.kind === 'submitted' ? (
-          <>
-            <p className="dialog-hint">已收到反馈：{mode.id}</p>
-            <div className="dialog-actions">
-              <button type="button" className="dialog-submit" onClick={onClose}>
-                关闭
-              </button>
-            </div>
-          </>
+  return (
+    <DialogBase
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+      title="反馈"
+      size="md"
+      footer={
+        isSubmitted ? (
+          <Button type="button" onClick={onClose}>
+            关闭
+          </Button>
         ) : (
           <>
-            <label className="dialog-field">
-              <span>标题</span>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={200}
-                required
-                disabled={mode.kind === 'submitting'}
-              />
-            </label>
-            <label className="dialog-field">
-              <span>正文（可空）</span>
-              <textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={5}
-                maxLength={10_000}
-                disabled={mode.kind === 'submitting'}
-                className="dialog-textarea"
-              />
-            </label>
-            <p className="dialog-hint">
-              提交时自动附最近 50 条操作、当前终端可见内容、浏览器与网络
-              状态——便于定位。如终端正显示敏感内容请取消。
-            </p>
-            {mode.kind === 'error' && (
-              <p className="dialog-error" role="alert">
-                {mode.message}
-              </p>
-            )}
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="dialog-cancel"
-                onClick={onClose}
-                disabled={mode.kind === 'submitting'}
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                className="dialog-submit"
-                disabled={mode.kind === 'submitting' || title.trim().length === 0}
-              >
-                {mode.kind === 'submitting' ? '提交中…' : '提交'}
-              </button>
-            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              取消
+            </Button>
+            <Button
+              type="submit"
+              form="feedback-form"
+              disabled={isSubmitting || title.trim().length === 0}
+            >
+              {isSubmitting ? '提交中…' : '提交'}
+            </Button>
           </>
-        )}
-      </form>
-    </div>
+        )
+      }
+    >
+      {isSubmitted ? (
+        <p className="text-sm text-fg-muted">
+          已收到反馈：<span className="font-mono">{mode.id}</span>
+        </p>
+      ) : (
+        <form
+          id="feedback-form"
+          className="space-y-4"
+          onSubmit={(e) => void submit(e)}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="feedback-title">标题</Label>
+            <Input
+              id="feedback-title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={200}
+              required
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="feedback-body">正文（可空）</Label>
+            <Textarea
+              id="feedback-body"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={5}
+              maxLength={10_000}
+              disabled={isSubmitting}
+              className="font-mono"
+            />
+          </div>
+          <p className="text-xs leading-relaxed text-fg-muted">
+            提交时自动附最近 50 条操作、当前终端可见内容、浏览器与网络
+            状态——便于定位。如终端正显示敏感内容请取消。
+          </p>
+          {mode.kind === 'error' && (
+            <p className="text-sm text-danger" role="alert">
+              {mode.message}
+            </p>
+          )}
+        </form>
+      )}
+    </DialogBase>
   );
 }

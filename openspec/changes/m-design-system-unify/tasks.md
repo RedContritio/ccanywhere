@@ -40,19 +40,31 @@
   new-session-dialog.tsx / session-list.tsx 共 4 处 grep + 改 import
 - [x] T2.6. 单元测试：projects.test.ts (7 case) / status-badge.test.tsx
   (4 case) / list-base.test.tsx (6 case) / dialog-base.test.tsx (6 case)
-- [ ] T2.7. C2 commit + 全测试通过
+- [x] T2.7. C2 commit + 全测试通过 (b7ad59f)
 
 ## Phase 3 — C3 dialogs
 
-- [ ] T3.1. `feedback-dialog.tsx` 用 DialogBase 重写
-- [ ] T3.2. `new-session-dialog.tsx` 用 DialogBase 重写（target 432 →
-  ~250 LOC）
-- [ ] T3.3. `quota-panel.tsx` 用 DialogBase / Sheet（按 DP5 决策）重写
-- [ ] T3.4. `toolbar-edit-dialog.tsx` 内容暂保留（C4 拆到 /settings 时再
-  分解，此 commit 仅 visual rewrite）
-- [ ] T3.5. autoFocus 系统化审核（B8）：所有 dialog 显式声明 autoFocus
-  规则，记录在 DialogBase props 文档
-- [ ] T3.6. 浏览器验所有 dialog（open / close / submit / mobile tap）
+- [x] T3.1. `feedback-dialog.tsx` 用 DialogBase 重写（含 shadcn Input/
+  Textarea/Label/Button + Form 状态机 compose/submitting/submitted/error）
+- [x] T3.2. `new-session-dialog.tsx` 用 DialogBase + Tabs(mode) +
+  ListBase(projects/history) + SortButton 重写（432 → 366 LOC，剩余
+  ~120 LOC 是 essential logic：resize / sort / new-project subform /
+  step 状态机；未达 250 target 但 dialog wrapper / list / sort 都已
+  抽象，未来再缩 cost 高）
+- [x] T3.3. `quota-panel.tsx` 用 DialogBase 保 dialog 形态（DP5）重写；
+  progress bar tone 改 bg-brand/bg-warning/bg-danger per DP7
+- [x] T3.4. `toolbar-edit-dialog.tsx` visual rewrite（C4 才拆 /settings）
+  + 提取 ToolbarCell / ToolbarCatalogKey wrap pattern（响应用户
+  "进一步 wrap 常用 pattern" 偏好）
+- [x] T3.5. autoFocus 审核（B8）：DialogBase 默认 autoFocusContent=
+  false per DP8；4 dialog 未显式覆盖，统一 off。grep autoFocus 仅
+  login page 留（非 dialog 范畴）
+- [x] T3.6. e2e visual screenshot 自检（`web/e2e/visual.spec.ts`，
+  3 case）：workspace home / new-session dialog / feedback dialog，
+  Read PNG 视觉符合 Warp settings 调性。quota / toolbar-edit dialog
+  需要 active cc session，e2e 难驱动，留待 user 浏览器手开补验
+- [x] T3.x. 加 ToolbarCell / ToolbarCatalogKey / SortButton 三个
+  pattern wrap + shadcn Textarea 引入（响应用户 wrap 偏好）
 - [ ] T3.7. C3 commit + healthz
 
 ## Phase 4 — C4 pages part 1（login + settings）

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { api } from '../api.js';
+import { DialogBase } from './dialog-base.js';
 
 export interface QuotaSnapshot {
   readonly kind: 'owner' | 'limited';
@@ -15,17 +18,21 @@ interface Props {
 }
 
 /**
- * #46 quota panel — limited users see live cost/tokens usage vs their limit.
- * Opens via the workspace header quota button. Polls `/api/me/quota` while
- * open (default 30s). Owner sees a no-limit placeholder; limited sees two
- * progress bars colored by saturation (≥80% yellow, ≥100% red).
+ * #46 quota panel — limited users see live cost/tokens usage vs their
+ * limit. Polls `/api/me/quota` while open (default 30s). Owner sees a
+ * no-limit placeholder; limited sees two progress bars colored by
+ * saturation (≥80% warning, ≥100% danger).
  *
- * Polling stops when the dialog closes — there's no value pulling quota
- * data the user can't see. cc-side block decisions are surfaced inside the
- * terminal (cc prints the hook's `reason` field on the next prompt); the
- * panel exists to make "how close am I?" visible BEFORE the block.
+ * Polling stops when the dialog closes — no value pulling quota data
+ * the user can't see. cc-side block decisions are surfaced inside the
+ * terminal (cc prints the hook's `reason` field on the next prompt);
+ * the panel exists to make "how close am I?" visible BEFORE the block.
  */
-export function QuotaPanel({ open, onClose, pollIntervalMs = 30_000 }: Props): JSX.Element | null {
+export function QuotaPanel({
+  open,
+  onClose,
+  pollIntervalMs = 30_000,
+}: Props): JSX.Element {
   const [snapshot, setSnapshot] = useState<QuotaSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,53 +56,47 @@ export function QuotaPanel({ open, onClose, pollIntervalMs = 30_000 }: Props): J
     };
   }, [open, pollIntervalMs, refetch]);
 
-  if (!open) return null;
-
   return (
-    <div className="dialog-backdrop" onClick={onClose} role="presentation">
-      <div
-        className="dialog quota-panel"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="quota-title"
-      >
-        <h2 id="quota-title" className="dialog-title">
-          配额
-        </h2>
-        {error !== null ? (
-          <p className="dialog-hint dialog-error">加载失败：{error}</p>
-        ) : snapshot === null ? (
-          <p className="dialog-hint">载入中…</p>
-        ) : snapshot.kind === 'owner' ? (
-          <p className="dialog-hint">owner 账号无配额限制。</p>
-        ) : (
-          <div className="quota-body">
-            <QuotaRow
-              label="费用 (USD)"
-              used={snapshot.cost.usedUsd}
-              limit={snapshot.cost.limitUsd}
-              format={(v) => `$${v.toFixed(2)}`}
-            />
-            <QuotaRow
-              label="Tokens"
-              used={snapshot.tokens.used}
-              limit={snapshot.tokens.limit}
-              format={(v) => v.toLocaleString()}
-            />
-            <p className="quota-footnote">
-              配额累加自账号创建以来全部 cc 用量；超限后下一次 prompt 会被服务端拦截。
-              联系管理员调整限额或换发 token。
-            </p>
-          </div>
-        )}
-        <div className="dialog-actions">
-          <button type="button" className="dialog-submit" onClick={onClose}>
-            关闭
-          </button>
+    <DialogBase
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+      title="配额"
+      size="md"
+      footer={
+        <Button type="button" variant="secondary" onClick={onClose}>
+          关闭
+        </Button>
+      }
+    >
+      {error !== null ? (
+        <p className="text-sm text-danger">加载失败：{error}</p>
+      ) : snapshot === null ? (
+        <p className="text-sm text-fg-muted">载入中…</p>
+      ) : snapshot.kind === 'owner' ? (
+        <p className="text-sm text-fg-muted">owner 账号无配额限制。</p>
+      ) : (
+        <div className="space-y-4">
+          <QuotaRow
+            label="费用 (USD)"
+            used={snapshot.cost.usedUsd}
+            limit={snapshot.cost.limitUsd}
+            format={(v) => `$${v.toFixed(2)}`}
+          />
+          <QuotaRow
+            label="Tokens"
+            used={snapshot.tokens.used}
+            limit={snapshot.tokens.limit}
+            format={(v) => v.toLocaleString()}
+          />
+          <p className="text-xs leading-relaxed text-fg-muted">
+            配额累加自账号创建以来全部 cc 用量；超限后下一次 prompt 会被
+            服务端拦截。联系管理员调整限额或换发 token。
+          </p>
         </div>
-      </div>
-    </div>
+      )}
+    </DialogBase>
   );
 }
 
@@ -109,24 +110,33 @@ interface RowProps {
 function QuotaRow({ label, used, limit, format }: RowProps): JSX.Element {
   if (limit === null) {
     return (
-      <div className="quota-row">
-        <div className="quota-row-label">{label}</div>
-        <div className="quota-row-value">{format(used)} / 无限制</div>
+      <div className="flex items-center justify-between text-sm">
+        <span>{label}</span>
+        <span className="font-mono text-fg-muted">
+          {format(used)} / 无限制
+        </span>
       </div>
     );
   }
-  const pct = limit === 0 ? 100 : Math.min(100, Math.round((used / limit) * 1000) / 10);
-  const tone = pct >= 100 ? 'is-exhausted' : pct >= 80 ? 'is-warn' : 'is-ok';
+  const pct =
+    limit === 0 ? 100 : Math.min(100, Math.round((used / limit) * 1000) / 10);
+  const toneClass =
+    pct >= 100 ? 'bg-danger' : pct >= 80 ? 'bg-warning' : 'bg-brand';
   return (
-    <div className="quota-row">
-      <div className="quota-row-label">
-        {label}
-        <span className="quota-row-pct">{pct.toFixed(1)}%</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span>{label}</span>
+        <span className="font-mono text-xs text-fg-muted">
+          {pct.toFixed(1)}%
+        </span>
       </div>
-      <div className={`quota-bar ${tone}`}>
-        <div className="quota-bar-fill" style={{ width: `${Math.min(100, pct)}%` }} />
+      <div className="relative h-1.5 w-full overflow-hidden rounded-sm bg-border">
+        <div
+          className={cn('absolute inset-y-0 left-0 transition-all', toneClass)}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
       </div>
-      <div className="quota-row-value">
+      <div className="text-right font-mono text-xs text-fg-muted">
         {format(used)} / {format(limit)}
       </div>
     </div>

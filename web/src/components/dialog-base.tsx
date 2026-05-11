@@ -53,7 +53,7 @@ export function DialogBase({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={cn(sizeClass[size], className)}
+        className={cn(sizeClass[size], 'overflow-hidden', className)}
         {...(autoFocusContent
           ? {}
           : {
@@ -70,7 +70,12 @@ export function DialogBase({
             {description ?? title}
           </DialogDescription>
         </DialogHeader>
-        {children}
+        {/* min-w-0 forces grid tracks to honor dialog max-width: without it,
+            grid items default to min-content sizing and long unbreakable
+            content (e.g. session preview text) can push the dialog wider
+            than its declared max. overflow-hidden truncates visually any
+            child that still tries to overflow horizontally. */}
+        <div className="min-w-0 overflow-x-hidden">{children}</div>
         {footer !== undefined && <DialogFooter>{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>

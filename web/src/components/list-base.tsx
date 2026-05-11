@@ -65,7 +65,7 @@ export function ListBase<T>({
         const key = getKey(item);
         const isSelected = key === selectedKey;
         const baseRow = cn(
-          'flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm',
+          'flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden px-3 py-2 text-left text-sm',
           idx > 0 && 'border-t border-border',
           isSelected && 'bg-muted text-brand',
           interactive && 'hover:bg-muted focus-visible:bg-muted focus:outline-none',

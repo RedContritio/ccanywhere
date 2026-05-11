@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useProjectsStore,
   type HistorySummary,
   type Project,
 } from '../state/projects.js';
-import { SelectableList } from './selectable-list.js';
+import { DialogBase } from './dialog-base.js';
+import { ListBase } from './list-base.js';
+import { SortButton } from './sort-button.js';
 
 export interface CreateRequest {
   projectId: string;
@@ -38,7 +44,7 @@ export function NewSessionDialog({
   projects,
   onClose,
   onCreate,
-}: Props): JSX.Element | null {
+}: Props): JSX.Element {
   const fetchHistory = useProjectsStore((s) => s.fetchHistory);
   const createProject = useProjectsStore((s) => s.createProject);
 
@@ -50,8 +56,9 @@ export function NewSessionDialog({
   const [resumeId, setResumeId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Default sort: most-recently-modified first; click same field to flip dir,
-  // click the other field to switch + reset dir to asc.
+  // 'asc' is the user-intuitive default per field:
+  //   modified asc = most-recently-modified first
+  //   name     asc = a → z
   const [sortField, setSortField] = useState<ProjectSortField>('modified');
   const [sortDir, setSortDir] = useState<ProjectSortDir>('asc');
 
@@ -59,8 +66,7 @@ export function NewSessionDialog({
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectBusy, setNewProjectBusy] = useState(false);
 
-  // Fix `now` per dialog open so the relative-time strings don't drift
-  // mid-render. Reset on every open.
+  // Fix `now` per dialog open so relative-time strings don't drift mid-render.
   const nowRef = useRef<number>(Date.now());
 
   useEffect(() => {
@@ -102,7 +108,8 @@ export function NewSessionDialog({
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : '加载历史失败');
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : '加载历史失败');
       })
       .finally(() => {
         if (!cancelled) setHistoryLoading(false);
@@ -114,11 +121,6 @@ export function NewSessionDialog({
 
   const sortedProjects = useMemo(() => {
     const copy = [...projects];
-    // 'asc' is the user-intuitive default for each field:
-    //   modified asc = most-recently-modified first
-    //   name     asc = a → z
-    // 'desc' flips both. Implementation note: we sort once per field, then
-    // reverse for desc — keeps the comparator definitions trivially correct.
     if (sortField === 'name') {
       copy.sort((a, b) => a.id.localeCompare(b.id));
     } else {
@@ -136,8 +138,6 @@ export function NewSessionDialog({
       setSortDir('asc');
     }
   };
-
-  if (!open) return null;
 
   const canAdvanceFromStep1 =
     projectId.length > 0 && !submitting && projectAction === 'idle';
@@ -205,213 +205,37 @@ export function NewSessionDialog({
         : '新建会话';
 
   return (
-    <div className="dialog-backdrop" onClick={onClose} role="presentation">
-      <form
-        className="dialog"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={onPrimary}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-session-title"
-      >
-        <h2 id="new-session-title" className="dialog-title">
-          {stepTitle}
-        </h2>
-
-        {step === 1 && (
-          <>
-            <div className="dialog-field">
-              <div className="dialog-field-row">
-                <span>项目</span>
-                <div className="dialog-sort-toggle" role="group" aria-label="排序">
-                  <button
-                    type="button"
-                    className={`dialog-sort-btn ${sortField === 'modified' ? 'is-active' : ''}`}
-                    onClick={() => toggleSort('modified')}
-                    title={
-                      sortField === 'modified'
-                        ? sortDir === 'asc'
-                          ? '最近修改优先（点击切换为最久优先）'
-                          : '最久修改优先（点击切换为最近优先）'
-                        : '按修改时间排序'
-                    }
-                  >
-                    时间
-                    {sortField === 'modified' && (
-                      <span className="dialog-sort-arrow" aria-hidden="true">
-                        {sortDir === 'asc' ? ' ↓' : ' ↑'}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className={`dialog-sort-btn ${sortField === 'name' ? 'is-active' : ''}`}
-                    onClick={() => toggleSort('name')}
-                    title={
-                      sortField === 'name'
-                        ? sortDir === 'asc'
-                          ? 'A→Z（点击切换为 Z→A）'
-                          : 'Z→A（点击切换为 A→Z）'
-                        : '按名称排序'
-                    }
-                  >
-                    名称
-                    {sortField === 'name' && (
-                      <span className="dialog-sort-arrow" aria-hidden="true">
-                        {sortDir === 'asc' ? ' ↓' : ' ↑'}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
-              {sortedProjects.length > 0 ? (
-                <SelectableList
-                  items={sortedProjects}
-                  selectedId={projectId}
-                  getId={(p) => p.id}
-                  renderPrimary={(p) => p.name}
-                  renderSecondary={(p) => fmtRelative(p.modifiedAt, nowRef.current)}
-                  onSelect={setProjectId}
-                  ariaLabel="项目"
-                />
-              ) : (
-                <p className="dialog-hint">
-                  还没有项目。点击"+ 新建项目"，或在 mac 的 Projects/ 下手动 mkdir。
-                </p>
-              )}
-            </div>
-
-            <div className="dialog-project-actions">
-              {projectAction === 'new' && (
-                <div className="dialog-new-project">
-                  <input
-                    type="text"
-                    placeholder="目录名（直接落在 Projects/ 下）"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    disabled={newProjectBusy}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void submitNewProject();
-                      }
-                      if (e.key === 'Escape') {
-                        e.preventDefault();
-                        setProjectAction('idle');
-                        setNewProjectName('');
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="dialog-link"
-                    onClick={() => void submitNewProject()}
-                    disabled={newProjectBusy || newProjectName.trim() === ''}
-                  >
-                    {newProjectBusy ? '创建中…' : '创建'}
-                  </button>
-                  <button
-                    type="button"
-                    className="dialog-link"
-                    onClick={() => {
-                      setProjectAction('idle');
-                      setNewProjectName('');
-                    }}
-                    disabled={newProjectBusy}
-                  >
-                    取消
-                  </button>
-                </div>
-              )}
-              {projectAction === 'idle' && (
-                <button
-                  type="button"
-                  className="dialog-link"
-                  onClick={() => setProjectAction('new')}
-                >
-                  + 新建项目
-                </button>
-              )}
-            </div>
-
-            <fieldset className="dialog-mode">
-              <legend>模式</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="mode"
-                  value="create"
-                  checked={mode === 'create'}
-                  onChange={() => setMode('create')}
-                />
-                <span>全新会话</span>
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="mode"
-                  value="resume"
-                  checked={mode === 'resume'}
-                  onChange={() => setMode('resume')}
-                />
-                <span>从历史接续</span>
-              </label>
-            </fieldset>
-          </>
-        )}
-
-        {step === 2 && (
-          <div className="dialog-field">
-            <span>选择要接续的会话</span>
-            {historyLoading ? (
-              <p className="dialog-hint">加载历史中...</p>
-            ) : history.length === 0 ? (
-              <p className="dialog-hint">该项目还没有可接续的历史会话。</p>
-            ) : (
-              <SelectableList
-                items={history}
-                selectedId={resumeId}
-                getId={(h) => h.sessionId}
-                renderPrimary={(h) =>
-                  h.preview.length > 0 ? h.preview.slice(0, 80) : '(无预览)'
-                }
-                renderSecondary={(h) => fmtRelative(h.modifiedAt, nowRef.current)}
-                onSelect={setResumeId}
-                ariaLabel="历史会话"
-              />
-            )}
-          </div>
-        )}
-
-        {error !== null && (
-          <p className="dialog-error" role="alert">
-            {error}
-          </p>
-        )}
-
-        <div className="dialog-actions">
+    <DialogBase
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+      title={stepTitle}
+      size="lg"
+      footer={
+        <>
           {step === 2 ? (
-            <button
+            <Button
               type="button"
-              className="dialog-cancel"
+              variant="secondary"
               onClick={() => setStep(1)}
               disabled={submitting}
             >
               上一步
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
-              className="dialog-cancel"
+              variant="secondary"
               onClick={onClose}
               disabled={submitting}
             >
               取消
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="submit"
-            className="dialog-submit"
+            form="new-session-form"
             disabled={
               step === 1
                 ? !canAdvanceFromStep1
@@ -427,9 +251,161 @@ export function NewSessionDialog({
               : submitting
                 ? '创建中...'
                 : '创建'}
-          </button>
-        </div>
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="new-session-form"
+        onSubmit={onPrimary}
+        className="space-y-4"
+      >
+        {step === 1 && (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>项目</Label>
+                <div
+                  className="inline-flex gap-1 text-xs"
+                  role="group"
+                  aria-label="排序"
+                >
+                  <SortButton
+                    active={sortField === 'modified'}
+                    dir={sortField === 'modified' ? sortDir : null}
+                    onClick={() => toggleSort('modified')}
+                  >
+                    时间
+                  </SortButton>
+                  <SortButton
+                    active={sortField === 'name'}
+                    dir={sortField === 'name' ? sortDir : null}
+                    onClick={() => toggleSort('name')}
+                  >
+                    名称
+                  </SortButton>
+                </div>
+              </div>
+              {sortedProjects.length > 0 ? (
+                <ListBase
+                  items={sortedProjects}
+                  selectedKey={projectId}
+                  getKey={(p) => p.id}
+                  renderPrimary={(p) => p.name}
+                  renderSecondary={(p) =>
+                    fmtRelative(p.modifiedAt, nowRef.current)
+                  }
+                  onSelect={setProjectId}
+                  ariaLabel="项目"
+                />
+              ) : (
+                <p className="text-xs text-fg-muted">
+                  还没有项目。点击「+ 新建项目」，或在 mac 的 Projects/ 下
+                  手动 mkdir。
+                </p>
+              )}
+            </div>
+
+            {projectAction === 'new' ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  placeholder="目录名（直接落在 Projects/ 下）"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  disabled={newProjectBusy}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void submitNewProject();
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setProjectAction('idle');
+                      setNewProjectName('');
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => void submitNewProject()}
+                  disabled={newProjectBusy || newProjectName.trim() === ''}
+                >
+                  {newProjectBusy ? '创建中…' : '创建'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setProjectAction('idle');
+                    setNewProjectName('');
+                  }}
+                  disabled={newProjectBusy}
+                >
+                  取消
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setProjectAction('new')}
+              >
+                + 新建项目
+              </Button>
+            )}
+
+            <div className="space-y-2">
+              <Label>模式</Label>
+              <Tabs
+                value={mode}
+                onValueChange={(v) => setMode(v as 'create' | 'resume')}
+              >
+                <TabsList>
+                  <TabsTrigger value="create">全新会话</TabsTrigger>
+                  <TabsTrigger value="resume">从历史接续</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-2">
+            <Label>选择要接续的会话</Label>
+            {historyLoading ? (
+              <p className="text-xs text-fg-muted">加载历史中...</p>
+            ) : (
+              <ListBase
+                items={history}
+                selectedKey={resumeId}
+                getKey={(h) => h.sessionId}
+                renderPrimary={(h) =>
+                  h.preview.length > 0 ? h.preview.slice(0, 80) : '(无预览)'
+                }
+                renderSecondary={(h) =>
+                  fmtRelative(h.modifiedAt, nowRef.current)
+                }
+                onSelect={setResumeId}
+                ariaLabel="历史会话"
+                emptyLabel="该项目还没有可接续的历史会话"
+              />
+            )}
+          </div>
+        )}
+
+        {error !== null && (
+          <p className="text-sm text-danger" role="alert">
+            {error}
+          </p>
+        )}
       </form>
-    </div>
+    </DialogBase>
   );
 }
+
