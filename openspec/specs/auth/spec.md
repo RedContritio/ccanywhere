@@ -210,3 +210,36 @@ mac CLI `ccanywhere revoke <device-id>` MUST 调用
 - WHEN  浏览器 `POST /api/auth/token` body `{ token }`
 - THEN  返回 200 + Set-Cookie 含 token plaintext，maxAge ≤ token.expiresAt
 - AND   后续 `GET /api/me/quota` 返回 alice 的 quota
+
+### Requirement: user.quota 累加自 user.createdAt（m-quota-cost-tracking）
+
+`user.quota.cost.usedUsd` 与 `user.quota.tokens.used` MUST 通过
+`ccusageCalc(jsonlPath, sinceTimestamp = user.createdAt)` 重新计算并写回，
+**不是** 增量累加。这保证：
+
+- token 轮换 / revoke / re-issue 不重置 quota（quota 是 user-scoped，
+  与 token lifecycle 解耦）。
+- 多 session 并发不会因为 race 导致 used 双计：每次 hook fire 都从
+  user.createdAt 全量重读 jsonl，结果是幂等的。
+- cost 公式：每个 `type='assistant'` 且 `timestamp >= user.createdAt` 的
+  `message.usage` 行按 model `priceFor()` 累加 `(input + output +
+  cache_read + cache_creation tokens) × rate / 1_000_000`。
+
+owner 的 `quota.cost.usedUsd` / `quota.tokens.used` MUST NOT 被服务端写入
+（owner 不限额；hook handler 在 quota check 处早退 owner 路径，绕开 persist）。
+
+#### Scenario: token 轮换不重置 quota
+
+- GIVEN limited user alice `createdAt = T0`，`cost.usedUsd = $4.50`，
+        已颁 token T1 + revoked
+- WHEN  owner 给 alice 颁新 token T2（同 user.id，新 expiresAt）
+- AND   alice 用 T2 登录 + 触发 UserPromptSubmit
+- THEN  `userStore.findById(alice.id).quota.cost.usedUsd` 仍 ≥ $4.50
+- AND   ccusageCalc 重读 jsonl since=T0，不是 token.createdAt
+
+#### Scenario: owner usage 不持久化
+
+- GIVEN owner session，jsonl 含 $10 真实 usage
+- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
+- THEN  `userStore.findById(owner.id).quota.cost.usedUsd === 0`（pre-quota
+        初始值保留）

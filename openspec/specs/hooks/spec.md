@@ -128,3 +128,138 @@ cc 的 hook 是 fire-and-forget HTTP 调用，cc 自身不重试。本服务端
 
 延伸：服务端 MUST NOT 根据 PTY 输出静默时间猜测 idle，因 TUI 重绘会让启发式
 经常误判。状态机由 hook 主导（user 自愿配置）。
+
+### Requirement: UserPromptSubmit 是 quota 单一 enforcement 点（m-quota-cost-tracking）
+
+`UserPromptSubmit` event 处理器 MUST 在 state transition 之前做配额检查；
+任何其他事件（`SessionStart` / `PreToolUse` / `PostToolUse` / `Notification` /
+`Stop` / `SubagentStop`）MUST NOT 触发配额检查。
+
+服务端 MUST：
+
+1. 解析 `session.info.userId` → User；找不到（legacy session）→ 跳过配额，
+   继续 state-machine 路径。
+2. `user.kind === 'owner'` → 跳过配额，继续 state-machine 路径。
+3. limited user 路径：派生 cc-internal sessionId `ccSessionId =
+   info.resumeSessionId ?? info.id`，算 `jsonlPath = ccJsonlPathOf(info.cwd,
+   ccSessionId)`。
+4. `jsonl` 文件不存在（first-prompt edge：cc 还没 flush）→ treat as 0，
+   **不** 触发 setQuotaUsage（保留任何旧 `user.quota.*.used` 值），不 block，
+   继续 state-machine 路径。
+5. jsonl 存在 → `ccusageCalc(jsonlPath, since=user.createdAt)` → 累加
+   ALL `type='assistant'` 且 `timestamp >= user.createdAt` 行的 token usage
+   与 cost。
+6. `userStore.setQuotaUsage(user.id, costUsd, totalTokens)` 持久化。
+7. 双限制按先触达：cost 先于 tokens；任一命中 → 返回 200 + cc 协议
+   block JSON `{ decision: 'block', reason, continue: false, stopReason }`，
+   **不** 转 `busy`（pre-block 状态保持）。
+8. 都未命中 → 转 `busy`（按状态机表）+ 204。
+
+`since=user.createdAt` 而 **非** token.createdAt：用户换发 token 不重置
+quota；configured limit 反映用户帐户生命周期的累计上限。
+
+cc 协议的 block JSON `decision='block'` MUST 用 status 200 返回，**不能**
+用 4xx — curl 在 4xx 上 exit 非 0，cc 把 hook 视为失败而不是 block。
+`continue: false` + `stopReason` 字段同时填充，覆盖 cc 2.x 两种字段命名。
+
+#### Scenario: limited user 未超 limit → 204 + 转 busy + persist usage
+
+- GIVEN limited user alice 持有 `cost.limitUsd=100, tokens.limit=null`，
+        jsonl 已含 sonnet 1000 input + 500 output（约 $0.0105，1500 tokens）
+- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
+- THEN  状态 `204`
+- AND   `session.state === 'busy'`
+- AND   `userStore.findById(alice.id).quota.cost.usedUsd ≈ 0.0105`
+- AND   `userStore.findById(alice.id).quota.tokens.used === 1500`
+
+#### Scenario: 超 cost limit → 200 + block JSON + 状态保持 idle
+
+- GIVEN limited user 持有 `cost.limitUsd=5`，jsonl 已含 opus $15 用量
+- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
+- THEN  状态 `200`，body `{ decision: 'block', reason: 'cost quota exhausted: $15.00 / $5.00', continue: false, stopReason: '...' }`
+- AND   `session.state === 'idle'`（pre-block 状态）
+
+#### Scenario: jsonl 不存在 → 不 block + 不 persist
+
+- GIVEN limited user 已创建但尚未发任何 prompt（jsonl 文件未生成）
+- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
+- THEN  状态 `204`
+- AND   `session.state === 'busy'`
+- AND   `userStore.findById(user.id).quota.cost.usedUsd === 0`（保留初始值）
+
+#### Scenario: owner 全程旁路配额检查
+
+- GIVEN owner session，jsonl 含极大用量
+- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
+- THEN  状态 `204`
+- AND   `userStore.findById(owner.id).quota.cost.usedUsd === 0`（不 persist）
+
+#### Scenario: 双限制按先触达——cost 先到
+
+- GIVEN limited user 持有 `cost.limitUsd=1, tokens.limit=10_000_000`，
+        usage 累计 $3 / 1M tokens
+- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
+- THEN  block reason 含 `cost quota exhausted`，不含 `tokens`
+
+#### Scenario: 非 UserPromptSubmit 事件不触发配额
+
+- GIVEN limited user 已超 `cost.limitUsd`
+- WHEN  POST `/api/hook/<sid>/Stop` 或 `/PreToolUse` 或 `/SessionStart`
+- THEN  状态 `204`，不返 block JSON
+
+### Requirement: UserPromptSubmit hook stdout 直通（m-quota-cost-tracking）
+
+`buildHookSettings` 生成的 `UserPromptSubmit` curl 命令 MUST 保留 stdout
+（仅丢 stderr），形如：
+
+```
+curl -fsS -m 2 -X POST -H "Authorization: Bearer <token>" "<url>" 2>/dev/null || true
+```
+
+其它事件 MUST 双重重定向（fire-and-forget 状态机通知，无返回值）：
+
+```
+curl ... >/dev/null 2>&1 || true
+```
+
+理由：UserPromptSubmit 的服务端响应可能含 cc 协议的 block JSON，cc 从
+hook command stdout 读取并解析；丢 stdout 会让 quota 决策失效。
+
+#### Scenario: UserPromptSubmit stdout 保留
+
+- GIVEN `buildHookSettings('s', ep)`
+- WHEN  读取 `UserPromptSubmit` 事件下第一条 hook 的 `command`
+- THEN  命令含 `2>/dev/null`
+- AND   命令 **不含** `>/dev/null 2>&1`
+
+#### Scenario: 其它事件 stdout 双重丢弃
+
+- GIVEN 同上
+- WHEN  读取 `Stop` / `PreToolUse` / `SessionStart` 等事件的命令
+- THEN  命令含 `>/dev/null 2>&1`
+
+### Requirement: 启动期 cc jsonl path encoding sanity check（m-quota-cost-tracking）
+
+服务端启动时 MUST 调 `runStartupSanityCheck` 验 `ccJsonlPathOf` 与 cc CLI
+当前的 jsonl 路径编码一致：
+
+1. 扫 `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` 找一个真实 jsonl 路径。
+2. 反推 cwd（`-` → `/` 解码），用本实现 `ccJsonlPathOf` 回算 path。
+3. 回算 path 与原 path 不一致 → MUST 抛 `QuotaPathError`，server 启动失败
+   退出码 `2`，错误消息含 "cc 升级可能改了 path encoding"。
+4. `~/.claude/projects` 不存在 / 空 / 无 uuid.jsonl → MUST warn + 跳过
+   （新装机器不卡；下次有 jsonl 后 hook 路径自行 self-check）。
+
+#### Scenario: 编码漂移 → fatal 启动失败
+
+- GIVEN `~/.claude/projects/-some-path/<uuid>.jsonl` 存在
+- AND   `ccJsonlPathOf` 算出与磁盘文件不一致的路径
+- WHEN  server 启动
+- THEN  以错误消息（含 "path encoding"）退出，退出码 `2`
+
+#### Scenario: 新装机器 projects 空 → warn 但启动成功
+
+- GIVEN `~/.claude/projects` 不存在或为空
+- WHEN  server 启动
+- THEN  启动成功（不退出）
+- AND   日志含 warn 消息（提示首次 hook fire 时 self-check）
