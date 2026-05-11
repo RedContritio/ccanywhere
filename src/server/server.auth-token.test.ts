@@ -193,4 +193,160 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     const res = await app.inject({ method: 'GET', url: '/api/auth/me' });
     expect(res.statusCode).toBe(401);
   });
+
+  it('GET /api/me/preferences with limited cookie → 200 + empty by default', async () => {
+    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/me/preferences',
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({});
+  });
+
+  it('PUT /api/me/preferences round-trips a toolbar layout', async () => {
+    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const layout = {
+      rows: 1,
+      cols: 3,
+      cells: [
+        { id: 'esc', label: 'Esc', action: 'plain', payload: '' },
+        null,
+        { id: 'c', label: '^C', action: 'ctrl-letter', payload: 'c' },
+      ],
+    };
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/api/me/preferences',
+      headers: { cookie: authCookie, 'content-type': 'application/json' },
+      payload: { toolbar: layout },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const get = await app.inject({
+      method: 'GET',
+      url: '/api/me/preferences',
+      headers: { cookie: authCookie },
+    });
+    const body = get.json() as { toolbar?: typeof layout };
+    expect(body.toolbar).toEqual(layout);
+  });
+
+  it('PUT /api/me/preferences { toolbar: null } clears the override', async () => {
+    const { authCookie } = env.createLimitedUserWithToken('alice');
+    await app.inject({
+      method: 'PUT',
+      url: '/api/me/preferences',
+      headers: { cookie: authCookie, 'content-type': 'application/json' },
+      payload: {
+        toolbar: { rows: 1, cols: 3, cells: [null, null, null] },
+      },
+    });
+    const clear = await app.inject({
+      method: 'PUT',
+      url: '/api/me/preferences',
+      headers: { cookie: authCookie, 'content-type': 'application/json' },
+      payload: { toolbar: null },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json()).toEqual({});
+  });
+
+  it('PUT /api/me/preferences invalid rows → 400', async () => {
+    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/me/preferences',
+      headers: { cookie: authCookie, 'content-type': 'application/json' },
+      payload: { toolbar: { rows: 9, cols: 3, cells: [] } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('PUT /api/me/preferences ctrl-letter payload must be a..z → 400', async () => {
+    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/me/preferences',
+      headers: { cookie: authCookie, 'content-type': 'application/json' },
+      payload: {
+        toolbar: {
+          rows: 1,
+          cols: 3,
+          cells: [
+            null,
+            null,
+            { id: 'bad', label: 'X', action: 'ctrl-letter', payload: 'CC' },
+          ],
+        },
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('GET /api/me/active-session → 200 + null by default', async () => {
+    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/me/active-session',
+      headers: { cookie: authCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ sessionId: null });
+  });
+
+  it('PUT /api/me/active-session round-trips id and clears with null', async () => {
+    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const sid = '11111111-2222-3333-4444-555555555555';
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/api/me/active-session',
+      headers: { cookie: authCookie, 'content-type': 'application/json' },
+      payload: { sessionId: sid },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const get = await app.inject({
+      method: 'GET',
+      url: '/api/me/active-session',
+      headers: { cookie: authCookie },
+    });
+    expect(get.json()).toEqual({ sessionId: sid });
+
+    const clear = await app.inject({
+      method: 'PUT',
+      url: '/api/me/active-session',
+      headers: { cookie: authCookie, 'content-type': 'application/json' },
+      payload: { sessionId: null },
+    });
+    expect(clear.json()).toEqual({ sessionId: null });
+  });
+
+  it('owner can also set preferences + active-session', async () => {
+    // owner uses the test-helpers device session cookie
+    const layout = {
+      rows: 1,
+      cols: 3,
+      cells: [
+        { id: 'up', label: 'Up', action: 'plain', payload: '[A' },
+        null,
+        null,
+      ],
+    };
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/api/me/preferences',
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
+      payload: { toolbar: layout },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const get = await app.inject({
+      method: 'GET',
+      url: '/api/me/preferences',
+      headers: { cookie: env.authCookie },
+    });
+    expect((get.json() as { toolbar?: object }).toolbar).toEqual(layout);
+  });
 });

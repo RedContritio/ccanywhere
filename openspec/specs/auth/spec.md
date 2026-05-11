@@ -211,6 +211,61 @@ mac CLI `ccanywhere revoke <device-id>` MUST 调用
     kind: 'limited', lastUsedAt: user.lastLoginAt }`
   - 无 cookie → 401
 
+### Requirement: 用户级偏好与活跃 session（m-user-prefs）
+
+User 记录 MUST 含两个跨设备同步字段：
+
+- `preferences: UserPreferences` —— UI 偏好对象（首期含 `toolbar?:
+  ToolbarLayout`，未来可扩 theme override 等）。**owner 与 limited 同等
+  支持**。
+- `lastActiveSessionId: string | null` —— 用户最后选中的 cc session id
+  （ephemeral state，与 preferences 语义分离）。客户端访问 /workspace 时
+  作为默认选中，stale id 由客户端 join 实时 sessions list 时 silently
+  忽略。
+
+API（cookie-gated，owner / limited 同等可用）：
+
+```
+GET  /api/me/preferences       → 200 UserPreferences (默认 {})
+PUT  /api/me/preferences        body { toolbar?: ToolbarLayout | null }
+                                → 200 UserPreferences  (null = 清掉回默认)
+                                → 400 invalid_request
+
+GET  /api/me/active-session    → 200 { sessionId: string | null }
+PUT  /api/me/active-session     body { sessionId: string | null }
+                                → 200 { sessionId }
+```
+
+`ToolbarLayout` 字段约束（服务端 zod 校验）：
+
+- `rows ∈ [1, 3]`, `cols ∈ [3, 8]`
+- `cells.length === rows × cols`，每 cell 为 `ToolbarKey` 或 `null`
+- 每个 `ToolbarKey.id` 在 layout 内唯一
+- `action ∈ {'plain', 'ctrl-letter', 'toggle-sticky-ctrl'}`
+- `'ctrl-letter'` 的 `payload` MUST 匹配 `/^[a-z]$/`
+
+旧 `users.json`（pre-m-user-prefs，无 `preferences` / `lastActiveSessionId`
+字段）load 时 MUST 默认为 `{}` / `null`（持久化迁移在 load 路径完成）。
+
+#### Scenario: 颁发后默认空
+
+- GIVEN owner 自动建 或 limited 通过 CLI 创建
+- WHEN  `GET /api/me/preferences` + `GET /api/me/active-session`
+- THEN  分别返 `{}` 与 `{ sessionId: null }`
+
+#### Scenario: PUT preferences { toolbar: null } 清掉
+
+- GIVEN 已存 toolbar layout
+- WHEN  `PUT /api/me/preferences { toolbar: null }`
+- THEN  200，后续 `GET /api/me/preferences` 返 `{}`
+
+#### Scenario: 旧 users.json 升级时无 preferences 字段不破坏 load
+
+- GIVEN 磁盘上 users.json 来自 pre-m-user-prefs 版本（无 preferences
+  / lastActiveSessionId 字段）
+- WHEN  UserStore 启动 load
+- THEN  内存中 user 记录的 `preferences === {}` 与 `lastActiveSessionId === null`
+
 #### Scenario: token login 颁 cookie
 
 - GIVEN limited user alice 已由 owner 创建，token plaintext 已颁

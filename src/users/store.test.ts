@@ -3,12 +3,15 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { UserStore } from './store.js';
+import type { ToolbarLayout } from './types.js';
 
 describe('UserStore', () => {
   let configDir: string;
@@ -206,6 +209,116 @@ describe('UserStore', () => {
     it('rejects setQuotaLimit on owner', () => {
       const owner = store.getOwner();
       expect(() => store.setQuotaLimit(owner.id, { costLimitUsd: 5 })).toThrow(/owner/);
+    });
+  });
+
+  describe('preferences (m-user-prefs)', () => {
+    it('fresh user has empty preferences object', () => {
+      const u = store.createLimitedUser({
+        username: 'alice',
+        costLimitUsd: 5,
+        tokensLimit: null,
+      });
+      expect(u.preferences).toEqual({});
+      expect(u.lastActiveSessionId).toBeNull();
+    });
+
+    it('owner bootstrap creates with empty prefs + null lastActiveSessionId', () => {
+      const owner = store.getOwner();
+      expect(owner.preferences).toEqual({});
+      expect(owner.lastActiveSessionId).toBeNull();
+    });
+
+    it('getPreferences returns null for unknown user', () => {
+      expect(store.getPreferences('does-not-exist')).toBeNull();
+    });
+
+    it('setPreferences + getPreferences roundtrip', () => {
+      const u = store.createLimitedUser({
+        username: 'alice',
+        costLimitUsd: 5,
+        tokensLimit: null,
+      });
+      const layout: ToolbarLayout = {
+        rows: 2,
+        cols: 3,
+        cells: [
+          { id: 'esc', label: 'Esc', action: 'plain', payload: '\x1b' },
+          { id: 'tab', label: 'Tab', action: 'plain', payload: '\t' },
+          null,
+          { id: 'ctrl', label: 'Ctrl', action: 'toggle-sticky-ctrl', payload: '' },
+          { id: 'c', label: '^C', action: 'ctrl-letter', payload: 'c' },
+          null,
+        ],
+      };
+      store.setPreferences(u.id, { toolbar: layout });
+      const got = store.getPreferences(u.id);
+      expect(got?.toolbar).toEqual(layout);
+    });
+
+    it('setLastActiveSession + roundtrip', () => {
+      const u = store.createLimitedUser({
+        username: 'alice',
+        costLimitUsd: 5,
+        tokensLimit: null,
+      });
+      const sid = '11111111-2222-3333-4444-555555555555';
+      const next = store.setLastActiveSession(u.id, sid);
+      expect(next.lastActiveSessionId).toBe(sid);
+      expect(store.findById(u.id)?.lastActiveSessionId).toBe(sid);
+      const cleared = store.setLastActiveSession(u.id, null);
+      expect(cleared.lastActiveSessionId).toBeNull();
+    });
+
+    it('legacy users.json (no preferences / lastActiveSessionId fields) migrates to defaults on load', () => {
+      // Build a legacy file by hand.
+      const legacyPath = join(configDir, 'legacy.json');
+      const ownerId = '00000000-0000-4000-8000-000000000001';
+      writeFileSync(
+        legacyPath,
+        JSON.stringify({
+          users: [
+            {
+              id: ownerId,
+              username: 'owner',
+              kind: 'owner',
+              createdAt: 1,
+              lastLoginAt: null,
+              quota: {
+                cost: { limitUsd: null, usedUsd: 0 },
+                tokens: { limit: null, used: 0 },
+              },
+              // preferences + lastActiveSessionId intentionally missing
+            },
+          ],
+        }),
+      );
+      const legacyStore = new UserStore({
+        statePath: legacyPath,
+        guestProjectsRoot: guestRoot,
+        now: () => now,
+      });
+      const owner = legacyStore.findById(ownerId);
+      expect(owner?.preferences).toEqual({});
+      expect(owner?.lastActiveSessionId).toBeNull();
+    });
+
+    it('persisted users.json contains preferences + lastActiveSessionId after writes', () => {
+      const u = store.createLimitedUser({
+        username: 'alice',
+        costLimitUsd: 5,
+        tokensLimit: null,
+      });
+      store.setPreferences(u.id, {
+        toolbar: { rows: 1, cols: 3, cells: [null, null, null] },
+      });
+      store.setLastActiveSession(u.id, 'sid-abc');
+      const raw = JSON.parse(readFileSync(statePath, 'utf8')) as {
+        users: Array<{ preferences?: object; lastActiveSessionId?: string | null }>;
+      };
+      const alice = raw.users.find((rec) => rec.lastActiveSessionId === 'sid-abc');
+      expect(alice?.preferences).toBeDefined();
+      expect(alice?.lastActiveSessionId).toBe('sid-abc');
     });
   });
 });

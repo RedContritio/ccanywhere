@@ -2,8 +2,65 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { TokenStore } from '../../tokens/store.js';
 import type { UserStore } from '../../users/store.js';
+import {
+  TOOLBAR_COLS_MAX,
+  TOOLBAR_COLS_MIN,
+  TOOLBAR_ROWS_MAX,
+  TOOLBAR_ROWS_MIN,
+  type UserPreferences,
+} from '../../users/types.js';
 
 const TokenLoginSchema = z.object({ token: z.string().min(32) });
+
+const ToolbarKeySchema = z.object({
+  id: z.string().min(1).max(64),
+  label: z.string().min(1).max(16),
+  ariaLabel: z.string().max(64).optional(),
+  title: z.string().max(128).optional(),
+  action: z.enum(['plain', 'ctrl-letter', 'toggle-sticky-ctrl']),
+  payload: z.string().max(16),
+});
+
+const ToolbarLayoutSchema = z
+  .object({
+    rows: z.number().int().min(TOOLBAR_ROWS_MIN).max(TOOLBAR_ROWS_MAX),
+    cols: z.number().int().min(TOOLBAR_COLS_MIN).max(TOOLBAR_COLS_MAX),
+    cells: z.array(ToolbarKeySchema.nullable()),
+  })
+  .superRefine((v, ctx) => {
+    if (v.cells.length !== v.rows * v.cols) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `cells.length must equal rows × cols (${v.rows * v.cols})`,
+      });
+    }
+    const ids = new Set<string>();
+    for (const cell of v.cells) {
+      if (cell === null) continue;
+      if (ids.has(cell.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `duplicate cell id: ${cell.id}`,
+        });
+        return;
+      }
+      ids.add(cell.id);
+      if (cell.action === 'ctrl-letter' && !/^[a-z]$/.test(cell.payload)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `ctrl-letter payload must be a..z (got ${JSON.stringify(cell.payload)})`,
+        });
+      }
+    }
+  });
+
+const PreferencesSchema = z.object({
+  toolbar: ToolbarLayoutSchema.nullable().optional(),
+});
+
+const ActiveSessionSchema = z.object({
+  sessionId: z.string().min(1).max(64).nullable(),
+});
 
 export interface AuthMultiUserRoutesOptions {
   readonly userStore: UserStore;
@@ -72,5 +129,81 @@ export async function registerAuthMultiUserRoutes(
       cost: user.quota.cost,
       tokens: user.quota.tokens,
     });
+  });
+
+  app.get('/api/me/preferences', async (req, reply) => {
+    const user = req.user;
+    if (user === undefined) {
+      await reply
+        .code(401)
+        .send({ error: { code: 'unauthorized', message: 'not logged in' } });
+      return;
+    }
+    const prefs = userStore.getPreferences(user.id);
+    await reply.code(200).send(prefs ?? {});
+  });
+
+  app.put('/api/me/preferences', async (req, reply) => {
+    const user = req.user;
+    if (user === undefined) {
+      await reply
+        .code(401)
+        .send({ error: { code: 'unauthorized', message: 'not logged in' } });
+      return;
+    }
+    const parsed = PreferencesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      await reply.code(400).send({
+        error: {
+          code: 'invalid_request',
+          message: 'preferences validation failed',
+          details: parsed.error.issues,
+        },
+      });
+      return;
+    }
+    // toolbar: null clears the override (client falls back to default).
+    // toolbar: undefined leaves it unchanged (rare — clients usually send
+    // the full prefs object).
+    const next: UserPreferences =
+      parsed.data.toolbar !== undefined && parsed.data.toolbar !== null
+        ? { toolbar: parsed.data.toolbar }
+        : {};
+    userStore.setPreferences(user.id, next);
+    await reply.code(200).send(next);
+  });
+
+  app.get('/api/me/active-session', async (req, reply) => {
+    const user = req.user;
+    if (user === undefined) {
+      await reply
+        .code(401)
+        .send({ error: { code: 'unauthorized', message: 'not logged in' } });
+      return;
+    }
+    await reply.code(200).send({ sessionId: user.lastActiveSessionId });
+  });
+
+  app.put('/api/me/active-session', async (req, reply) => {
+    const user = req.user;
+    if (user === undefined) {
+      await reply
+        .code(401)
+        .send({ error: { code: 'unauthorized', message: 'not logged in' } });
+      return;
+    }
+    const parsed = ActiveSessionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      await reply.code(400).send({
+        error: {
+          code: 'invalid_request',
+          message: 'active-session validation failed',
+          details: parsed.error.issues,
+        },
+      });
+      return;
+    }
+    userStore.setLastActiveSession(user.id, parsed.data.sessionId);
+    await reply.code(200).send({ sessionId: parsed.data.sessionId });
   });
 }

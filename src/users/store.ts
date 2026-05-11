@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { USERNAME_RE, type User } from './types.js';
+import { USERNAME_RE, type User, type UserPreferences } from './types.js';
 
 export class UserStoreError extends Error {
   constructor(message: string) {
@@ -109,6 +109,8 @@ export class UserStore {
         cost: { limitUsd: input.costLimitUsd, usedUsd: 0 },
         tokens: { limit: input.tokensLimit, used: 0 },
       },
+      preferences: {},
+      lastActiveSessionId: null,
     };
     this.users.set(user.id, user);
     try {
@@ -143,6 +145,43 @@ export class UserStore {
       },
     });
     this.persist();
+  }
+
+  /**
+   * Returns the user's preferences object. null only when the user id is
+   * unknown — present users always have at least `{}`.
+   */
+  getPreferences(userId: string): UserPreferences | null {
+    const u = this.users.get(userId);
+    return u ? u.preferences : null;
+  }
+
+  /**
+   * Replace preferences wholesale. Caller is responsible for validating
+   * `prefs` against the schema; UserStore stores them verbatim and never
+   * merges with the prior value.
+   */
+  setPreferences(userId: string, prefs: UserPreferences): User {
+    const u = this.users.get(userId);
+    if (!u) throw new UserStoreError(`user not found: ${userId}`);
+    const next: User = { ...u, preferences: prefs };
+    this.users.set(userId, next);
+    this.persist();
+    return next;
+  }
+
+  /**
+   * Cross-device "last selected session". null clears the selection. The
+   * server stores the id verbatim — staleness (session deleted) is
+   * resolved on the client when it joins against the live sessions list.
+   */
+  setLastActiveSession(userId: string, sessionId: string | null): User {
+    const u = this.users.get(userId);
+    if (!u) throw new UserStoreError(`user not found: ${userId}`);
+    const next: User = { ...u, lastActiveSessionId: sessionId };
+    this.users.set(userId, next);
+    this.persist();
+    return next;
   }
 
   setQuotaLimit(userId: string, input: SetQuotaLimitInput): User {
@@ -190,6 +229,8 @@ export class UserStore {
         cost: { limitUsd: null, usedUsd: 0 },
         tokens: { limit: null, used: 0 },
       },
+      preferences: {},
+      lastActiveSessionId: null,
     };
     this.users.set(owner.id, owner);
     this.persist();
@@ -211,7 +252,17 @@ export class UserStore {
     }
     if (Array.isArray(parsed.users)) {
       for (const u of parsed.users) {
-        if (typeof u?.id === 'string') this.users.set(u.id, u);
+        if (typeof u?.id !== 'string') continue;
+        // m-user-prefs migration: legacy records lack `preferences` and
+        // `lastActiveSessionId`. Coerce to defaults so downstream code
+        // (route handlers, ?? fallbacks) always sees defined values.
+        const migrated: User = {
+          ...u,
+          preferences: u.preferences ?? {},
+          lastActiveSessionId:
+            u.lastActiveSessionId === undefined ? null : u.lastActiveSessionId,
+        };
+        this.users.set(u.id, migrated);
       }
     }
   }
