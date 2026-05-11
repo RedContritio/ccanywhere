@@ -835,9 +835,9 @@
 }
 
 /* Sub-container holding ONLY [terminal-host + mobile-toolbar]. The
- * visual-viewport-driven translateY (keyboard up-shift) targets this,
- * leaving terminal-header pinned in place. See terminal.tsx
- * `applyKeyboardOffset`. */
+ * visual-viewport-driven keyboard channel applies `padding-bottom =
+ * keyboardH` here so the flex children physically shrink and a resize
+ * frame is sent to cc. See terminal-keyboard-overlay.ts. */
 .terminal-pane-content {
   flex: 1;
   display: flex;
@@ -853,14 +853,11 @@
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
   font-size: 13px;
-  /* Stack above .terminal-pane-content. The latter applies a
-   * transform: translateY(...) when the soft keyboard opens, which
-   * implicitly creates a stacking context (CSS spec: transformed
-   * elements form their own stacking context). Without explicit
-   * stacking on the header, terminal-pane-content paints on top of
-   * it, hiding the header except at the leftmost edge — caught in
-   * dogfood feedback. position:relative + z-index lifts the header
-   * above the transform's stacking context. */
+  /* Stack above .terminal-pane-content. Kept for defense even after the
+   * keyboard channel switched from translateY to padding-bottom: the
+   * .workspace-header still gets a transform (vv.pageTop counter-scroll),
+   * which creates a stacking context. position:relative + z-index keeps
+   * the terminal-header above any transformed ancestor. */
   position: relative;
   z-index: 5;
 }

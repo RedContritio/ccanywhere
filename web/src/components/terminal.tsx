@@ -65,15 +65,14 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     const container = containerRef.current;
     const placeholder = placeholderRef.current;
     if (container === null || placeholder === null) return;
-    // The visual-viewport translateY is applied to .terminal-pane-content —
-    // a sub-container that wraps just [terminal-host + MobileToolbar],
-    // NOT the terminal-header (汉堡 + session name + ws-conn chip). When
-    // the keyboard opens, those two shift up together so cursor row +
-    // virtual keys land above the keyboard, while the terminal-header
-    // stays pinned in its original layout position. Caught in feedback
-    // 4cc189f4 — earlier we translated the whole .terminal-pane and the
-    // top-bar (terminal-header) went up with it, which the user reported
-    // as "top bar 不停住".
+    // Keyboard channel reserves keyboardH as padding-bottom on
+    // .terminal-pane-content so flex children (terminal-host +
+    // MobileToolbar) shrink to fit above the keyboard. The shrink fires
+    // ResizeObserver on terminal-host → dims state machine → resize frame
+    // → cc draws into the visible region. terminal-header stays pinned
+    // (it's outside .terminal-pane-content). See terminal-keyboard-overlay.ts
+    // for the history (earlier translateY-based approach left cc with
+    // stale `rows`, so cursor / new output drew behind the keyboard).
     const { captureViewportMetrics, cleanup: cleanupKeyboardOverlay } =
       setupKeyboardOverlay(container);
 

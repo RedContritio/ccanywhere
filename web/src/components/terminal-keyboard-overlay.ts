@@ -23,20 +23,24 @@ export interface KeyboardOverlayHandle {
 }
 
 /**
- * Keyboard-overlay channel: translate `.terminal-pane-content` up by visual
- * viewport offset so cursor stays visible above the keyboard. Independent
- * from dims state machine — cc isn't informed of keyboard events.
+ * Keyboard-overlay channel: reserve the keyboard's height as `padding-bottom`
+ * on `.terminal-pane-content` so the pane's flex children (terminal-host +
+ * mobile-toolbar) physically shrink to fit above the keyboard. The shrink
+ * fires `ResizeObserver` on `.terminal-host` → dims state machine →
+ * `resize` frame, so cc learns the new `rows` and re-renders into the
+ * visible region — no off-screen cursor, no clipped output.
  *
- * Pinned `.workspace-header` against page auto-scroll: when keyboard pushes
- * the visual viewport up inside the layout viewport, the browser may also
- * auto-scroll the page to keep the focused input visible — counter-translate
- * the header by vv.pageTop so it stays put.
+ * Previously this channel applied `transform: translateY(-keyboardH)` to
+ * the same pane. That kept everything visible but cc was never told that
+ * `rows` had effectively shrunk, so cc would draw into rows that ended up
+ * behind the keyboard (and scroll history got pushed off the top each time
+ * the keyboard opened). User feedback called for resize semantics instead.
+ *
+ * `.workspace-header` still counter-translates by `vv.pageTop` against
+ * browser page auto-scroll when the focused input would otherwise be hidden
+ * behind the soft keyboard — that's independent of the pane resize.
  */
 export function setupKeyboardOverlay(container: HTMLElement): KeyboardOverlayHandle {
-  // The visual-viewport translateY is applied to .terminal-pane-content —
-  // a sub-container that wraps just [terminal-host + MobileToolbar],
-  // NOT the terminal-header. Keeps the top-bar pinned while cursor row
-  // shifts above the keyboard. Caught in feedback 4cc189f4.
   const pane = container.closest('.terminal-pane-content') as HTMLElement | null;
   const workspaceHeader =
     (container.closest('.workspace')?.querySelector('.workspace-header') as
@@ -66,13 +70,17 @@ export function setupKeyboardOverlay(container: HTMLElement): KeyboardOverlayHan
     // Safari (offsetTop > 0) and Chrome default `resizes-visual` path.
     const keyboardH = Math.max(0, layoutH - vv.height - vv.offsetTop);
     if (pane !== null) {
-      pane.style.transform = keyboardH > 0 ? `translateY(${-keyboardH}px)` : '';
+      // padding-bottom shrinks the flex content area; flex children
+      // (terminal-host with `flex: 1`, mobile-toolbar with fixed height)
+      // recompute, ResizeObserver on terminal-host fires, dims state
+      // machine sends a resize frame to cc.
+      pane.style.paddingBottom = keyboardH > 0 ? `${keyboardH}px` : '';
     }
     if (workspaceHeader !== null) {
       workspaceHeader.style.transform =
         vv.pageTop > 0 ? `translateY(${vv.pageTop}px)` : '';
     }
-    recordOp('viewport.vv', captureViewportMetrics());
+    recordOp('viewport.vv', { ...captureViewportMetrics(), keyboardH });
   };
 
   const onWindowResize = (): void => {
@@ -94,7 +102,8 @@ export function setupKeyboardOverlay(container: HTMLElement): KeyboardOverlayHan
         window.visualViewport.removeEventListener('scroll', onVisualViewport);
       }
       window.removeEventListener('resize', onWindowResize);
-      if (pane !== null) pane.style.transform = '';
+      if (pane !== null) pane.style.paddingBottom = '';
+      if (workspaceHeader !== null) workspaceHeader.style.transform = '';
     },
   };
 }
