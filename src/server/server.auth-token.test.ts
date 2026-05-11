@@ -42,6 +42,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
       internalHookToken: INTERNAL_HOOK_TOKEN,
       cliToken: CLI_TOKEN,
       webDistDir: null,
+      injectCcSessionId: false,
     });
   });
 

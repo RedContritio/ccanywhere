@@ -68,6 +68,7 @@ async function startServer(): Promise<Harness> {
     internalHookToken,
     cliToken,
     webDistDir: null,
+    injectCcSessionId: false,
   });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const addr = app.server.address() as AddressInfo;

@@ -95,6 +95,7 @@ describe('WebSocket /ws/sessions/:id cross-user mask', () => {
       internalHookToken,
       cliToken,
       webDistDir: null,
+      injectCcSessionId: false,
     });
     await app.listen({ host: '127.0.0.1', port: 0 });
     const port = (app.server.address() as AddressInfo).port;

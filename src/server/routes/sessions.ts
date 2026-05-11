@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -15,6 +16,12 @@ export interface SessionRoutesOptions {
   readonly idempotencyStore?: IdempotencyStore;
   /** m-multi-user: optional during step-4 rollout; required once wired. */
   readonly userStore?: UserStore;
+  /**
+   * #46: when true (default), append `--session-id <uuid>` to cc args in
+   * create mode so cc-id == ccanywhere-id. Tests using `sh` MUST pass
+   * `false` because sh rejects `--session-id`.
+   */
+  readonly injectCcSessionId?: boolean;
 }
 
 function isWithinSubtree(child: string, parent: string): boolean {
@@ -155,7 +162,14 @@ export async function registerSessionRoutes(
       return;
     }
 
+    // #46 quota: in create mode, pre-generate the session uuid and pass it
+    // to cc via `--session-id <uuid>` so that cc writes its jsonl as
+    // `<uuid>.jsonl` — same id as ccanywhere's SessionInfo.id. This lets
+    // the quota hook locate the jsonl deterministically. Resume mode reuses
+    // cc's existing jsonl (named after the resumed cc id), so we don't
+    // force a new --session-id there.
     const args: string[] = [];
+    let forcedSessionId: string | undefined;
     if (body.mode === 'resume') {
       const history =
         options.historyRoot === undefined
@@ -171,6 +185,9 @@ export async function registerSessionRoutes(
         return;
       }
       args.push('--resume', body.sessionId);
+    } else if (options.injectCcSessionId !== false) {
+      forcedSessionId = randomUUID();
+      args.push('--session-id', forcedSessionId);
     }
 
     const themeEnv = buildThemeEnv(body.webTheme);
@@ -183,6 +200,7 @@ export async function registerSessionRoutes(
       scrollbackBytes: config.scrollbackBytes,
       mode: body.mode,
       userId,
+      ...(forcedSessionId !== undefined ? { forcedSessionId } : {}),
       ...(Object.keys(themeEnv).length > 0 ? { env: themeEnv } : {}),
     };
     const withSize: Pick<SpawnOptions, 'cols' | 'rows'> = {

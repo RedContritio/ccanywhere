@@ -30,6 +30,7 @@ describe('REST API', () => {
       internalHookToken,
       cliToken,
       webDistDir: null,
+      injectCcSessionId: false,
     });
   });
 
@@ -68,6 +69,7 @@ describe('REST API', () => {
       internalHookToken,
       cliToken,
       webDistDir: null,
+      injectCcSessionId: false,
     });
     try {
       // Default cookie name no longer authenticates against this server.

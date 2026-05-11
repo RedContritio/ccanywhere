@@ -32,6 +32,7 @@ describe('REST API idempotency', () => {
       cliToken: CLI_TOKEN,
       idempotencyTtlMs: 60_000,
       webDistDir: null,
+      injectCcSessionId: false,
     });
   });
 

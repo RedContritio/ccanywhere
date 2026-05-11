@@ -51,6 +51,14 @@ export interface BuildServerOptions {
    * (useful in tests that don't want SPA fallback).
    */
   readonly webDistDir?: string | null;
+  /**
+   * #46 quota: when true (default), `POST /api/sessions` (create mode)
+   * appends `--session-id <uuid>` to cc args so cc's jsonl filename
+   * matches ccanywhere's SessionInfo.id. Tests that spawn `sh` instead
+   * of cc MUST pass `false` — sh rejects `--session-id` as invalid
+   * option and the PTY dies before snapshot.
+   */
+  readonly injectCcSessionId?: boolean;
 }
 
 function defaultWebDistDir(): string | null {
@@ -126,11 +134,17 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     historyRoot?: string;
     idempotencyStore: IdempotencyStore;
     userStore?: UserStore;
+    injectCcSessionId?: boolean;
   } = { idempotencyStore };
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
   if (opts.userStore !== undefined) sessionOpts.userStore = opts.userStore;
+  if (opts.injectCcSessionId !== undefined) sessionOpts.injectCcSessionId = opts.injectCcSessionId;
   await registerSessionRoutes(app, opts.config, opts.manager, opts.projectStore, sessionOpts);
-  await registerHookRoutes(app, opts.manager);
+  await registerHookRoutes(
+    app,
+    opts.manager,
+    opts.userStore !== undefined ? { userStore: opts.userStore } : {},
+  );
   await registerWebSocketRoutes(app, opts.manager, {
     heartbeat: opts.config.wsHeartbeat,
     outputFlushIntervalMs: Math.max(1, Math.round(1000 / opts.config.outputFps)),

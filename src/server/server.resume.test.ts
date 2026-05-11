@@ -40,6 +40,7 @@ describe('REST API with historyRoot for resume validation', () => {
       cliToken: CLI_TOKEN,
       historyRoot,
       webDistDir: null,
+      injectCcSessionId: false,
     });
   });
 

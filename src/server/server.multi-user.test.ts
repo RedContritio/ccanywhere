@@ -44,6 +44,7 @@ describe('REST API: cross-user isolation (multi-user)', () => {
       internalHookToken: INTERNAL_HOOK_TOKEN,
       cliToken: CLI_TOKEN,
       webDistDir: null,
+      injectCcSessionId: false,
     });
   });
 

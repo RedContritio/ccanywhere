@@ -7,6 +7,7 @@ import { resolveConfigDir } from '../config/paths.js';
 import { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
 import { ProjectStore, ProjectStoreError, ensureProjectsRoot } from '../projects/store.js';
+import { QuotaPathError, runStartupSanityCheck } from '../quota/path.js';
 import { buildServer } from '../server/server.js';
 import { SessionManager } from '../session/manager.js';
 import { TokenStore } from '../tokens/store.js';
@@ -89,6 +90,24 @@ export async function runServe(configPathArg?: string): Promise<void> {
     ownerId: userStore.getOwner().id,
   });
   const cliToken = ensureCliToken(configDir);
+
+  // #46 quota: verify ccJsonlPathOf matches cc CLI's path encoding before
+  // we accept the first request. Empty projects dir → skip + warn (new
+  // install). Encoding drift → fatal exit so the operator notices.
+  try {
+    runStartupSanityCheck({
+      logger: {
+        info: (msg) => logger.info(msg),
+        warn: (msg) => logger.warn(msg),
+      },
+    });
+  } catch (err) {
+    if (err instanceof QuotaPathError) {
+      logger.fatal(err.message);
+      process.exit(2);
+    }
+    throw err;
+  }
 
   const manager = new SessionManager({
     deletedSessionTtlMs: config.deletedSessionTtlMs,

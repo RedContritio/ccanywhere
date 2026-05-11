@@ -41,6 +41,22 @@ describe('buildHookSettings', () => {
     expect(cmd).toContain('|| true');
   });
 
+  it('UserPromptSubmit keeps stdout (no >/dev/null) so quota-block JSON reaches cc', () => {
+    const settings = buildHookSettings('s', ep);
+    const cmd = settings.hooks['UserPromptSubmit']?.[0]?.hooks[0]?.command ?? '';
+    // stderr redirected, but stdout MUST stream through to cc's hook-result reader
+    expect(cmd).toContain('2>/dev/null');
+    expect(cmd).not.toContain('>/dev/null 2>&1');
+  });
+
+  it('non-UserPromptSubmit events discard stdout (state-machine fire-and-forget)', () => {
+    const settings = buildHookSettings('s', ep);
+    for (const event of ['SessionStart', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SubagentStop']) {
+      const cmd = settings.hooks[event]?.[0]?.hooks[0]?.command ?? '';
+      expect(cmd).toContain('>/dev/null 2>&1');
+    }
+  });
+
   it('url-encodes the sessionId path component', () => {
     const settings = buildHookSettings('a/b c', ep);
     const cmd = settings.hooks['Stop']?.[0]?.hooks[0]?.command ?? '';

@@ -90,6 +90,7 @@ describe('POST /api/feedback', () => {
       internalHookToken,
       cliToken,
       webDistDir: null,
+      injectCcSessionId: false,
     });
   });
 

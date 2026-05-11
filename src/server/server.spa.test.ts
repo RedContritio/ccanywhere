@@ -35,6 +35,7 @@ describe('REST API SPA fallback', () => {
       internalHookToken: INTERNAL_HOOK_TOKEN,
       cliToken: CLI_TOKEN,
       webDistDir,
+      injectCcSessionId: false,
     });
   });
 
@@ -91,6 +92,7 @@ describe('REST API without web/dist', () => {
       internalHookToken: INTERNAL_HOOK_TOKEN,
       cliToken: CLI_TOKEN,
       webDistDir: null,
+      injectCcSessionId: false,
     });
   });
 

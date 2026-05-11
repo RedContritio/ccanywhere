@@ -21,6 +21,15 @@ export interface SpawnOptions {
   readonly resumeSessionId?: string;
   /** m-multi-user: User.id that owns this PTY session. */
   readonly userId: string;
+  /**
+   * #46 quota: caller-provided session id, threaded both into SessionInfo.id
+   * and into the cc CLI via `--session-id <uuid>` (caller is responsible for
+   * adding that flag to `args`). When set, cc writes its jsonl as
+   * `<id>.jsonl` matching ccanywhere's session id, so quota check can
+   * derive the jsonl path without ambiguity. Tests using non-cc binaries
+   * (e.g. `sh`) MUST NOT pass this — manager falls back to randomUUID.
+   */
+  readonly forcedSessionId?: string;
 }
 
 /**
@@ -99,7 +108,7 @@ export class SessionManager {
       }
     }
 
-    const id = randomUUID();
+    const id = opts.forcedSessionId ?? randomUUID();
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
 
