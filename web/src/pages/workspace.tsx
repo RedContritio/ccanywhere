@@ -8,6 +8,7 @@ import {
 import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { FeedbackDialog } from '../components/feedback-dialog.js';
+import { QuotaPanel } from '../components/quota-panel.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import type { DeadReason } from '../ws.js';
 import { wsConnLabel, type WsConnection } from '../ws-conn-label.js';
@@ -43,6 +44,7 @@ export function WorkspacePage(): JSX.Element {
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
 
@@ -303,6 +305,15 @@ export function WorkspacePage(): JSX.Element {
                   <span className="session-deleted-chip">已删除</span>
                 )}
                 <div className="header-spacer" />
+                <button
+                  type="button"
+                  className="terminal-header-quota"
+                  onClick={() => setQuotaOpen(true)}
+                  title="配额"
+                  aria-label="查看配额"
+                >
+                  💰
+                </button>
                 <span className={`ws-conn-chip is-${wsConnection}`}>
                   {wsConnLabel(wsConnection, deadReason)}
                 </span>
@@ -337,6 +348,7 @@ export function WorkspacePage(): JSX.Element {
         open={feedbackOpen}
         onClose={() => setFeedbackOpen(false)}
       />
+      <QuotaPanel open={quotaOpen} onClose={() => setQuotaOpen(false)} />
     </div>
   );
 }

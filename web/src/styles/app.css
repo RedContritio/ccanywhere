@@ -869,6 +869,79 @@
   font-weight: 500;
 }
 
+.terminal-header-quota {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.terminal-header-quota:hover {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.08));
+}
+
+.quota-panel .quota-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quota-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quota-row-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+.quota-row-pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-row-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-bar {
+  height: 8px;
+  background: var(--bg-elevated, rgba(127, 127, 127, 0.15));
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.quota-bar-fill {
+  height: 100%;
+  transition: width 0.2s ease-out;
+}
+
+.quota-bar.is-ok .quota-bar-fill {
+  background: #5cb85c;
+}
+
+.quota-bar.is-warn .quota-bar-fill {
+  background: #f0ad4e;
+}
+
+.quota-bar.is-exhausted .quota-bar-fill {
+  background: #d9534f;
+}
+
+.quota-footnote {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  margin: 8px 0 0;
+  line-height: 1.45;
+}
+
 .terminal-host {
   flex: 1;
   min-height: 0;
