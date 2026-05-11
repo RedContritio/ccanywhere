@@ -32,13 +32,31 @@ ccanywhere 所有工作（已 ship / 在做 / 待办 / 设计决策）都走 `op
 
 ### 不要在 memory / 散文中维护
 
-- 待办 backlog → `openspec/changes/` active 列出
+- 待办 backlog → `openspec/changes/` (大项) + `openspec/BACKLOG.md` (小项)
 - 已 ship 列表 → `openspec/archive/` + `git log`
 - 设计决策 → archive proposal "决策"段
 - 形式化保证 → archive proposal "形式化保证"段
 - 关键合约 → 对应 area 的 `specs/<area>/spec.md` Requirement
 
 memory 仅保留**无法从 openspec/git 推导**的协作约定（feedback type rules）。
+
+### 未启动 backlog 也必须落 OpenSpec
+
+conversation 里出现的 todo / "后续" / 用户提的 "也想要 X" / 我建议的
+follow-up — 全部**立即**落到：
+
+- **大项**（≥80 LOC 或跨多 commit）→ 建 `openspec/changes/<slug>/proposal.md`
+  + tasks.md，frontmatter `status: planned`（启动后改 `in-flight`）
+- **小项 / 散点**（≤80 LOC，单笔可做）→ 在 `openspec/BACKLOG.md` append 一
+  条，含**出处** / **scope 估算** / **优先级**
+
+落地是规则不是建议——禁止用 "我记得有 X" / "之前提过 Y" 类依赖记忆的回答。
+列 backlog 时直接 `ls openspec/changes/` + `cat openspec/BACKLOG.md`，
+不靠 grep archive 散段 / git log / 我回忆。
+
+启动 BACKLOG.md 里某项时，把它从 BACKLOG.md 删 + 建 `changes/<slug>/`（即便
+~30 LOC 也建 proposal，统一流程；proposal 可以很薄，只要有 intent + 决
+策点 + scope）。
 
 ## 在告诉用户 commit 之前，必须自己确认部署可用
 
