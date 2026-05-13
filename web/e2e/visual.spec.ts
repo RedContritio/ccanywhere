@@ -1,17 +1,12 @@
-import { expect, test } from '@playwright/test';
+import { devices, expect, test } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Visual screenshots for m-design-system-unify C3. Each test snaps a
+ * Visual screenshots for m-design-system-unify. Each test snaps a
  * meaningful UI state to `test-results/visual-*.png`. Author Read()s the
  * PNGs and does visual inspection — replaces the legacy "user opens
  * browser and checks visually" loop (see feedback_e2e_visual_verify.md).
- *
- * Coverage in this commit:
- *   - workspace home (no session selected) — base chrome / sidebar / theme
- *   - new-session dialog — DialogBase + Tabs + ListBase + SortButton
- *   - feedback dialog — DialogBase + Input + Textarea
  *
  * Out of scope: dialogs that require an active cc session (quota,
  * toolbar-edit unfortunately also reaches a `currentSession`-gated
@@ -23,6 +18,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCREENSHOT_DIR = path.resolve(__dirname, '..', 'test-results');
 
 test.describe('m-design-system-unify visual', () => {
+  // Force themeMode=dark so screenshots are deterministic regardless of
+  // the clock — without this the `auto` mode flips to light at 07:00
+  // local time and screenshot names disagree with what's painted.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'ccanywhere.ui',
+        JSON.stringify({
+          state: { themeMode: 'dark', currentSessionId: null },
+          version: 0,
+        }),
+      );
+    });
+  });
+
   test('workspace home (no session) dark mode', async ({ page }) => {
     await page.goto('/workspace');
     await page.waitForLoadState('networkidle');
@@ -66,6 +76,306 @@ test.describe('m-design-system-unify visual', () => {
     await expect(page.getByText('反馈').first()).toBeVisible();
   });
 
+  test('login page idle (unpaired) dark mode', async ({ page, context }) => {
+    // Clear the planted session cookie so probeSession() returns null and
+    // LoginPage settles in `idle / suggestLogin: false` mode (no
+    // localStorage deviceId in a fresh BrowserContext).
+    await context.clearCookies();
+    await page.goto('/login');
+    await page.waitForLoadState('networkidle');
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, 'visual-login-idle-dark.png'),
+      fullPage: true,
+    });
+    await expect(page.getByRole('heading', { name: 'CC anywhere' })).toBeVisible();
+  });
+
+  test('/settings page with toolbar config dark mode', async ({ page }) => {
+    // RequireAuth gates /settings on auth state held in zustand-persist
+    // localStorage, not the cookie. A fresh BrowserContext has no
+    // localStorage, so a direct `goto('/settings')` bounces to /login. Hit
+    // /workspace first so probeSession() populates the limited-user state,
+    // then navigate to /settings.
+    await page.goto('/workspace');
+    await page.waitForURL(/\/workspace/);
+    await page.waitForLoadState('networkidle');
+    await page.goto('/settings');
+    await page.waitForLoadState('networkidle');
+    // Wait for toolbar editor cells to render before snapping.
+    await page.waitForSelector('[data-slot="toolbar-cell"]');
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, 'visual-settings-toolbar-dark.png'),
+      fullPage: true,
+    });
+    await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '快捷栏布局' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '保存' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '重置默认' })).toBeVisible();
+  });
+
+  test('stale session id shows friendly recovery pane', async ({ page }) => {
+    // Hit /workspace first so probeSession() hydrates the limited-user
+    // state into zustand-persist (RequireAuth would otherwise bounce a
+    // direct goto to /login since fresh BrowserContext has empty
+    // localStorage). See the /settings test above for the same pattern.
+    await page.goto('/workspace');
+    await page.waitForURL(/\/workspace/);
+    await page.waitForLoadState('networkidle');
+    // Mock sessions to an empty list so fetchSessions resolves instantly
+    // and the stale UI lands well before the 5s auto-redirect timer.
+    // Without this the test's actionTimeout (also 5s) races the redirect.
+    await page.route('**/api/sessions', (route) => {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sessions: [] }),
+      });
+    });
+    const FAKE_ID = '00000000-0000-0000-0000-000000000000';
+    await page.goto(`/workspace/${FAKE_ID}`);
+    await page.waitForLoadState('networkidle');
+    // Wait until fetchSessions resolves and the stale state lands —
+    // until then a "加载中…" spinner may render instead.
+    await page.getByRole('heading', { name: '会话已结束' }).waitFor();
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, 'visual-stale-session-dark.png'),
+      fullPage: true,
+    });
+    await expect(
+      page.getByRole('heading', { name: '会话已结束' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '回到首页' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '新建会话' }),
+    ).toBeVisible();
+    // Copy must not leak dev jargon picked up from the old wording.
+    // Guard against future drift adding TTL / cleanup / tombstone vocabulary.
+    await expect(
+      page.getByText(/deletedSessionTtlMs|TTL|GC|回收|tombstone|cleanup/i),
+    ).toHaveCount(0);
+  });
+
+  test('terminal header (active session) dark mode', async ({ page }) => {
+    await page.goto('/workspace');
+    await page.waitForURL(/\/workspace/);
+    await page.waitForLoadState('networkidle');
+    const SESS_ID = '11111111-1111-1111-1111-111111111111';
+    const PROJ_ID = 'p-1';
+    await page.route('**/api/sessions', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sessions: [
+            {
+              id: SESS_ID,
+              projectId: PROJ_ID,
+              mode: 'create',
+              resumeSessionId: null,
+              state: 'idle',
+              createdAt: Date.now() - 60_000,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+    );
+    await page.route('**/api/projects', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          projects: [{ id: PROJ_ID, name: 'demo-proj', path: '/tmp/demo' }],
+        }),
+      }),
+    );
+    await page.goto(`/workspace/${SESS_ID}`);
+    await page.getByText('idle').first().waitFor();
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, 'visual-terminal-header-dark.png'),
+      fullPage: false,
+      clip: { x: 320, y: 0, width: 960, height: 80 },
+    });
+    await expect(page.getByText('demo-proj').first()).toBeVisible();
+  });
+
+  test('dead session pane (Resume preview) dark mode', async ({ page }) => {
+    await page.goto('/workspace');
+    await page.waitForURL(/\/workspace/);
+    await page.waitForLoadState('networkidle');
+    const DEAD_ID = '22222222-2222-2222-2222-222222222222';
+    const PROJ_ID = 'p-dead';
+    await page.route('**/api/sessions', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sessions: [
+            {
+              id: DEAD_ID,
+              projectId: PROJ_ID,
+              mode: 'create',
+              resumeSessionId: null,
+              state: 'dead',
+              createdAt: Date.now() - 120_000,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+    );
+    await page.route('**/api/projects', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          projects: [{ id: PROJ_ID, name: 'paused-proj', path: '/tmp/paused' }],
+        }),
+      }),
+    );
+    await page.route(`**/api/sessions/${DEAD_ID}/screen`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/plain; charset=utf-8',
+        body: 'previous frame:\n  prompt > ls\n  foo  bar  baz\n  prompt > ',
+      }),
+    );
+    await page.goto(`/workspace/${DEAD_ID}`);
+    await page.getByRole('button', { name: 'Resume' }).waitFor();
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, 'visual-dead-session-pane-dark.png'),
+      fullPage: false,
+      clip: { x: 320, y: 0, width: 960, height: 400 },
+    });
+    await expect(page.getByText('paused-proj').first()).toBeVisible();
+    await expect(page.getByText('已结束').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
+    await expect(page.getByText('prompt > ls').first()).toBeVisible();
+  });
+
+  // m-dead-pane-touch-select P5 regression: dead pane plain-text render
+  // on mobile viewport. Verifies sidebar drawer ☰ stays reachable (was
+  // broken by P4 overlay z-index+pointer-events) and the snapshot text
+  // is selectable via Range API (proxy for native long-press selection
+  // which playwright can't simulate at the OS level).
+  test.describe('mobile (iPhone 13)', () => {
+    // Hand-set the iPhone 13 properties instead of spreading
+    // devices['iPhone 13'] — the device descriptor includes
+    // defaultBrowserType: 'webkit' which playwright rejects inside a
+    // describe.use (forces a new worker).
+    const iphone13 = devices['iPhone 13'];
+    test.use({
+      viewport: iphone13.viewport,
+      userAgent: iphone13.userAgent,
+      deviceScaleFactor: iphone13.deviceScaleFactor,
+      isMobile: iphone13.isMobile,
+      hasTouch: iphone13.hasTouch,
+    });
+
+    test('dead session pane (P7 DOM renderer + capture-phase mouse stop) — sidebar reachable + text selectable', async ({
+      page,
+    }) => {
+      await page.goto('/workspace');
+      await page.waitForURL(/\/workspace/);
+      await page.waitForLoadState('networkidle');
+      const DEAD_ID = '33333333-3333-3333-3333-333333333333';
+      const PROJ_ID = 'p-dead-mobile';
+      await page.route('**/api/sessions', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            sessions: [
+              {
+                id: DEAD_ID,
+                projectId: PROJ_ID,
+                mode: 'create',
+                resumeSessionId: null,
+                state: 'dead',
+                createdAt: Date.now() - 120_000,
+                deletedAt: null,
+              },
+            ],
+          }),
+        }),
+      );
+      await page.route('**/api/projects', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            projects: [{ id: PROJ_ID, name: 'paused-mobile', path: '/tmp/m' }],
+          }),
+        }),
+      );
+      await page.route(`**/api/sessions/${DEAD_ID}/screen`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'text/plain; charset=utf-8',
+          body: 'mobile frame:\n  prompt > ls\n  foo  bar  baz\n  prompt > ',
+        }),
+      );
+      await page.goto(`/workspace/${DEAD_ID}`);
+      await page.getByRole('button', { name: 'Resume' }).waitFor();
+
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, 'visual-dead-session-pane-mobile-dark.png'),
+        fullPage: false,
+      });
+
+      // P4 broke this: overlay z-index+pointer-events covered/intercepted
+      // the header sibling area on mobile, making the drawer button hard
+      // to reach. P5 has no overlay → ☰ stays clickable.
+      const hamburger = page.getByRole('button', { name: '打开侧边栏' });
+      await expect(hamburger).toBeVisible();
+
+      // Plain-text snapshot is in DOM and visible (not behind canvas).
+      await expect(page.getByText('prompt > ls').first()).toBeVisible();
+
+      // Wait for xterm DOM renderer to actually paint rows. t.open +
+      // t.write are async-queued — DOM cells appear only after the
+      // RAF-paced renderer ticks.
+      await page.waitForSelector('[data-dead-pane="true"] .xterm-rows > div', {
+        timeout: 5000,
+      });
+
+      // Selectability proxy (P6): xterm's default DOM renderer puts
+      // each cell in a <span>; xterm-overrides.css unlocks user-select
+      // for [data-dead-pane="true"] descendants. Programmatically
+      // selecting the xterm-rows container via Range and reading
+      // getSelection() back confirms the spans are real native HTML
+      // text and selectable. Native long-press is OS-level and not
+      // driveable from playwright, but Range working means the element
+      // is genuinely selectable end-to-end.
+      const selectionText = await page.evaluate(() => {
+        const xterm = document.querySelector(
+          '[data-dead-pane="true"] .xterm-rows',
+        );
+        if (!xterm) return null;
+        const range = document.createRange();
+        range.selectNodeContents(xterm);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        return sel?.toString() ?? null;
+      });
+      expect(selectionText).toContain('prompt > ls');
+
+      // Tap the drawer button → confirms touch routing reaches header
+      // (P4 overlay would have intercepted).
+      await hamburger.tap();
+      // Drawer panel becomes visible after tap. The sidebar uses
+      // role=navigation around the project list; assert it's reachable.
+      await expect(
+        page.getByRole('button', { name: '关闭侧边栏' }).or(
+          page.locator('aside, [role="navigation"], [data-drawer-open="true"]'),
+        ).first(),
+      ).toBeVisible({ timeout: 2000 });
+    });
+  });
+
   test('new-session step 2 history with long preview truncates (regression: dialog must not overflow)', async ({
     page,
   }) => {
@@ -103,13 +413,16 @@ test.describe('m-design-system-unify visual', () => {
     await page.waitForSelector('[data-slot="dialog-content"]');
 
     // Pick the first project (any will do — we mock the response anyway).
-    await page.locator('[role="radio"]').first().click();
+    // Scope to dialog so we don't accidentally click the ThemeToggle
+    // radiogroup that lives in the workspace header.
+    const dialog = page.locator('[data-slot="dialog-content"]');
+    await dialog.locator('[role="radio"]').first().click();
     // Switch to resume tab.
     await page.getByRole('tab', { name: '从历史接续' }).click();
     // Submit advances to step 2 (button text "下一步").
     await page.getByRole('button', { name: '下一步' }).click();
-    // Wait for mocked history to render.
-    await page.waitForSelector('[role="radiogroup"]');
+    // Wait for mocked history to render inside the dialog.
+    await dialog.locator('[role="radiogroup"]').waitFor();
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, 'visual-history-long-preview-dark.png'),

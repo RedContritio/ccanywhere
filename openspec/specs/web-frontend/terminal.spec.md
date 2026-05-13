@@ -325,8 +325,18 @@ scroll 路径：
 
 selection 路径：
 
+- 合成 `MouseEvent` MUST 设 `detail` 字段。xterm SelectionService
+  `handleMouseDown` 用 `event.detail` 区分单 / 双 / 三击路由到
+  `_handleSingleClick` / `_handleDoubleClick` / `_handleTripleClick`；
+  detail=0（`new MouseEvent` 默认）三个分支都不命中，`_model
+  .selectionStart` 不会被设，drag 无法扩展 selection。
+- 长按 fire 时 dispatched mousedown MUST 用 `detail: 2`（走
+  `_handleDoubleClick` 选中按下处的 word + activeSelectionMode=WORD）。
+  `detail: 1` 单击只设 `selectionStart`，hold-only 长按（user 不
+  drag）会产出 empty selection——mobile-native 长按 UX 期望直接
+  选词，drag 再扩展。`mousemove` / `mouseup` 默认 `detail: 1` 不变。
 - 长按 timer fire 且 `touchMode === 'idle'` 时 → `touchMode = 'selection'`，
-  立即 `dispatchMouseEvent('mousedown', x, y)` 让 xterm selection service
+  立即 `dispatchMouseEvent('mousedown', x, y, 2)` 让 xterm selection service
   接管。
 - 后续 `touchmove` 派生 `mousemove`；`touchend` 派生 `mouseup`。
 - `touchend` 后 `setTimeout(0)` 让 xterm 完成 selection 计算，再调
@@ -352,7 +362,9 @@ ops 埋点 MUST 包含：`touch.start` / `touch.end` / `touch.drag.start` /
 - GIVEN xterm 已 stable，光标稳定
 - WHEN  用户单指按住屏幕 ≥ 500ms 不动 (移动 < 6 px)
 - THEN  `touchMode` 变 `selection`
-- AND   xterm selection service 被 mousedown 事件触发，开始选中
+- AND   合成 `mousedown` 带 `detail: 2` dispatched 到 `.xterm-screen`
+- AND   xterm `_handleDoubleClick` 选中按下处的 word，
+        `activeSelectionMode = WORD`
 - AND   touchend 后非空选中文本被 `navigator.clipboard.writeText` 写入
 - AND   `recordOp('term.selection.copy.ok')` 落 ops
 
@@ -363,6 +375,38 @@ ops 埋点 MUST 包含：`touch.start` / `touch.end` / `touch.drag.start` /
 - THEN  此时 `touchMode` 已是 `scroll`（不再 idle），timer 回调发现
   状态非 idle 不触发 selection
 - AND   滚动路径正常进行
+
+#### Dead session pane readonly mode（m-dead-pane-touch-select）
+
+Dead session 的 readonly snapshot pane (`DeadSessionSnapshot`) MUST attach
+同一 `setupTouchInteraction(container, term, undefined)`，复用 long-press
+→ selection → clipboard 路径，让 mobile 用户在 dead pane 也能长按选择
+文本。`fit` 传 `undefined` 标识 readonly mode：
+
+- pinch-zoom 路径 MUST 被跳过（onTouchStart 见 2 finger 时立即 return）；
+  dead pane 是 fixed cols/rows snapshot，font size 改变没有 fit
+  relayout 路径。
+- single-finger scroll 路径保留但 `term.scrollLines` 在 scrollback=0
+  下是 no-op，不影响用户。
+- long-press selection 路径完全等同 active pane，touchend 后同样
+  `navigator.clipboard.writeText` 复制。
+
+#### Scenario: dead pane 长按复制
+
+- GIVEN dead session pane 已渲染 last-screen snapshot
+- WHEN  mobile 用户单指按住 ≥ 500ms 不动
+- THEN  `touchMode` 变 `selection`，xterm selection service 被合成
+  mousedown 触发开始选中
+- AND   finger drag 扩展 selection
+- AND   touchend 后非空选中文本写入 clipboard
+
+#### Scenario: dead pane 不响应 pinch-zoom
+
+- GIVEN dead session pane 已渲染
+- WHEN  mobile 用户双指 pinch
+- THEN  `pinchBase` MUST NOT 被 set（fit undefined 导致 onTouchStart
+  在 2-finger 分支立即 return）
+- AND   font size 不变，无 fit relayout 尝试
 
 ### Requirement: 客户端诊断收集（diag）
 

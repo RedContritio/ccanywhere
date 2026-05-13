@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { probeSession, runLogin, runPair, runTokenLogin } from '../auth-flow.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
 import { useAuthStore } from '../state/auth.js';
@@ -148,49 +151,50 @@ export function LoginPage(): JSX.Element {
   };
 
   return (
-    <main className="login-page">
-      <div className="login-page-corner">
+    <main className="relative grid min-h-screen place-items-center bg-bg px-4 py-8 font-sans text-fg">
+      <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
-      <div className="login-card">
-        <h1 className="login-title">CC anywhere</h1>
-        <p className="login-subtitle">把本地 cc 映射到 web 的远程入口</p>
+      <div className="w-full max-w-sm space-y-5 rounded-lg border border-border bg-bg-elevated p-6">
+        <header className="space-y-1">
+          <h1 className="text-lg font-semibold tracking-tight">CC anywhere</h1>
+          <p className="text-xs text-fg-muted">
+            把本地 cc 映射到 web 的远程入口
+          </p>
+        </header>
 
-        {mode.kind === 'probing' && <p className="login-hint">检查会话状态…</p>}
+        {mode.kind === 'probing' && <Hint>检查会话状态…</Hint>}
 
         {mode.kind === 'idle' && mode.suggestLogin && (
-          <div className="login-form">
-            <p className="login-hint">
+          <div className="space-y-3">
+            <p className="text-sm text-fg-muted">
               已配对设备
-              {storedLabel !== null ? (
+              {storedLabel !== null && (
                 <>
-                  ：<strong>{storedLabel}</strong>
+                  ：<span className="font-mono text-fg">{storedLabel}</span>
                 </>
-              ) : (
-                ''
               )}
             </p>
-            <button type="button" className="login-submit" onClick={onLoginClick}>
+            <Button type="button" className="w-full" onClick={onLoginClick}>
               用本机生物识别登入
-            </button>
-            <button
-              type="button"
-              className="login-link"
+            </Button>
+            <LinkButton
               onClick={() => {
                 logout();
                 setMode({ kind: 'idle', suggestLogin: false });
               }}
             >
               重新配对其他设备
-            </button>
+            </LinkButton>
           </div>
         )}
 
         {mode.kind === 'idle' && !mode.suggestLogin && (
-          <form onSubmit={onPairSubmit} className="login-form">
-            <label className="login-field">
-              <span>设备名</span>
-              <input
+          <form onSubmit={onPairSubmit} className="space-y-4">
+            <Field>
+              <Label htmlFor="login-label">设备名</Label>
+              <Input
+                id="login-label"
                 type="text"
                 value={labelInput}
                 onChange={(e) => setLabelInput(e.target.value)}
@@ -200,36 +204,36 @@ export function LoginPage(): JSX.Element {
                 autoComplete="off"
                 spellCheck={false}
               />
-            </label>
-            <p className="login-hint">
-              点击「申请配对」会调用浏览器的生物识别（Touch ID / Face ID / 指纹），
-              然后等待 mac 上 <code>ccanywhere approve</code> 命令通过。
-            </p>
-            <button
+            </Field>
+            <Hint>
+              点击「申请配对」会调用浏览器的生物识别（Touch ID / Face ID /
+              指纹），然后等待 mac 上{' '}
+              <Code>ccanywhere approve</Code> 命令通过。
+            </Hint>
+            <Button
               type="submit"
-              className="login-submit"
+              className="w-full"
               disabled={labelInput.trim().length === 0}
             >
               申请配对
-            </button>
-            <button
-              type="button"
-              className="login-link"
+            </Button>
+            <LinkButton
               onClick={() => {
                 setTokenInput('');
                 setMode({ kind: 'token-input' });
               }}
             >
               用 token 登录（受限用户）
-            </button>
+            </LinkButton>
           </form>
         )}
 
         {mode.kind === 'token-input' && (
-          <form onSubmit={onTokenSubmit} className="login-form">
-            <label className="login-field">
-              <span>Token</span>
-              <input
+          <form onSubmit={onTokenSubmit} className="space-y-4">
+            <Field>
+              <Label htmlFor="login-token">Token</Label>
+              <Input
+                id="login-token"
                 type="password"
                 value={tokenInput}
                 onChange={(e) => setTokenInput(e.target.value)}
@@ -238,64 +242,101 @@ export function LoginPage(): JSX.Element {
                 autoFocus
                 autoComplete="off"
                 spellCheck={false}
+                className="font-mono"
               />
-            </label>
-            <p className="login-hint">
-              owner 通过 mac CLI <code>ccanywhere user create</code> 或{' '}
-              <code>ccanywhere token issue</code> 颁发的 plaintext token。
+            </Field>
+            <Hint>
+              owner 通过 mac CLI <Code>ccanywhere user create</Code> 或{' '}
+              <Code>ccanywhere token issue</Code> 颁发的 plaintext token。
               限 7 天有效期。
-            </p>
-            <button
+            </Hint>
+            <Button
               type="submit"
-              className="login-submit"
+              className="w-full"
               disabled={tokenInput.trim().length < 32}
             >
               登录
-            </button>
-            <button
-              type="button"
-              className="login-link"
-              onClick={() => setMode({ kind: 'idle', suggestLogin: deviceId !== null })}
+            </Button>
+            <LinkButton
+              onClick={() =>
+                setMode({ kind: 'idle', suggestLogin: deviceId !== null })
+              }
             >
               返回
-            </button>
+            </LinkButton>
           </form>
         )}
 
-        {mode.kind === 'token-submitting' && (
-          <p className="login-hint">正在验证 token…</p>
-        )}
+        {mode.kind === 'token-submitting' && <Hint>正在验证 token…</Hint>}
 
         {mode.kind === 'pairing-create' && (
-          <p className="login-hint">请用生物识别完成「{mode.label}」的注册…</p>
+          <Hint>
+            请用生物识别完成「
+            <span className="font-mono text-fg">{mode.label}</span>
+            」的注册…
+          </Hint>
         )}
 
         {mode.kind === 'pairing-await' && (
-          <div className="login-form">
-            <p className="login-hint">申请已提交，正在等待审批…</p>
-            <button type="button" className="login-link" onClick={cancelPair}>
-              取消
-            </button>
+          <div className="space-y-3">
+            <Hint>申请已提交，正在等待审批…</Hint>
+            <LinkButton onClick={cancelPair}>取消</LinkButton>
           </div>
         )}
 
-        {mode.kind === 'logging-in' && <p className="login-hint">正在用生物识别登入…</p>}
+        {mode.kind === 'logging-in' && <Hint>正在用生物识别登入…</Hint>}
 
         {mode.kind === 'error' && (
-          <div className="login-form">
-            <p className="login-error" role="alert">
+          <div className="space-y-3">
+            <p className="text-sm text-danger" role="alert">
               {mode.message}
             </p>
-            <button
-              type="button"
-              className="login-link"
-              onClick={() => setMode({ kind: 'idle', suggestLogin: deviceId !== null })}
+            <LinkButton
+              onClick={() =>
+                setMode({ kind: 'idle', suggestLogin: deviceId !== null })
+              }
             >
               重试
-            </button>
+            </LinkButton>
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+function Field({ children }: { children: React.ReactNode }): JSX.Element {
+  return <div className="space-y-1.5">{children}</div>;
+}
+
+function Hint({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <p className="text-xs leading-relaxed text-fg-muted">{children}</p>
+  );
+}
+
+function Code({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <code className="rounded-sm bg-bg px-1 py-0.5 font-mono text-[11px] text-fg">
+      {children}
+    </code>
+  );
+}
+
+function LinkButton({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-center text-xs text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+    >
+      {children}
+    </button>
   );
 }

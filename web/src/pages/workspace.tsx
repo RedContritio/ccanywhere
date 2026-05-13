@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { DeadSessionSnapshot } from '../components/dead-session-pane.js';
 import { MobileToolbar } from '../components/mobile-toolbar.js';
+import {
+  ActiveHeaderIcons,
+  DeadHeaderActions,
+} from '../components/workspace-header-actions.js';
 import {
   NewSessionDialog,
   type CreateRequest,
@@ -9,11 +16,11 @@ import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { FeedbackDialog } from '../components/feedback-dialog.js';
 import { QuotaPanel } from '../components/quota-panel.js';
-import { ToolbarEditDialog } from '../components/toolbar-edit-dialog.js';
+import { StatusBadge } from '../components/status-badge.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import type { DeadReason } from '../ws.js';
 import { wsConnLabel, type WsConnection } from '../ws-conn-label.js';
-import { ThemeToggle } from '../components/theme-toggle.js';
+import { ThemeCycleButton } from '../components/theme-toggle.js';
 import { logoutServer } from '../auth-flow.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
 import { useBackgroundPoll } from '../state/use-background-poll.js';
@@ -25,6 +32,15 @@ import { useProjectsStore } from '../state/projects.js';
 import { useSessionsStore, type SessionState } from '../state/sessions.js';
 import { useUiStore } from '../state/ui.js';
 
+const WS_CONN_TONE: Record<WsConnection, string> = {
+  connecting: 'text-fg-muted',
+  connected: 'text-success',
+  reconnecting: 'text-warning',
+  dead: 'text-danger',
+};
+
+const STALE_REDIRECT_MS = 5000;
+
 export function WorkspacePage(): JSX.Element {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -35,7 +51,9 @@ export function WorkspacePage(): JSX.Element {
   const fetchSessions = useSessionsStore((s) => s.fetchSessions);
   const createSession = useSessionsStore((s) => s.createSession);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
+  const resumeSession = useSessionsStore((s) => s.resumeSession);
   const sessionsError = useSessionsStore((s) => s.error);
+  const sessionsLoading = useSessionsStore((s) => s.loading);
 
   const currentSessionId = useUiStore((s) => s.currentSessionId);
   const selectSession = useUiStore((s) => s.selectSession);
@@ -52,7 +70,6 @@ export function WorkspacePage(): JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [quotaOpen, setQuotaOpen] = useState(false);
-  const [toolbarEditOpen, setToolbarEditOpen] = useState(false);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
 
@@ -154,6 +171,22 @@ export function WorkspacePage(): JSX.Element {
     }
   };
 
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeBusy, setResumeBusy] = useState(false);
+  const onResume = async (sid: string): Promise<void> => {
+    setResumeBusy(true);
+    setResumeError(null);
+    try {
+      await resumeSession(sid, { webTheme: effectiveTheme });
+      // Store now has the row as active; this component re-renders into
+      // the TerminalView branch.
+    } catch (err) {
+      setResumeError(err instanceof Error ? err.message : 'resume failed');
+    } finally {
+      setResumeBusy(false);
+    }
+  };
+
   const onWsConnected = useCallback(() => {
     setWsConnection('connected');
     setDeadReason(null);
@@ -173,41 +206,79 @@ export function WorkspacePage(): JSX.Element {
       : undefined;
   const headerStatus =
     liveSessionState ?? currentSession?.state ?? null;
+  const deadResumable =
+    currentSession?.state === 'dead' && currentSession.deletedAt === null;
+
+  // Stale URL recovery: when /workspace/<id> resolves to no live session
+  // (recycled by GC, deleted in another tab, never existed), auto-bounce
+  // back to /workspace after 5s so the URL doesn't sit on a permanent
+  // "this session is gone" pane. Gate on !loading + no error so we don't
+  // race a still-resolving fetch — the cleanup runs whenever the gate
+  // flips back, cancelling the redirect if the session actually appears.
+  useEffect(() => {
+    if (id === undefined) return;
+    if (currentSession !== undefined) return;
+    if (sessionsLoading) return;
+    if (sessionsError !== null) return;
+    const t = setTimeout(
+      () => navigate('/workspace', { replace: true }),
+      STALE_REDIRECT_MS,
+    );
+    return () => clearTimeout(t);
+  }, [id, currentSession, sessionsLoading, sessionsError, navigate]);
 
   // The drawer wraps the workspace header + session list on mobile. On
   // desktop it stays open inline (CSS turns the transform into a no-op).
   // Auto-close after picking a session so the terminal isn't hidden by
   // the drawer the whole time.
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-   
+
   useEffect(() => {
     closeDrawer();
   }, [id]);
 
   return (
-    <div className={`workspace ${drawerOpen ? 'is-drawer-open' : ''}`}>
-      <aside className="workspace-drawer">
-        <header className="workspace-header">
+    <div
+      data-workspace
+      className="relative flex h-[100svh] w-full flex-row overflow-hidden bg-bg font-sans text-fg"
+    >
+      <aside
+        className={cn(
+          'flex min-h-0 w-80 shrink-0 flex-col border-r border-border bg-bg-elevated',
+          // Mobile drawer: fixed overlay, slides in from left.
+          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-10 max-md:h-[100svh] max-md:w-[min(85vw,360px)] max-md:transform max-md:transition-transform max-md:duration-200 max-md:ease-out',
+          drawerOpen
+            ? 'max-md:translate-x-0'
+            : 'max-md:-translate-x-full',
+        )}
+      >
+        <header
+          data-workspace-header
+          className="relative z-[5] flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 max-md:flex-col max-md:items-stretch max-md:gap-2"
+        >
           <button
             type="button"
-            className="header-brand"
             onClick={() => navigate('/workspace')}
             aria-label="返回主页"
             title="返回主页"
+            className="text-sm font-semibold tracking-tight hover:text-brand"
           >
             CC anywhere
           </button>
-          <div className="header-spacer" />
-          <div className="header-actions">
-            <span className="header-device">{label ?? 'unnamed'}</span>
-            <ThemeToggle />
-            <button
+          <div className="flex-1 max-md:hidden" />
+          <div className="flex items-center gap-2 max-md:justify-between">
+            <span className="truncate font-mono text-xs text-fg-muted max-md:flex-1 max-md:text-center">
+              {label ?? 'unnamed'}
+            </span>
+            <ThemeCycleButton />
+            <Button
               type="button"
-              className="header-logout"
+              variant="ghost"
+              size="xs"
               onClick={() => void onLogout()}
             >
               登出
-            </button>
+            </Button>
           </div>
         </header>
         <NotificationBanner />
@@ -218,167 +289,168 @@ export function WorkspacePage(): JSX.Element {
           onNew={onOpenNew}
           onDelete={(sid) => void onDelete(sid)}
         />
-        <div className="drawer-bottom-actions">
-          <button
+        <div className="border-t border-border p-2">
+          <Button
             type="button"
-            className="drawer-feedback"
+            variant="ghost"
+            size="sm"
+            className="w-full"
             onClick={() => setFeedbackOpen(true)}
           >
             反馈
-          </button>
+          </Button>
         </div>
       </aside>
-      <button
-        type="button"
-        className="workspace-backdrop"
-        aria-label="关闭侧边栏"
-        onClick={closeDrawer}
-      />
-      <main className="workspace-main">
-        <section className="terminal-pane">
+      {drawerOpen && (
+        <button
+          type="button"
+          aria-label="关闭侧边栏"
+          onClick={closeDrawer}
+          className="fixed inset-0 z-[9] bg-black/50 md:hidden"
+        />
+      )}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-bg">
+        <section className="flex min-w-0 flex-1 flex-col">
           {sessionsError !== null && id === undefined ? (
-            <div className="terminal-pane-empty">
-              <button
-                type="button"
-                className="terminal-hamburger"
-                aria-label="打开侧边栏"
-                onClick={() => setDrawerOpen(true)}
-              >
-                ☰
-              </button>
+            <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
               加载失败: {sessionsError}
-            </div>
+            </EmptyPane>
           ) : id === undefined ? (
-            <div className="terminal-pane-empty">
-              <button
-                type="button"
-                className="terminal-hamburger"
-                aria-label="打开侧边栏"
-                onClick={() => setDrawerOpen(true)}
-              >
-                ☰
-              </button>
-              <div className="home-card">
-                <h2 className="home-title">CC anywhere</h2>
-                <dl className="home-status">
-                  <dt>设备</dt>
-                  <dd>{label ?? 'unnamed'}</dd>
-                  <dt>项目</dt>
-                  <dd>{projects.length}</dd>
-                  <dt>活跃会话</dt>
-                  <dd>{sessions.filter((s) => s.deletedAt === null).length}</dd>
+            <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
+              <div className="flex max-w-md flex-col items-center gap-4 text-center">
+                <h2 className="text-xl font-semibold tracking-tight">
+                  CC anywhere
+                </h2>
+                <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-xs">
+                  <dt className="text-right text-fg-muted">设备</dt>
+                  <dd className="font-mono text-fg">{label ?? 'unnamed'}</dd>
+                  <dt className="text-right text-fg-muted">项目</dt>
+                  <dd className="font-mono text-fg">{projects.length}</dd>
+                  <dt className="text-right text-fg-muted">活跃会话</dt>
+                  <dd className="font-mono text-fg">
+                    {sessions.filter((s) => s.deletedAt === null).length}
+                  </dd>
                 </dl>
-                <p className="home-hint">
+                <p className="text-xs text-fg-muted">
                   从左侧选中一个会话，或点击「+ 新建」创建一个
                 </p>
               </div>
-            </div>
+            </EmptyPane>
           ) : currentSession === undefined ? (
-            <div className="terminal-pane-empty">
-              <button
-                type="button"
-                className="terminal-hamburger"
-                aria-label="打开侧边栏"
-                onClick={() => setDrawerOpen(true)}
-              >
-                ☰
-              </button>
-              <div className="home-card">
-                <h2 className="home-title">会话不存在</h2>
-                <p className="home-hint">
-                  该 session id 可能已被回收（超过 deletedSessionTtlMs
-                  之后由 GC 清理）。
-                </p>
-                <div className="home-actions">
-                  <button
-                    type="button"
-                    className="home-cta"
-                    onClick={() => navigate('/workspace', { replace: true })}
-                  >
-                    回到首页
-                  </button>
-                  <button
-                    type="button"
-                    className="home-cta is-secondary"
-                    onClick={onOpenNew}
-                  >
-                    新建会话
-                  </button>
+            sessionsLoading ? (
+              <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
+                <p className="text-sm text-fg-muted">加载中…</p>
+              </EmptyPane>
+            ) : (
+              <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
+                <div className="flex max-w-md flex-col items-center gap-4 text-center">
+                  <h2 className="text-xl font-semibold tracking-tight">
+                    会话已结束
+                  </h2>
+                  <p className="text-xs leading-relaxed text-fg-muted">
+                    可以新建一个，或回到首页查看其它会话。
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => navigate('/workspace', { replace: true })}
+                    >
+                      回到首页
+                    </Button>
+                    <Button type="button" variant="outline" onClick={onOpenNew}>
+                      新建会话
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </EmptyPane>
+            )
           ) : deviceId === null ? (
-            <div className="terminal-pane-empty">未登录</div>
+            <div className="flex flex-1 items-center justify-center text-sm text-fg-muted">
+              未登录
+            </div>
           ) : (
             <>
-              <div className="terminal-header">
+              <header className="relative z-[5] flex shrink-0 items-center gap-2 border-b border-border bg-bg-elevated px-3 py-2 text-sm">
                 <button
                   type="button"
-                  className="terminal-hamburger"
                   aria-label="打开侧边栏"
                   onClick={() => setDrawerOpen(true)}
+                  className="rounded-md border border-border px-2 py-1 leading-none md:hidden"
                 >
                   ☰
                 </button>
-                <span className="terminal-header-name">
+                <span className="truncate font-medium">
                   {currentProject?.name ?? currentSession.projectId}
                 </span>
                 {headerStatus !== null && (
-                  <span className={`session-state-chip is-${headerStatus}`}>
-                    {headerStatus}
-                  </span>
+                  <StatusBadge state={headerStatus} variant="dot" />
                 )}
                 {currentSession.deletedAt !== null && (
-                  <span className="session-deleted-chip">已删除</span>
+                  <span className="font-mono text-xs text-danger">已删除</span>
                 )}
-                <div className="header-spacer" />
-                <button
-                  type="button"
-                  className="terminal-header-quota"
-                  onClick={() => setQuotaOpen(true)}
-                  title="配额"
-                  aria-label="查看配额"
-                >
-                  💰
-                </button>
-                <button
-                  type="button"
-                  className="terminal-header-prefs"
-                  onClick={() => setToolbarEditOpen(true)}
-                  title="自定义快捷栏"
-                  aria-label="自定义快捷栏"
-                >
-                  ⚙
-                </button>
-                <button
-                  type="button"
-                  className="terminal-header-reload"
-                  onClick={() => location.reload()}
-                  title="重连当前 session（清掉 cc Ink scrollback 累积的重复内容）"
-                  aria-label="刷新页面"
-                >
-                  ↻
-                </button>
-                <span className={`ws-conn-chip is-${wsConnection}`}>
-                  {wsConnLabel(wsConnection, deadReason)}
-                </span>
-              </div>
-              <div className="terminal-pane-content">
-                <div className="terminal-host">
-                  <TerminalView
-                    key={currentSession.id}
-                    ref={terminalRef}
-                    sessionId={currentSession.id}
-                    onStatus={onWsStatus}
-                    onConnected={onWsConnected}
-                    onReconnecting={onWsReconnecting}
-                    onDead={onWsDead}
+                <div className="flex-1" />
+                {deadResumable ? (
+                  <DeadHeaderActions
+                    busy={resumeBusy}
+                    onResume={() => void onResume(currentSession.id)}
+                    onDelete={() => void onDelete(currentSession.id)}
                   />
+                ) : (
+                  <ActiveHeaderIcons
+                    onQuota={() => setQuotaOpen(true)}
+                    onSettings={() => navigate('/settings')}
+                    onReload={() => location.reload()}
+                  />
+                )}
+                <span
+                  className={cn(
+                    'font-mono text-xs leading-none',
+                    deadResumable
+                      ? 'text-fg-muted'
+                      : WS_CONN_TONE[wsConnection],
+                  )}
+                >
+                  {deadResumable
+                    ? '已结束'
+                    : wsConnLabel(wsConnection, deadReason)}
+                </span>
+              </header>
+              <div
+                data-pane-content
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <div className="relative min-h-0 flex-1 overflow-hidden">
+                  {deadResumable ? (
+                    <DeadSessionSnapshot
+                      key={currentSession.id}
+                      sessionId={currentSession.id}
+                    />
+                  ) : (
+                    <TerminalView
+                      key={currentSession.id}
+                      ref={terminalRef}
+                      sessionId={currentSession.id}
+                      onStatus={onWsStatus}
+                      onConnected={onWsConnected}
+                      onReconnecting={onWsReconnecting}
+                      onDead={onWsDead}
+                    />
+                  )}
                 </div>
-                <MobileToolbar
-                  onKey={(data) => terminalRef.current?.input(data)}
-                />
+                {!deadResumable && (
+                  <MobileToolbar
+                    onKey={(data) => terminalRef.current?.input(data)}
+                  />
+                )}
               </div>
+              {resumeError !== null && (
+                <p
+                  role="alert"
+                  className="shrink-0 border-t border-border bg-bg-elevated px-3 py-2 text-xs text-danger"
+                >
+                  重连失败：{resumeError}
+                </p>
+              )}
             </>
           )}
         </section>
@@ -394,10 +466,28 @@ export function WorkspacePage(): JSX.Element {
         onClose={() => setFeedbackOpen(false)}
       />
       <QuotaPanel open={quotaOpen} onClose={() => setQuotaOpen(false)} />
-      <ToolbarEditDialog
-        open={toolbarEditOpen}
-        onClose={() => setToolbarEditOpen(false)}
-      />
+    </div>
+  );
+}
+
+function EmptyPane({
+  children,
+  onOpenDrawer,
+}: {
+  children: React.ReactNode;
+  onOpenDrawer: () => void;
+}): JSX.Element {
+  return (
+    <div className="relative flex flex-1 items-center justify-center p-4 text-center text-sm text-fg-muted">
+      <button
+        type="button"
+        aria-label="打开侧边栏"
+        onClick={onOpenDrawer}
+        className="absolute top-3 left-3 rounded-md border border-border px-2 py-1 leading-none md:hidden"
+      >
+        ☰
+      </button>
+      {children}
     </div>
   );
 }

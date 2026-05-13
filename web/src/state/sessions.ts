@@ -27,6 +27,13 @@ export interface CreateSessionRequest {
   webTheme?: 'dark' | 'light';
 }
 
+/** Optional viewport hints for resume (frontend's current terminal size). */
+export interface ResumeRequest {
+  cols?: number;
+  rows?: number;
+  webTheme?: 'dark' | 'light';
+}
+
 interface SessionsStore {
   sessions: Session[];
   loading: boolean;
@@ -37,6 +44,12 @@ interface SessionsStore {
     idempotencyKey: string,
   ) => Promise<Session>;
   deleteSession: (id: string) => Promise<void>;
+  /**
+   * m-session-persistence: revive a dead-stub session. Server reuses the
+   * original ccanywhere id (cc jsonl filename) so the conversation
+   * continues from the prior `--resume` point.
+   */
+  resumeSession: (id: string, req?: ResumeRequest) => Promise<Session>;
   /** Optimistic local mark — server is source of truth. */
   markSessionDeletedLocal: (id: string) => void;
 }
@@ -127,6 +140,20 @@ export const useSessionsStore = create<SessionsStore>((set) => ({
         x.id === id ? { ...x, deletedAt: x.deletedAt ?? Date.now() } : x,
       ),
     }));
+  },
+  resumeSession: async (id, req) => {
+    const revived = await api<Session>(
+      `/api/sessions/${encodeURIComponent(id)}/resume`,
+      {
+        method: 'POST',
+        body: req ?? {},
+      },
+    );
+    recordOp('session.resume', { id });
+    set((s) => ({
+      sessions: s.sessions.map((x) => (x.id === id ? revived : x)),
+    }));
+    return revived;
   },
   markSessionDeletedLocal: (id) =>
     set((s) => ({

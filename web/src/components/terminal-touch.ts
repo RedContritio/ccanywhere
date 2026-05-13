@@ -55,7 +55,10 @@ const VISUAL_LINE_HEIGHT_FACTOR = 1.2;
 export function setupTouchInteraction(
   container: HTMLElement,
   term: Terminal,
-  fit: FitAddon,
+  /** Optional. Pass `undefined` for readonly mode (dead pane snapshot)
+   *  where pinch-zoom font resize has no persistence semantics and no
+   *  fit addon is available. Long-press → selection still works. */
+  fit?: FitAddon,
 ): TouchInteractionHandle {
   let pinchBase: { dist: number; fontSize: number } | null = null;
   let singleTouchStart: { x: number; y: number } | null = null;
@@ -74,9 +77,18 @@ export function setupTouchInteraction(
     type: 'mousedown' | 'mousemove' | 'mouseup',
     x: number,
     y: number,
+    detail = 1,
   ): void => {
     const target =
       (container.querySelector('.xterm-screen') as HTMLElement | null) ?? container;
+    // xterm SelectionService.handleMouseDown checks `event.detail` to
+    // route into _handleSingleClick (detail=1) / _handleDoubleClick (2)
+    // / _handleTripleClick (3). detail=0 (MouseEvent default) hits none
+    // of them → `_model.selectionStart` never gets set → subsequent
+    // _handleMouseMove returns early on `!selectionStart` → drag does
+    // not extend the selection. The long-press path passes detail=2 so
+    // a hold-only gesture selects the word at the touch point (mobile-
+    // native UX), and drag still extends in WORD mode after.
     const ev = new MouseEvent(type, {
       bubbles: true,
       cancelable: true,
@@ -84,6 +96,7 @@ export function setupTouchInteraction(
       clientY: y,
       button: 0,
       buttons: type === 'mouseup' ? 0 : 1,
+      detail,
       view: window,
     });
     target.dispatchEvent(ev);
@@ -104,6 +117,9 @@ export function setupTouchInteraction(
   const onTouchStart = (e: TouchEvent): void => {
     recordOp('touch.start', { fingers: e.touches.length });
     if (e.touches.length === 2) {
+      // Readonly mode (dead pane): no fit addon → no way to relayout
+      // after font size change. Skip pinch-zoom entirely.
+      if (fit === undefined) return;
       pinchBase = {
         dist: fingerDistance(e.touches),
         fontSize: term.options.fontSize ?? FONT_SIZE_DEFAULT,
@@ -130,7 +146,13 @@ export function setupTouchInteraction(
         if (touchMode === 'idle' && singleTouchStart !== null) {
           touchMode = 'selection';
           recordOp('touch.longpress', { x: lastTouchClient.x, y: lastTouchClient.y });
-          dispatchMouseEvent('mousedown', lastTouchClient.x, lastTouchClient.y);
+          // detail=2 routes into xterm _handleDoubleClick which selects
+          // the word at the touch point and switches activeSelectionMode
+          // to WORD — matching mobile-native long-press UX (hold to
+          // select word; drag to extend by word). A detail=1 single
+          // click would only set selectionStart and require subsequent
+          // mousemove to produce any visible selection at all.
+          dispatchMouseEvent('mousedown', lastTouchClient.x, lastTouchClient.y, 2);
         }
       }, LONG_PRESS_MS);
     }
@@ -167,7 +189,10 @@ export function setupTouchInteraction(
       if (next !== term.options.fontSize) {
         term.options.fontSize = next;
         try {
-          fit.fit();
+          // pinchBase only gets set when fit is defined (onTouchStart
+          // returns early otherwise), so fit is guaranteed here at
+          // runtime — optional chain is just to satisfy TS.
+          fit?.fit();
         } catch {
           // fit can throw mid-resize; ResizeObserver will reconcile
         }

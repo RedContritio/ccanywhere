@@ -12,7 +12,12 @@ import type { SessionState } from '../state/sessions.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
 import { TerminalSocket, type DeadReason } from '../ws.js';
 import { setupTerminalSocket } from './terminal-socket-setup.js';
-import { loadStoredFontSize, pickRenderer, THEMES } from './terminal-config.js';
+import {
+  FONT_FAMILY_DEFAULT,
+  loadStoredFontSize,
+  pickRenderer,
+  THEMES,
+} from './terminal-config.js';
 import { setupDimsStateMachine } from './terminal-dims.js';
 import { setupKeyboardOverlay } from './terminal-keyboard-overlay.js';
 import { setupTouchInteraction } from './terminal-touch.js';
@@ -65,20 +70,20 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     const container = containerRef.current;
     const placeholder = placeholderRef.current;
     if (container === null || placeholder === null) return;
-    // Keyboard channel reserves keyboardH as padding-bottom on
-    // .terminal-pane-content so flex children (terminal-host +
-    // MobileToolbar) shrink to fit above the keyboard. The shrink fires
-    // ResizeObserver on terminal-host → dims state machine → resize frame
-    // → cc draws into the visible region. terminal-header stays pinned
-    // (it's outside .terminal-pane-content). See terminal-keyboard-overlay.ts
-    // for the history (earlier translateY-based approach left cc with
-    // stale `rows`, so cursor / new output drew behind the keyboard).
+    // Keyboard channel reserves keyboardH as padding-bottom on the
+    // pane container ([data-pane-content]) so flex children
+    // (terminal host + MobileToolbar) shrink to fit above the keyboard.
+    // The shrink fires ResizeObserver → dims state machine → resize frame
+    // → cc draws into the visible region. terminal header stays pinned
+    // (it's outside the pane). See terminal-keyboard-overlay.ts for the
+    // history (earlier translateY-based approach left cc with stale
+    // `rows`, so cursor / new output drew behind the keyboard).
     const { captureViewportMetrics, cleanup: cleanupKeyboardOverlay } =
       setupKeyboardOverlay(container);
 
     // ── Terminal — mounted early; placeholder covers it until stable ─
     const term = new Terminal({
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      fontFamily: FONT_FAMILY_DEFAULT,
       fontSize: loadStoredFontSize(),
       theme: THEMES[effectiveRef.current],
       convertEol: false,
@@ -209,11 +214,15 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   }, [effective]);
 
   return (
-    <div className="terminal-view-pane">
-      <div ref={containerRef} className="terminal-view" />
-      <div ref={placeholderRef} className="terminal-placeholder" aria-hidden="true">
-        <span className="terminal-placeholder-cursor" />
-        <span className="terminal-placeholder-label">加载中…</span>
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="absolute inset-0 p-2" />
+      <div
+        ref={placeholderRef}
+        aria-hidden="true"
+        className="absolute inset-0 z-10 flex items-center justify-center bg-bg font-mono"
+      >
+        <span className="inline-block h-4 w-2 animate-pulse bg-fg" />
+        <span className="ml-3 text-xs text-fg-muted opacity-60">加载中…</span>
       </div>
     </div>
   );

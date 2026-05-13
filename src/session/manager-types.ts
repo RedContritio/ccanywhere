@@ -1,0 +1,70 @@
+import type { Session, SessionMode } from './types.js';
+import type { SessionRegistry } from './registry.js';
+
+export interface SpawnOptions {
+  readonly projectId: string;
+  readonly cwd: string;
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly cols?: number;
+  readonly rows?: number;
+  readonly env?: Readonly<Record<string, string>>;
+  readonly scrollbackBytes: number;
+  readonly mode: SessionMode;
+  readonly resumeSessionId?: string;
+  /** m-multi-user: User.id that owns this PTY session. */
+  readonly userId: string;
+  /**
+   * #46 quota: caller-provided session id, threaded both into SessionInfo.id
+   * and into the cc CLI via `--session-id <uuid>` (caller is responsible for
+   * adding that flag to `args`). When set, cc writes its jsonl as
+   * `<id>.jsonl` matching ccanywhere's session id, so quota check can
+   * derive the jsonl path without ambiguity. Tests using non-cc binaries
+   * (e.g. `sh`) MUST NOT pass this — manager falls back to randomUUID.
+   *
+   * m-session-persistence: also used by `resumeDeadStub()` to reuse the
+   * original ccanywhere id (and thus the original cc jsonl).
+   */
+  readonly forcedSessionId?: string;
+}
+
+/**
+ * Discriminated result of `SessionManager.spawn`. `attached` means a prior
+ * web-session is already alive for the same cc resumeSessionId — caller
+ * should idempotently return that existing session row instead of treating
+ * this as a "new" creation. Without this guard, two cc processes end up
+ * writing the same `~/.claude/projects/<cwd>/<X>.jsonl` and the history
+ * file is corrupted (anthropics/claude-code#26964).
+ */
+export type SpawnResult =
+  | { readonly kind: 'created'; readonly session: Session }
+  | { readonly kind: 'attached'; readonly existingId: string };
+
+export interface SessionManagerOptions {
+  /**
+   * Time after `deletedAt` a soft-deleted session is physically removed
+   * from the manager's map. Defaults to 10 minutes. GC runs
+   * opportunistically on spawn / list calls.
+   */
+  readonly deletedSessionTtlMs?: number;
+  /**
+   * Optional disk persistence. When set, spawn/markDeleted/exit/gc all
+   * write to disk so the next `loadDeadStubs()` can recover the session
+   * list (per m-session-persistence). Tests with no persistence needs
+   * leave this undefined.
+   */
+  readonly registry?: SessionRegistry;
+}
+
+export function buildEnv(
+  extra: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (typeof v === 'string') out[k] = v;
+  }
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) out[k] = v;
+  }
+  return out;
+}

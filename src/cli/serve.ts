@@ -8,8 +8,10 @@ import { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
 import { ProjectStore, ProjectStoreError, ensureProjectsRoot } from '../projects/store.js';
 import { QuotaPathError, runStartupSanityCheck } from '../quota/path.js';
+import { maybePricingStaleWarn } from '../quota/pricing.js';
 import { buildServer } from '../server/server.js';
 import { SessionManager } from '../session/manager.js';
+import { SessionRegistry } from '../session/registry.js';
 import { TokenStore } from '../tokens/store.js';
 import { UserStore } from '../users/store.js';
 
@@ -91,6 +93,11 @@ export async function runServe(configPathArg?: string): Promise<void> {
   });
   const cliToken = ensureCliToken(configDir);
 
+  // m-pricing-staleness-sentinel (B7): one-line warn at boot if the
+  // hardcoded Anthropic pricing table is >180 days unverified. Side
+  // effect only — priceFor() still returns the table.
+  maybePricingStaleWarn(new Date(), (msg) => logger.warn(msg));
+
   // #46 quota: verify ccJsonlPathOf matches cc CLI's path encoding before
   // we accept the first request. Empty projects dir → skip + warn (new
   // install). Encoding drift → fatal exit so the operator notices.
@@ -109,9 +116,15 @@ export async function runServe(configPathArg?: string): Promise<void> {
     throw err;
   }
 
+  // m-session-persistence: hardcode <configDir>/sessions/ per D9. Boot
+  // synchronously loads previously-persisted session metadata + last
+  // screen snapshots into dead-stub map so list/Resume work from frame 0.
+  const sessionRegistry = new SessionRegistry(join(configDir, 'sessions'));
   const manager = new SessionManager({
     deletedSessionTtlMs: config.deletedSessionTtlMs,
+    registry: sessionRegistry,
   });
+  manager.loadDeadStubs();
   const internalHookToken = randomBytes(32).toString('hex');
 
   const app = await buildServer({
@@ -129,7 +142,15 @@ export async function runServe(configPathArg?: string): Promise<void> {
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     logger.info({ signal }, 'shutting down');
     await app.close();
+    // m-session-persistence: actively kill PTYs in-process. Earlier
+    // attempt relied on the OS SIGHUP'ing the children after our exit,
+    // but by then the JS event loop is gone and `pty.onExit` never
+    // fires — last-screen snapshots were silently dropped. killAll()
+    // here awaits each PTY's exit (which fires handleSessionExit →
+    // queues snapshot writes); detach() then drains pendingWrites so
+    // the metadata is durable before process.exit.
     await manager.killAll();
+    await manager.detach();
     process.exit(0);
   };
   process.on('SIGINT', (s) => void shutdown(s));

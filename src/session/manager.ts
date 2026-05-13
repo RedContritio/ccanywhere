@@ -1,80 +1,53 @@
 import { randomUUID } from 'node:crypto';
 import { spawn as ptySpawn } from 'node-pty';
 import { logger } from '../log.js';
+import { makeDeadStub, type DeadStub } from './dead-stub.js';
+import {
+  buildEnv,
+  type SessionManagerOptions,
+  type SpawnOptions,
+  type SpawnResult,
+} from './manager-types.js';
+import type { SessionRegistry } from './registry.js';
 import { ScreenState } from './screen-state.js';
 import { Scrollback } from './scrollback.js';
 import { SessionImpl } from './session-impl.js';
-import type { Session, SessionInfo, SessionMode } from './types.js';
+import type { Session, SessionInfo, SessionRow } from './types.js';
 
-export type { Session } from './types.js';
-
-export interface SpawnOptions {
-  readonly projectId: string;
-  readonly cwd: string;
-  readonly command: string;
-  readonly args: readonly string[];
-  readonly cols?: number;
-  readonly rows?: number;
-  readonly env?: Readonly<Record<string, string>>;
-  readonly scrollbackBytes: number;
-  readonly mode: SessionMode;
-  readonly resumeSessionId?: string;
-  /** m-multi-user: User.id that owns this PTY session. */
-  readonly userId: string;
-  /**
-   * #46 quota: caller-provided session id, threaded both into SessionInfo.id
-   * and into the cc CLI via `--session-id <uuid>` (caller is responsible for
-   * adding that flag to `args`). When set, cc writes its jsonl as
-   * `<id>.jsonl` matching ccanywhere's session id, so quota check can
-   * derive the jsonl path without ambiguity. Tests using non-cc binaries
-   * (e.g. `sh`) MUST NOT pass this — manager falls back to randomUUID.
-   */
-  readonly forcedSessionId?: string;
-}
-
-/**
- * Discriminated result of `SessionManager.spawn`. `attached` means a prior
- * web-session is already alive for the same cc resumeSessionId — caller
- * should idempotently return that existing session row instead of treating
- * this as a "new" creation. Without this guard, two cc processes end up
- * writing the same `~/.claude/projects/<cwd>/<X>.jsonl` and the history
- * file is corrupted (anthropics/claude-code#26964).
- */
-export type SpawnResult =
-  | { readonly kind: 'created'; readonly session: Session }
-  | { readonly kind: 'attached'; readonly existingId: string };
-
-function buildEnv(extra: Readonly<Record<string, string>> | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) {
-    if (typeof v === 'string') out[k] = v;
-  }
-  if (extra) {
-    for (const [k, v] of Object.entries(extra)) out[k] = v;
-  }
-  return out;
-}
-
-export interface SessionManagerOptions {
-  /**
-   * Time after `deletedAt` a soft-deleted session is physically removed from the
-   * manager's map. Defaults to 10 minutes. GC runs opportunistically on spawn / list calls.
-   */
-  readonly deletedSessionTtlMs?: number;
-}
+export type {
+  SessionManagerOptions,
+  SpawnOptions,
+  SpawnResult,
+} from './manager-types.js';
+export type { Session, SessionRow } from './types.js';
+export type { DeadStub } from './dead-stub.js';
 
 const DEFAULT_DELETED_TTL_MS = 10 * 60 * 1000;
 
+function makeSessionInfo(id: string, opts: SpawnOptions): SessionInfo {
+  const base = {
+    id,
+    projectId: opts.projectId,
+    cwd: opts.cwd,
+    mode: opts.mode,
+    createdAt: Date.now(),
+    userId: opts.userId,
+  };
+  return opts.resumeSessionId !== undefined
+    ? { ...base, resumeSessionId: opts.resumeSessionId }
+    : base;
+}
+
 export class SessionManager {
   private readonly sessions = new Map<string, SessionImpl>();
-  // Tracks which cc resumeSessionId is currently being driven by which
-  // active web-session. Same cc-X MUST NOT have two concurrent cc
-  // processes — they'd interleave jsonl writes (anthropics/claude-code#26964).
-  // Map can briefly hold stale entries during the markDeleted → kill →
-  // exit window; spawn() rechecks the candidate is still active before
-  // honoring an attach, so stale entries never leak to callers.
+  /** PTY-exited sessions: disjoint from `sessions`, kept for Resume. */
+  private readonly deadStubs = new Map<string, DeadStub>();
+  /** cc resumeSessionId → ccanywhere id: avoid two cc procs on one jsonl
+   * (anthropics/claude-code#26964). Stale entries cleared on attach recheck. */
   private readonly _activeResumeTargets = new Map<string, string>();
   private readonly deletedSessionTtlMs: number;
+  private readonly registry: SessionRegistry | undefined;
+  private readonly pendingWrites = new Set<Promise<unknown>>();
 
   constructor(options: SessionManagerOptions = {}) {
     this.deletedSessionTtlMs = options.deletedSessionTtlMs ?? DEFAULT_DELETED_TTL_MS;
@@ -83,86 +56,68 @@ export class SessionManager {
         `deletedSessionTtlMs must be positive, got ${this.deletedSessionTtlMs}`,
       );
     }
+    this.registry = options.registry;
+  }
+
+  /** Boot-time sync recovery: GC stale soft-deleted, load rest as dead stubs. */
+  loadDeadStubs(now: number = Date.now()): void {
+    if (this.registry === undefined) return;
+    const all = this.registry.loadAllSync();
+    const ttl = this.deletedSessionTtlMs;
+    for (const p of all) {
+      // Active wins over stub (re-load after spawn / duplicate load).
+      if (this.sessions.has(p.info.id)) continue;
+      if (p.deletedAt !== null && p.deletedAt + ttl < now) {
+        this.trackWrite(this.registry.delete(p.info.id));
+        continue;
+      }
+      this.deadStubs.set(
+        p.info.id,
+        makeDeadStub(p.info, p.deletedAt, p.lastScreen, p.deletedAt ?? now),
+      );
+    }
+    logger.info(
+      { count: this.deadStubs.size },
+      'session registry loaded dead stubs',
+    );
   }
 
   spawn(opts: SpawnOptions): SpawnResult {
     this.gc(Date.now());
 
-    // Idempotent attach: if cc-X is already being driven by an active
-    // web-session, hand the caller that webSessionId instead of spawning
-    // a second cc process for the same jsonl history file.
-    if (opts.mode === 'resume' && opts.resumeSessionId !== undefined) {
-      const existingId = this._activeResumeTargets.get(opts.resumeSessionId);
-      if (existingId !== undefined) {
-        const existing = this.sessions.get(existingId);
-        if (
-          existing !== undefined &&
-          existing.deletedAt === null &&
-          existing.state !== 'dead'
-        ) {
-          return { kind: 'attached', existingId };
-        }
-        // Stale: candidate has been deleted or its PTY has exited but the
-        // exit listener hasn't fired yet. Drop the stale entry and fall through.
-        this._activeResumeTargets.delete(opts.resumeSessionId);
-      }
-    }
+    const attached = this.tryAttachExisting(opts);
+    if (attached !== null) return attached;
 
     const id = opts.forcedSessionId ?? randomUUID();
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
-
-    // Inherit parent process environment (HOME, PATH, …) so cc reads
-    // ~/.claude/ for auth + settings. MUST NOT override CLAUDE_CONFIG_DIR
-    // — earlier auto-injection (M5) shadowed user auth.
-    const env = buildEnv(opts.env);
-
+    // Inherit parent env (HOME, PATH, …) so cc reads ~/.claude/. MUST
+    // NOT override CLAUDE_CONFIG_DIR (M5 regression).
     const pty = ptySpawn(opts.command, [...opts.args], {
       cwd: opts.cwd,
       cols,
       rows,
-      env,
+      env: buildEnv(opts.env),
       name: 'xterm-256color',
     });
 
-    const info: SessionInfo =
-      opts.resumeSessionId === undefined
-        ? {
-            id,
-            projectId: opts.projectId,
-            cwd: opts.cwd,
-            mode: opts.mode,
-            createdAt: Date.now(),
-            userId: opts.userId,
-          }
-        : {
-            id,
-            projectId: opts.projectId,
-            cwd: opts.cwd,
-            mode: opts.mode,
-            resumeSessionId: opts.resumeSessionId,
-            createdAt: Date.now(),
-            userId: opts.userId,
-          };
-
+    const info = makeSessionInfo(id, opts);
     const session = new SessionImpl(
       info,
       pty,
       new Scrollback(opts.scrollbackBytes),
       new ScreenState(cols, rows),
+      (lastScreen) => this.handleSessionExit(id, lastScreen),
     );
     this.sessions.set(id, session);
+    this.deadStubs.delete(id); // resume-from-dead: no duplicate in list()
+    if (this.registry !== undefined) {
+      this.trackWrite(this.registry.save(info, null));
+      this.trackWrite(this.registry.deleteScreen(id)); // stale snapshot
+    }
 
     if (opts.mode === 'resume' && opts.resumeSessionId !== undefined) {
-      const lockKey = opts.resumeSessionId;
-      this._activeResumeTargets.set(lockKey, id);
-      // Identity check on release: if same lockKey was reclaimed by a newer
-      // web-session, this stale exit must not wipe the new owner's entry.
-      session.on('exit', () => {
-        if (this._activeResumeTargets.get(lockKey) === id) {
-          this._activeResumeTargets.delete(lockKey);
-        }
-      });
+      this.bindResumeLock(opts.resumeSessionId, id, session);
     }
 
     session.setState('idle');
@@ -183,13 +138,110 @@ export class SessionManager {
     return { kind: 'created', session };
   }
 
+  private tryAttachExisting(opts: SpawnOptions): SpawnResult | null {
+    if (opts.mode !== 'resume' || opts.resumeSessionId === undefined) {
+      return null;
+    }
+    const existingId = this._activeResumeTargets.get(opts.resumeSessionId);
+    if (existingId === undefined) return null;
+    const existing = this.sessions.get(existingId);
+    if (
+      existing !== undefined &&
+      existing.deletedAt === null &&
+      existing.state !== 'dead'
+    ) {
+      return { kind: 'attached', existingId };
+    }
+    // Stale entry — exit listener hasn't fired yet. Drop and fall through.
+    this._activeResumeTargets.delete(opts.resumeSessionId);
+    return null;
+  }
+
+  private bindResumeLock(lockKey: string, id: string, session: SessionImpl): void {
+    this._activeResumeTargets.set(lockKey, id);
+    // Identity-check on release: newer reclaim must not wipe new owner.
+    session.on('exit', () => {
+      if (this._activeResumeTargets.get(lockKey) === id) {
+        this._activeResumeTargets.delete(lockKey);
+      }
+    });
+  }
+
+  /** Dead → active: spawn a new cc PTY reusing the original id/jsonl. */
+  resumeDeadStub(
+    id: string,
+    spawnOpts: Omit<
+      SpawnOptions,
+      'mode' | 'resumeSessionId' | 'forcedSessionId' | 'projectId' | 'cwd' | 'userId'
+    >,
+  ): SpawnResult {
+    const stub = this.deadStubs.get(id);
+    if (stub === undefined) {
+      throw new Error(`resumeDeadStub: no dead stub for ${id}`);
+    }
+    if (stub.deletedAt !== null) {
+      throw new Error(`resumeDeadStub: stub ${id} is soft-deleted, cannot resume`);
+    }
+    // Lock key uses cc jsonl id (resume mode preserves original).
+    return this.spawn({
+      ...spawnOpts,
+      projectId: stub.info.projectId,
+      cwd: stub.info.cwd,
+      userId: stub.info.userId,
+      mode: 'resume',
+      resumeSessionId: stub.info.resumeSessionId ?? id,
+      forcedSessionId: id,
+    });
+  }
+
+  /** Soft-delete for active or dead rows. Returns false on unknown id. */
+  markDeleted(id: string): boolean {
+    const session = this.sessions.get(id);
+    if (session !== undefined) {
+      session.markDeleted();
+      if (this.registry !== undefined) {
+        this.trackWrite(this.registry.save(session.info, session.deletedAt));
+      }
+      return true;
+    }
+    const stub = this.deadStubs.get(id);
+    if (stub !== undefined) {
+      if (stub.deletedAt !== null) return true;
+      const updated = makeDeadStub(stub.info, Date.now(), stub.lastScreen, stub.exitedAt);
+      this.deadStubs.set(id, updated);
+      if (this.registry !== undefined) {
+        this.trackWrite(this.registry.save(stub.info, updated.deletedAt));
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** Active SessionImpl access (PTY-bound methods). Dead rows return undefined. */
   get(id: string): Session | undefined {
     return this.sessions.get(id);
   }
 
-  list(): Session[] {
+  /** Dead-stub access for the resume / screen endpoints. */
+  getDeadStub(id: string): DeadStub | undefined {
+    return this.deadStubs.get(id);
+  }
+
+  /** Look up either map; used by DELETE / auth-check paths. */
+  findRow(id: string): SessionRow | undefined {
+    const active = this.sessions.get(id);
+    if (active !== undefined) return active;
+    return this.deadStubs.get(id);
+  }
+
+  /** Last-frame text from a dead stub (workspace preview). */
+  getScreenSnapshot(id: string): string | undefined {
+    return this.deadStubs.get(id)?.lastScreen;
+  }
+
+  list(): SessionRow[] {
     this.gc(Date.now());
-    return [...this.sessions.values()];
+    return [...this.sessions.values(), ...this.deadStubs.values()];
   }
 
   listActive(): Session[] {
@@ -197,20 +249,51 @@ export class SessionManager {
     return [...this.sessions.values()].filter((s) => s.deletedAt === null);
   }
 
-  /**
-   * Remove soft-deleted sessions whose deletedAt + ttl has elapsed.
-   * `now` is injectable for tests; production callers pass Date.now().
-   */
+  /** Hard-delete soft-deleted rows past ttl. now injectable for tests. */
   gc(now: number): void {
     const ttl = this.deletedSessionTtlMs;
     for (const [id, s] of this.sessions) {
       if (s.deletedAt !== null && s.deletedAt + ttl < now) {
         this.sessions.delete(id);
+        if (this.registry !== undefined) {
+          this.trackWrite(this.registry.delete(id));
+        }
+      }
+    }
+    for (const [id, stub] of this.deadStubs) {
+      if (stub.deletedAt !== null && stub.deletedAt + ttl < now) {
+        this.deadStubs.delete(id);
+        if (this.registry !== undefined) {
+          this.trackWrite(this.registry.delete(id));
+        }
       }
     }
   }
 
+  /** Awaits pending registry writes (shutdown flush). Does not kill PTYs. */
+  async detach(): Promise<void> {
+    await Promise.allSettled([...this.pendingWrites]);
+  }
+
   async killAll(): Promise<void> {
-    await Promise.all(this.list().map((s) => s.kill()));
+    await Promise.all(this.listActive().map((s) => s.kill()));
+  }
+
+  private handleSessionExit(id: string, lastScreen: string): void {
+    const session = this.sessions.get(id);
+    if (session === undefined) return;
+    const deletedAt = session.deletedAt;
+    this.sessions.delete(id);
+    const stub = makeDeadStub(session.info, deletedAt, lastScreen, Date.now());
+    this.deadStubs.set(id, stub);
+    if (this.registry !== undefined) {
+      this.trackWrite(this.registry.save(session.info, deletedAt));
+      this.trackWrite(this.registry.saveScreen(id, lastScreen));
+    }
+  }
+
+  private trackWrite(p: Promise<unknown>): void {
+    this.pendingWrites.add(p);
+    void p.finally(() => this.pendingWrites.delete(p));
   }
 }

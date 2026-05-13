@@ -177,7 +177,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     expect(body.label).toBe('alice');
   });
 
-  it('GET /api/auth/me with owner cookie → 200 + kind=owner', async () => {
+  it('GET /api/auth/me with owner cookie → 200 + kind=owner; label=owner.username', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/auth/me',
@@ -186,7 +186,8 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { kind: string; label: string };
     expect(body.kind).toBe('owner');
-    expect(body.label).toBe('test-device');
+    // /me now surfaces the user identity, not the device label.
+    expect(body.label).toBe('owner');
   });
 
   it('GET /api/auth/me without cookie → 401', async () => {

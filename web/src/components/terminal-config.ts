@@ -58,6 +58,13 @@ export const FONT_SIZE_MAX = 32;
 export const FONT_SIZE_DEFAULT = 13;
 export const FONT_SIZE_LS_KEY = 'ccanywhere.fontSize';
 
+// Single source of truth for terminal monospace font stack — shared
+// between active TerminalView, dead-pane xterm, and dead-pane plain-text
+// overlay (overlay must match xterm cell width / line-height exactly to
+// stay glyph-aligned with the canvas underneath).
+export const FONT_FAMILY_DEFAULT =
+  'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
 // Quiescence threshold derivation — see
 // openspec/changes/m-mobile-fit-timing/design.md "QUIESCENCE_MS 推导".
 // Don't tune the constant directly; adjust the inputs.

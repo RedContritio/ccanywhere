@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Terminal } from '@xterm/xterm';
 import type { TerminalSocket } from '../ws.js';
+import { resetAuthStoreForTest, useAuthStore } from './auth.js';
 import { collectDiag, noteTermWrite, resetActiveForTest, setActiveTerm } from './diag.js';
 
 interface MockLine {
@@ -70,11 +71,33 @@ function makeMockSocket(diag: {
 describe('collectDiag', () => {
   beforeEach(() => {
     resetActiveForTest();
+    resetAuthStoreForTest();
   });
 
   afterEach(() => {
     resetActiveForTest();
+    resetAuthStoreForTest();
     vi.unstubAllGlobals();
+  });
+
+  it.each([['owner'] as const, ['limited'] as const])(
+    'includes userKind=%s from auth store when logged in',
+    (kind) => {
+      useAuthStore.setState({
+        deviceId: 'u-1',
+        label: 'someone',
+        kind,
+        verifiedAt: Date.now(),
+      });
+      const d = collectDiag();
+      expect(d.app?.userKind).toBe(kind);
+    },
+  );
+
+  it('omits userKind when auth store has no kind (logged out)', () => {
+    // resetAuthStoreForTest() in beforeEach already cleared kind to null.
+    const d = collectDiag();
+    expect(d.app?.userKind).toBeUndefined();
   });
 
   it('returns env/page/viewport/net even without active terminal', () => {
@@ -144,12 +167,15 @@ describe('collectDiag', () => {
     expect(d.activeSessionId).toBe('sess-A');
     expect(d.viewport!.cols).toBe(10);
     expect(d.viewport!.rows).toBe(3);
-    expect(d.app).toEqual({
+    expect(d.app).toMatchObject({
       activeSessionId: 'sess-A',
       sessionIds: ['sess-A', 'sess-B'],
       theme: 'auto',
       effectiveTheme: 'dark',
     });
+    // version is injected at build-time by vite.config.ts `define`;
+    // shape is "<short-sha-or-dev> @ <ISO time>".
+    expect(d.app!.version).toMatch(/^([0-9a-f]{7,40}|dev) @ \d{4}-\d{2}-\d{2}T/);
     expect(d.ws).toMatchObject({
       readyState: 1,
       lastSeq: 42,

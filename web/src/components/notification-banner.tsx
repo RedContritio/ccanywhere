@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 
 type Permission = 'default' | 'granted' | 'denied' | 'unsupported';
 
@@ -27,16 +28,20 @@ export function NotificationBanner(): JSX.Element | null {
 
   if (permission === 'denied') {
     return (
-      <div className="notification-banner is-denied" role="status">
-        <span>桌面通知已被浏览器禁用，请在站点设置中恢复</span>
-        <button
+      <div
+        role="status"
+        className="flex items-center gap-2 border-b border-border bg-bg-elevated px-3 py-2 text-xs text-warning"
+      >
+        <span className="flex-1">桌面通知已被浏览器禁用，请在站点设置中恢复</span>
+        <Button
           type="button"
-          className="notification-banner-dismiss"
+          variant="ghost"
+          size="icon-xs"
           onClick={() => setDismissed(true)}
           aria-label="关闭"
         >
           ×
-        </button>
+        </Button>
       </div>
     );
   }
@@ -54,25 +59,25 @@ export function NotificationBanner(): JSX.Element | null {
   };
 
   return (
-    <div className="notification-banner" role="status">
-      <span>开启桌面通知，cc 完成响应时即使切到别的标签也能提醒你</span>
-      <div className="notification-banner-actions">
-        <button
-          type="button"
-          className="notification-banner-enable"
-          onClick={() => void onEnable()}
-        >
-          开启
-        </button>
-        <button
-          type="button"
-          className="notification-banner-dismiss"
-          onClick={() => setDismissed(true)}
-          aria-label="关闭"
-        >
-          ×
-        </button>
-      </div>
+    <div
+      role="status"
+      className="flex items-center gap-2 border-b border-border bg-bg-elevated px-3 py-2 text-xs"
+    >
+      <span className="flex-1 text-fg-muted">
+        开启桌面通知，cc 完成响应时即使切到别的标签也能提醒你
+      </span>
+      <Button type="button" variant="default" size="xs" onClick={() => void onEnable()}>
+        开启
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        onClick={() => setDismissed(true)}
+        aria-label="关闭"
+      >
+        ×
+      </Button>
     </div>
   );
 }

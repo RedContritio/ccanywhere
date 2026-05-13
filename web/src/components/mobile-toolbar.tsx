@@ -1,4 +1,5 @@
 import { useEffect, useState, type MouseEvent } from 'react';
+import { cn } from '@/lib/utils';
 import { usePrefsStore } from '../state/prefs.js';
 import {
   DEFAULT_TOOLBAR_LAYOUT,
@@ -26,8 +27,9 @@ interface Props {
  *   - ctrl-letter:        translate payload (a..z) to its 0x01..0x1A byte
  *   - toggle-sticky-ctrl: toggle the next-key Ctrl-prefix flag
  *
- * Grid dims (cols/rows) drive CSS via the `--mt-cols` / `--mt-rows` custom
- * properties, so user-customized layouts render without a CSS rebuild.
+ * Visible on mobile only (`md:hidden`). Grid dims drive inline-style
+ * `gridTemplateColumns/Rows` so user-customized layouts render without
+ * any CSS rebuild.
  */
 export function MobileToolbar({ onKey }: Props): JSX.Element {
   const storeLayout = usePrefsStore((s) => s.toolbar);
@@ -75,48 +77,44 @@ export function MobileToolbar({ onKey }: Props): JSX.Element {
     }
   };
 
-  const onCtrlClick = (e: MouseEvent<HTMLButtonElement>): void => {
-    e.preventDefault();
-  };
-
-  const style = {
-    ['--mt-cols' as string]: String(layout.cols),
-    ['--mt-rows' as string]: String(layout.rows),
-  } as React.CSSProperties;
-
   return (
     <div
-      className="mobile-toolbar"
       role="toolbar"
       aria-label="virtual keys"
-      style={style}
+      className="grid shrink-0 gap-1 border-t border-border bg-bg-elevated p-1.5 md:hidden"
+      style={{
+        gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${layout.rows}, minmax(2.25rem, 1fr))`,
+      }}
     >
       {layout.cells.map((cell, idx) => {
         if (cell === null) {
-          // Empty cell — render an inert spacer so the grid template fills.
-          return <span key={`empty-${idx}`} className="mt-empty" aria-hidden="true" />;
+          return (
+            <span
+              key={`empty-${idx}`}
+              aria-hidden="true"
+              className="rounded-sm border border-dashed border-border/50"
+            />
+          );
         }
         const isStickyCtrl = cell.action === 'toggle-sticky-ctrl';
-        const className = [
-          'mt-key',
-          isStickyCtrl ? 'mt-ctrl' : '',
-          isStickyCtrl && pendingCtrl ? 'is-active' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
+        const isActive = isStickyCtrl && pendingCtrl;
         return (
           <button
             key={cell.id}
             type="button"
-            className={className}
             onMouseDown={keepXtermFocus}
             onClick={(e) => {
-              if (isStickyCtrl) onCtrlClick(e);
+              if (isStickyCtrl) e.preventDefault();
               dispatchKey(cell);
             }}
             aria-label={cell.ariaLabel}
             aria-pressed={isStickyCtrl ? pendingCtrl : undefined}
             title={cell.title}
+            className={cn(
+              'flex items-center justify-center rounded-sm border border-border bg-bg font-mono text-sm text-fg transition-colors active:bg-bg-elevated',
+              isActive && 'border-brand bg-brand text-bg',
+            )}
           >
             {cell.label}
           </button>

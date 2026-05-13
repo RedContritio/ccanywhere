@@ -49,12 +49,21 @@ export interface PtyDataChunkRecord {
   readonly head: string;
 }
 
-export interface Session {
+/**
+ * Minimal shape used by REST list endpoints and the post-restart
+ * persistence layer — anything that doesn't need a live PTY. Both
+ * `Session` (active, PTY-backed) and `DeadStub` (exited, snapshot-only)
+ * satisfy this.
+ */
+export interface SessionRow {
   readonly info: SessionInfo;
   readonly state: SessionState;
+  readonly deletedAt: number | null;
+}
+
+export interface Session extends SessionRow {
   readonly scrollback: Scrollback;
   readonly screenState: ScreenState;
-  readonly deletedAt: number | null;
   readonly lastDataAt: number | null;
   readonly exitCode: number | null;
   readonly recentDataChunks: readonly PtyDataChunkRecord[];

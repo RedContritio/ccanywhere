@@ -359,6 +359,86 @@ terminal-header MUST 提供 ⚙ 入口按钮（`.terminal-header-prefs`）打开
 - WHEN  关闭并重新打开浏览器，访问应用
 - THEN  themeMode 从 localStorage 恢复为 `dark`
 
+### Requirement: Design system（m-design-system-unify）
+
+ccanywhere web 端 MUST 通过 tailwind v4 + shadcn/ui copy（`web/src/
+components/ui/`）+ 统一 token 文件（`web/src/styles/tokens.css`）实现
+一致视觉系统，审美锚定 Warp settings GUI 风（dark first / 紧凑 / 扁平
+/ 字体分工）。无独立第三方 UI 库（Mantine / antd / Chakra / MUI），无
+CSS-in-JS。
+
+#### 字体分工
+
+UI chrome（label / 按钮 / 提示）MUST 使用 sans-serif；**所有数据值**
+MUST 使用 monospace：session id / token / project path / shortcut key
+/ SessionState label / count / timestamp。两套字体均走系统字体栈（无
+webfont 下载 / 无首屏 swap 抖动）。
+
+#### Token 上限
+
+- `--radius-*` 仅暴露 `sm: 2px` / `md: 4px` / `lg: 6px`，无更大。
+- `--shadow-*` 仅暴露 `--shadow-dialog`；其它组件 MUST NOT 使用 shadow。
+- 色板 = 5 中性（bg / bg-elevated / border / fg / fg-muted）+ 3 status
+  (success / warning / danger) + 1 brand = 9 色封顶。tokens.css 不
+  暴露其它颜色变量；shadcn 期望的 `--color-*` 名称仅作 alias 指向
+  上述 9 色。
+
+#### Component 抽象
+
+所有 dialog MUST 通过 `web/src/components/dialog-base.tsx` 创建；
+production 组件 MUST NOT 直接 import `@radix-ui/react-dialog`（仅
+dialog-base.tsx 自身允许）。
+
+所有紧凑 list MUST 通过 `web/src/components/list-base.tsx` 创建；
+特殊 shape（如 router `<Link>` wrap + trailing action）可借鉴视觉而
+非组件，但 MUST 不重新发明 list chrome。
+
+SessionState 4 状态显式映射到 `<StatusBadge>` 组件：
+
+| state    | tone        |
+|----------|-------------|
+| starting | brand       |
+| idle     | fg-muted    |
+| busy     | warning     |
+| dead     | danger      |
+
+`<StatusBadge>` MUST 提供 `variant: 'text' | 'dot'` 两形态：`text` 显
+示 monospace 文字（`idle` / `busy` 等），`dot` 显示同色圆点（用于 top
+bar 等 sans 邻居场景，避免 mono/sans 视觉重量冲突）。production 组件
+MUST NOT 硬编码 `state === 'busy'` 等条件直接渲染颜色。
+
+#### autoFocus 默认 off
+
+`DialogBase` 默认 `autoFocusContent = false`，避免 mobile tap 时 input
+立即获得焦点弹软键盘。个别 dialog 需要 autoFocus 时显式声明覆盖，
+grep `autoFocus` 即可全审。
+
+#### Store 拆分
+
+projects / history summary 相关状态 MUST 位于 `web/src/state/
+projects.ts`（与 sessions store 独立），但 sessions store 对外 hook
+入口（`useSessionsStore`）保持向后兼容。
+
+#### Scenario: dialog 通过 DialogBase
+
+- WHEN  grep `from '@radix-ui/react-dialog'` 在 `web/src/` 全 grep
+- THEN  匹配仅出现在 dialog-base.tsx 与其测试（无其它 production
+  import）
+
+#### Scenario: SessionState 颜色映射唯一
+
+- WHEN  grep `state === 'busy'` / `state === 'dead'` 在 `web/src/`
+- THEN  命中点全部用于状态逻辑判断（如 ws / use-completion-notify），
+  无直接渲染颜色的代码
+
+#### Scenario: 数据值字体分工
+
+- GIVEN session list 渲染一行（含 project name 与 SessionState
+  StatusBadge）
+- WHEN  查看 DOM 节点 computed font-family
+- THEN  project name 节点为 sans 系统字体栈
+- AND   SessionState text 节点（如 `idle`）为 monospace 系统字体栈
+
 ### Requirement: 路由
 
 前端 MUST 使用 `react-router-dom` v6，至少包含以下路由：
@@ -368,11 +448,14 @@ terminal-header MUST 提供 ⚙ 入口按钮（`.terminal-header-prefs`）打开
 | `/login`                | 登录页 |
 | `/workspace`            | 主界面，session 未选中 |
 | `/workspace/:id`        | 主界面 + 选中某 session |
+| `/settings`             | 偏好设置页（toolbar 配置 + 主题切换；后续扩 quota / diag 入口） |
 | `/history`              | 占位（M7/M8 实现），目前 redirect 到 `/workspace` |
-| `/settings`             | 占位（M7/M8 实现），目前 redirect 到 `/workspace` |
 | 其它任意路径             | 重定向到 `/workspace` 或 `/login`（视登录态） |
 
 未登录访问任何非 `/login` 路径 MUST 跳到 `/login`。
+
+`/settings` page MUST 是独立路由（非 dialog）。workspace 中进入设置的入
+口（terminal-header ⚙ 按钮）MUST `navigate('/settings')` 而非打开 dialog。
 
 ### Requirement: 浏览器桌面通知
 

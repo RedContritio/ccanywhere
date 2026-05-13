@@ -51,6 +51,24 @@
   --color-popover-foreground: var(--fg);
 }
 
+/* Base layer: previously lived in reset.css. Tailwind preflight covers
+   box-sizing / margin reset / font inheritance — only the page-level
+   sizing + body chrome that aren't preflight-covered stay here. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
 :root {
   --bg: #ffffff;
   --bg-elevated: #f5f5f5;

@@ -48,6 +48,14 @@ export class SessionImpl implements Session {
     private readonly pty: IPty,
     public readonly scrollback: Scrollback,
     public readonly screenState: ScreenState,
+    /**
+     * Invoked once on PTY exit with the last-visible-frame text from
+     * screenState.snapshot(). Caller (SessionManager) persists this to
+     * the registry so the workspace UI can show user the final screen
+     * + a Resume button after restart. Captured BEFORE dispose() so the
+     * headless buffer is still readable.
+     */
+    private readonly onSnapshotReady?: (text: string) => void,
   ) {
     this.pty.onData((data) => {
       this.scrollback.append(data);
@@ -66,6 +74,27 @@ export class SessionImpl implements Session {
     this.pty.onExit(({ exitCode, signal }) => {
       this.state = 'dead';
       this.exitCode = exitCode;
+      // Capture the last visible frame BEFORE dispose so the manager
+      // can persist it for the post-restart Resume preview.
+      let lastScreen = '';
+      try {
+        lastScreen = this.screenState.snapshot();
+      } catch (err) {
+        logger.warn(
+          { err, sessionId: this.info.id },
+          'screenState snapshot on exit failed',
+        );
+      }
+      if (this.onSnapshotReady !== undefined) {
+        try {
+          this.onSnapshotReady(lastScreen);
+        } catch (err) {
+          logger.warn(
+            { err, sessionId: this.info.id },
+            'onSnapshotReady callback threw',
+          );
+        }
+      }
       this.emit('status', { sessionId: this.info.id, state: 'dead' });
       const exitPayload =
         signal === undefined

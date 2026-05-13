@@ -6,6 +6,9 @@
 session 的生命周期长于浏览器标签页（关闭笔记本上的标签后用手机能重新接回），
 也长于 PTY 进程本身（让 DELETE 在弱网络下天然幂等）。
 
+跨 server 重启的持久化（dead stub registry / boot 加载 / shutdown 时序 /
+resume 路径 / F1-F5 保证）拆分到 [persistence.spec.md](./persistence.spec.md)。
+
 ## Requirements
 
 ### Requirement: 用户隔离（m-multi-user）

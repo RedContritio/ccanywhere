@@ -20,6 +20,7 @@ import { registerInternalRoutes } from './routes/internal.js';
 import { registerInternalMultiUserRoutes } from './routes/internal-multi-user.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
+import { registerSessionResumeRoutes } from './routes/sessions-resume.js';
 import { registerHookRoutes } from './routes/hook.js';
 
 export interface BuildServerOptions {
@@ -140,6 +141,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   if (opts.userStore !== undefined) sessionOpts.userStore = opts.userStore;
   if (opts.injectCcSessionId !== undefined) sessionOpts.injectCcSessionId = opts.injectCcSessionId;
   await registerSessionRoutes(app, opts.config, opts.manager, opts.projectStore, sessionOpts);
+  await registerSessionResumeRoutes(app, opts.config, opts.manager, opts.projectStore);
   await registerHookRoutes(
     app,
     opts.manager,

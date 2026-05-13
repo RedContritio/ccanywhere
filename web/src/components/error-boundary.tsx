@@ -112,44 +112,55 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error, submit } = this.state;
     if (error !== null) {
       return (
-        <div className="error-fallback" role="alert">
-          <h2 className="error-fallback-title">前端渲染崩溃</h2>
-          <p className="error-fallback-message">{error.message || '(无错误信息)'}</p>
-          {submit.kind === 'submitted' ? (
-            <p className="error-fallback-hint">已自动反馈：{submit.id}</p>
-          ) : submit.kind === 'submitting' ? (
-            <p className="error-fallback-hint">正在自动反馈…</p>
-          ) : submit.kind === 'failed' ? (
-            <p className="error-fallback-hint" role="alert">
-              自动反馈失败：{submit.message}
+        <div
+          role="alert"
+          className="grid min-h-screen place-items-center bg-bg p-6 font-sans text-fg"
+        >
+          <div className="w-full max-w-md space-y-3 rounded-lg border border-border bg-bg-elevated p-6">
+            <h2 className="text-base font-semibold tracking-tight">
+              前端渲染崩溃
+            </h2>
+            <p className="font-mono text-xs text-danger">
+              {error.message || '(无错误信息)'}
             </p>
-          ) : (
-            <p className="error-fallback-hint">错误已记录到 ops-log。</p>
-          )}
-          <div className="error-fallback-actions">
-            {submit.kind === 'failed' && (
+            {submit.kind === 'submitted' ? (
+              <p className="text-xs text-fg-muted">
+                已自动反馈：<span className="font-mono">{submit.id}</span>
+              </p>
+            ) : submit.kind === 'submitting' ? (
+              <p className="text-xs text-fg-muted">正在自动反馈…</p>
+            ) : submit.kind === 'failed' ? (
+              <p className="text-xs text-danger" role="alert">
+                自动反馈失败：{submit.message}
+              </p>
+            ) : (
+              <p className="text-xs text-fg-muted">错误已记录到 ops-log。</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {submit.kind === 'failed' && (
+                <button
+                  type="button"
+                  onClick={() => void this.submitOneClick()}
+                  className="rounded-md bg-brand px-3 py-1.5 text-xs text-bg hover:opacity-90"
+                >
+                  重试反馈
+                </button>
+              )}
               <button
                 type="button"
-                className="error-fallback-reset is-primary"
-                onClick={() => void this.submitOneClick()}
+                onClick={this.reset}
+                className="rounded-md border border-border px-3 py-1.5 text-xs text-fg hover:bg-bg"
               >
-                重试反馈
+                重试当前页
               </button>
-            )}
-            <button
-              type="button"
-              className="error-fallback-reset"
-              onClick={this.reset}
-            >
-              重试当前页
-            </button>
-            <button
-              type="button"
-              className="error-fallback-reset"
-              onClick={() => location.reload()}
-            >
-              刷新整页
-            </button>
+              <button
+                type="button"
+                onClick={() => location.reload()}
+                className="rounded-md border border-border px-3 py-1.5 text-xs text-fg hover:bg-bg"
+              >
+                刷新整页
+              </button>
+            </div>
           </div>
         </div>
       );

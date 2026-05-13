@@ -34,6 +34,29 @@ export const ARROW_LEFT = '\x1b[D';
 export const ARROW_RIGHT = '\x1b[C';
 export const SHIFT_TAB = '\x1b[Z';
 
+export const TOOLBAR_ROWS_MIN = 1;
+export const TOOLBAR_ROWS_MAX = 3;
+export const TOOLBAR_COLS_MIN = 3;
+export const TOOLBAR_COLS_MAX = 8;
+
+/**
+ * Resize a layout in row-major order. Cells that still fit are preserved;
+ * overflow drops; new tail pads with null. A column count change therefore
+ * reshuffles cells — accepted because re-anchoring by (row, col) loses user
+ * intent when they shrink columns then grow them again.
+ */
+export function resizeToolbarLayout(
+  prev: ToolbarLayout,
+  nextRows: number,
+  nextCols: number,
+): ToolbarLayout {
+  const nextCells: (ToolbarKey | null)[] = [];
+  for (let i = 0; i < nextRows * nextCols; i++) {
+    nextCells.push(prev.cells[i] ?? null);
+  }
+  return { rows: nextRows, cols: nextCols, cells: nextCells };
+}
+
 export const DEFAULT_TOOLBAR_LAYOUT: ToolbarLayout = {
   rows: 2,
   cols: 6,

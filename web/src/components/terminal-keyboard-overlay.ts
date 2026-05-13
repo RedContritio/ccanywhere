@@ -24,11 +24,13 @@ export interface KeyboardOverlayHandle {
 
 /**
  * Keyboard-overlay channel: reserve the keyboard's height as `padding-bottom`
- * on `.terminal-pane-content` so the pane's flex children (terminal-host +
- * mobile-toolbar) physically shrink to fit above the keyboard. The shrink
- * fires `ResizeObserver` on `.terminal-host` → dims state machine →
- * `resize` frame, so cc learns the new `rows` and re-renders into the
- * visible region — no off-screen cursor, no clipped output.
+ * on the pane container (matched by `[data-pane-content]`) so the pane's
+ * flex children (terminal container + mobile-toolbar) physically shrink
+ * to fit above the keyboard. The shrink fires `ResizeObserver` on the
+ * terminal container element → dims state machine → `resize` frame, so
+ * cc learns the new `rows` and
+ * re-renders into the visible region — no off-screen cursor, no clipped
+ * output.
  *
  * Previously this channel applied `transform: translateY(-keyboardH)` to
  * the same pane. That kept everything visible but cc was never told that
@@ -36,14 +38,15 @@ export interface KeyboardOverlayHandle {
  * behind the keyboard (and scroll history got pushed off the top each time
  * the keyboard opened). User feedback called for resize semantics instead.
  *
- * `.workspace-header` still counter-translates by `vv.pageTop` against
- * browser page auto-scroll when the focused input would otherwise be hidden
- * behind the soft keyboard — that's independent of the pane resize.
+ * The workspace header (matched by `[data-workspace-header]`) still
+ * counter-translates by `vv.pageTop` against browser page auto-scroll when
+ * the focused input would otherwise be hidden behind the soft keyboard —
+ * that's independent of the pane resize.
  */
 export function setupKeyboardOverlay(container: HTMLElement): KeyboardOverlayHandle {
-  const pane = container.closest('.terminal-pane-content') as HTMLElement | null;
+  const pane = container.closest('[data-pane-content]') as HTMLElement | null;
   const workspaceHeader =
-    (container.closest('.workspace')?.querySelector('.workspace-header') as
+    (container.closest('[data-workspace]')?.querySelector('[data-workspace-header]') as
       | HTMLElement
       | null) ?? null;
 
@@ -71,9 +74,9 @@ export function setupKeyboardOverlay(container: HTMLElement): KeyboardOverlayHan
     const keyboardH = Math.max(0, layoutH - vv.height - vv.offsetTop);
     if (pane !== null) {
       // padding-bottom shrinks the flex content area; flex children
-      // (terminal-host with `flex: 1`, mobile-toolbar with fixed height)
-      // recompute, ResizeObserver on terminal-host fires, dims state
-      // machine sends a resize frame to cc.
+      // (terminal container with `flex: 1`, mobile-toolbar with fixed
+      // height) recompute, ResizeObserver on the terminal container
+      // fires, dims state machine sends a resize frame to cc.
       pane.style.paddingBottom = keyboardH > 0 ? `${keyboardH}px` : '';
     }
     if (workspaceHeader !== null) {

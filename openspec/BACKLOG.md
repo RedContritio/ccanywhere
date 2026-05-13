@@ -12,90 +12,61 @@ proposal，统一流程）。
 
 ## 真实 bug（fix 类）
 
-### B1. stale session id 在 URL 的 UX
-
-- **症状**：URL 含 `/workspace/<S>` 但 sessions list 没 S（已删 / 过期）。
-  当前裸"session 不在列表中"提示 UX 差。
-- **scope**：~30 LOC。workspace.tsx 检测 stale id → friendly banner +
-  "回到 /" 按钮 / 或自动 navigate `/workspace`。
-- **出处**：feedback `2026-05-09T09-23-34Z-d2a906cf`
-- **优先级**：高（影响日常打开 URL 体验）
+（无）
 
 ---
 
 ## 体验增强 / polish
 
-### B2. build sha + version 进 diag
-
-- **scope**：~15 LOC。vite config 用 `define` 注入 `__CC_VERSION__`（build
-  时 git rev-parse），collectDiag 加 `diag.app.version`。
-- **价值**：feedback triage 直接知道是哪个 commit。
-- **出处**：`openspec/archive/2026-05-12-m-diag-enrich-v2/tasks.md` "未做"
-- **优先级**：中
-
-### B3. user kind 进 diag
-
-- **scope**：~30 LOC。mount 时 fetch `/api/me/quota` (or `/api/auth/me`)
-  拿 `kind`，注入 `diag.app.userKind`。要小心 async 与现有同步 collectDiag
-  路径，可在 mount 时单独 set 而非 collect 时 fetch。
-- **价值**：triage 知道是 owner / limited 报的。
-- **出处**：同 B2
-- **优先级**：中（与 B2 一笔合并 ship 更顺）
-
-### B4. /settings 独立 page
-
-- **scope**：~80 LOC。route `/settings` + page 容器 + 复用 toolbar edit
-  dialog 内容 + 未来扩主题同步 / 字号 / 通知偏好等。
-- **背景**：m-user-prefs D2 决策当时用户答"后续单独开一个设置页面，**或者**
-  就和主页相关"，我做了 dialog 没做 page。未来加更多偏好就会撞上。
-- **优先级**：低（dialog 够用），但记录避免遗忘
+（无）
 
 ---
 
 ## E2E / CI
 
-### B5. CI 集成 e2e
-
-- **scope**：~60 LOC + GitHub Actions workflow。需用户先定 self-hosted
-  runner 还是 cloud（internal RPC 是 loopback-only，cloud runner 拿不到
-  token）。
-- **出处**：`openspec/archive/2026-05-12-m-e2e-backbone/tasks.md` "后续"
-- **优先级**：低
-
-### B6. e2e 多 browser
-
-- **scope**：~10 LOC。playwright.config.ts 加 webkit / firefox project。
-- **出处**：同 B5
-- **优先级**：低
+（无）
 
 ---
 
 ## 维护类 / 不做但记录
 
-### B7. quota pricing auto-sync
+（无）
 
-- **scope**：~50 LOC。pricing.ts 改 cached lookup（每周拉一次 Anthropic
-  价格表或第三方 npm 包）。
-- **背景**：当前硬编码 model → USD-per-token，改价 / 新 model 时过期。
-- **出处**：`openspec/archive/2026-05-11-m-quota-cost-tracking/proposal.md`
-  "不做" 段
-- **优先级**：低（手动跟够用）
+---
 
-### B8. dialog 类组件系统化审核 autoFocus
+## Deferred（触发条件未到 — 等真实信号再启动）
 
-- **scope**：~10 LOC 审核 + 修。
-- **背景**：feedback dialog + new-session dialog 已删 autoFocus；其它
-  dialog 类组件（quota panel / 未来设置 dialog 等）应同样审核避免 mobile
-  tap 问题。
-- **优先级**：低（按需，新 dialog 写时记得即可）
+下面这些条目都已有完整 scope + 决策点 + 出处。但触发条件（user 实际抱怨
+/ 量级达到痛阈值）尚未到，启动是浪费。本段是"显式 deferred 而非遗忘"
+的可见队列——下次扫 BACKLOG 看到这段就跳过，除非有新信号。
 
-### B9. archive hygiene 决策记录
+### B12. Level 2 scrollback 持久化
 
-- **scope**：~5 LOC（archive 一段 readme）。
-- **背景**：早期 archive 大量 unchecked `[ ]` 实际已 ship 但没勾。当前
-  决策"不清理"（B），用更准的 grep 逻辑（找显式"未做"段），下次新
-  conversation 看到 200 条 unchecked 不困惑。
-- **优先级**：可选，主要是记录决策本身
+- **状态**：deferred（"最后一屏已能定位上下文"基线尚未被 user 抱怨突破）
+- **触发信号**：user 进 dead pane 抱怨"想看历史滚动找不到"
+- **scope**：~150 LOC（dead 时 scrollback 全文 → 单独 file；resume 时 feed
+  回 xterm 还原；存储格式与 screen.txt 共享路径）
+- **背景**：m-session-persistence Level 1 只持久化"最后一屏"（含 ANSI
+  alt-screen + cursor 位置），dead pane 看不到历史滚动。Level 2 把
+  scrollback ring buffer 全文落盘，user 进 dead session 能滚回看历史
+- **决策点**：scrollback 大小（默认 1024 行 ~50-200 KB）/ format
+  （raw ANSI 还是 plain text）/ 是否压缩
+- **出处**：m-session-persistence proposal D8 "不做" 段标记 follow-up
+
+### B13. dead session retention policy
+
+- **状态**：deferred（单 owner + ~10 limited e2e user，dead 数量远未到累积痛阈值）
+- **触发信号**：boot 扫 sessions/ 慢 / 占盘超过痛阈值 / share 功能 ship 后 multi-user 累积
+- **scope**：~80 LOC + config schema bump
+- **背景**：m-session-persistence D11 决定 dead session 无自动 GC——user
+  不主动删就永远留。长期 N 大用户会累积 N 个 `<id>.json` + `.screen.txt`
+  慢 boot 扫描 + 占盘。可选 retention：超 N 天 / total size 超 M MB
+  时按 LRU hard delete dead stub
+- **决策点**：默认 ttl（7d / 30d / 永不）/ 是否进 config schema /
+  loadDeadStubs 时机做不做 size-based prune
+- **风险**：config schema bump = prod 同步成本（参考 m-multi-user
+  `guestProjectsRoot` 教训）
+- **出处**：m-session-persistence proposal D11 + "不做" 段
 
 ---
 

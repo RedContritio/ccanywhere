@@ -1,5 +1,6 @@
 import type { Terminal } from '@xterm/xterm';
 import type { TerminalSocket } from '../ws.js';
+import { useAuthStore, type UserKind } from './auth.js';
 
 /**
  * Module-scoped diagnostic collector. The terminal component registers its
@@ -99,6 +100,13 @@ interface DiagApp {
   sessionIds?: string[];
   theme?: string;
   effectiveTheme?: string;
+  /** `<short-sha> @ <ISO build time>` — injected at vite build (see
+   *  web/vite.config.ts `define`). 'dev' when git is unavailable. */
+  version?: string;
+  /** Account class — `owner` = webauthn-paired device, `limited` =
+   *  token-authenticated user. Triage uses this to know whether a
+   *  feedback came from the host or a guest. */
+  userKind?: UserKind;
 }
 interface DiagWs {
   readyState?: number;
@@ -238,6 +246,11 @@ export function collectDiag(extra: DiagExtra = {}): Diag {
   if (extra.sessionIds !== undefined) app.sessionIds = extra.sessionIds;
   if (extra.theme !== undefined) app.theme = extra.theme;
   if (extra.effectiveTheme !== undefined) app.effectiveTheme = extra.effectiveTheme;
+  if (typeof __CC_VERSION__ === 'string' && __CC_VERSION__.length > 0) {
+    app.version = __CC_VERSION__;
+  }
+  const userKind = useAuthStore.getState().kind;
+  if (userKind !== null) app.userKind = userKind;
   if (Object.keys(app).length > 0) out.app = app;
 
   // ws

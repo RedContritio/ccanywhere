@@ -267,14 +267,14 @@ export async function registerAuthRoutes(
     await reply.code(204).send();
   });
 
-  // owner returns device shape; limited returns user shape; same envelope
-  // so web client treats either as logged-in (m-multi-user).
+  // label = user identity (owner / limited username), not device label.
   app.get('/api/auth/me', async (req, reply) => {
     const device = req.authDevice;
     if (device) {
+      const label = opts.userStore?.getOwner().username ?? 'owner';
       await reply
         .code(200)
-        .send({ id: device.id, label: device.label, kind: 'owner', lastUsedAt: device.lastUsedAt });
+        .send({ id: device.id, label, kind: 'owner', lastUsedAt: device.lastUsedAt });
       return;
     }
     const user = req.user;

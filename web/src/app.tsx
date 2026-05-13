@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { LoginPage } from './pages/login.js';
+import { SettingsPage } from './pages/settings.js';
 import { WorkspacePage } from './pages/workspace.js';
 import { useAuthStore } from './state/auth.js';
 import { useApplyTheme } from './state/use-theme.js';
@@ -47,7 +48,14 @@ export function App(): JSX.Element {
           }
         />
         <Route path="/history" element={<Navigate to="/workspace" replace />} />
-        <Route path="/settings" element={<Navigate to="/workspace" replace />} />
+        <Route
+          path="/settings"
+          element={
+            <RequireAuth>
+              <SettingsPage />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/workspace" replace />} />
       </Routes>
     </BrowserRouter>

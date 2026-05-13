@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
@@ -6,8 +7,23 @@ import { defineConfig } from 'vite';
 
 const SERVER_URL = process.env['CCANYWHERE_DEV_SERVER'] ?? 'http://127.0.0.1:62275';
 
+function readGitSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'dev';
+  }
+}
+
+const CC_VERSION = `${readGitSha()} @ ${new Date().toISOString()}`;
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    __CC_VERSION__: JSON.stringify(CC_VERSION),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

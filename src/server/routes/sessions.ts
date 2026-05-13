@@ -261,8 +261,12 @@ export async function registerSessionRoutes(
   });
 
   app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
-    const session = manager.get(req.params.id);
-    if (!session) {
+    // m-session-persistence: DELETE must work for both active sessions
+    // and dead stubs (user purging a row left over from a prior restart).
+    // findRow merges both maps; manager.markDeleted dispatches to the
+    // right path (kill PTY for active, just-stamp + persist for dead).
+    const row = manager.findRow(req.params.id);
+    if (!row) {
       logger.debug({ id: req.params.id }, 'delete session: not found');
       await reply
         .code(404)
@@ -270,15 +274,13 @@ export async function registerSessionRoutes(
       return;
     }
     // m-multi-user: only the owning user may DELETE.
-    if (req.user !== undefined && session.info.userId !== req.user.id) {
+    if (req.user !== undefined && row.info.userId !== req.user.id) {
       await reply
         .code(404)
         .send({ error: { code: 'not_found', message: 'session not found' } });
       return;
     }
-    // markDeleted is idempotent: re-DELETE on the same id returns 204 too,
-    // and the session row is preserved with deletedAt set.
-    session.markDeleted();
+    manager.markDeleted(req.params.id);
     logger.debug(
       { id: req.params.id, deviceId: req.authDevice?.id },
       'session deleted',

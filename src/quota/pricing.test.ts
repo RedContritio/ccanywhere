@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { __resetWarnedForTest, priceFor } from './pricing.js';
+import {
+  __resetWarnedForTest,
+  LAST_VERIFIED,
+  maybePricingStaleWarn,
+  priceFor,
+} from './pricing.js';
 
 describe('priceFor', () => {
   afterEach(() => {
@@ -60,5 +65,34 @@ describe('priceFor', () => {
     priceFor('claude-mystery-9-9', warn);
     priceFor('claude-mystery-9-9', warn);
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('maybePricingStaleWarn (m-pricing-staleness-sentinel / B7)', () => {
+  const lastMs = Date.parse(LAST_VERIFIED);
+
+  it('does not warn within 180 days of LAST_VERIFIED', () => {
+    const warn = vi.fn();
+    const within = new Date(lastMs + 30 * 24 * 60 * 60 * 1000);
+    maybePricingStaleWarn(within, warn);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn exactly at the 180-day boundary', () => {
+    const warn = vi.fn();
+    const boundary = new Date(lastMs + 180 * 24 * 60 * 60 * 1000);
+    maybePricingStaleWarn(boundary, warn);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns past 180 days with age and LAST_VERIFIED in message', () => {
+    const warn = vi.fn();
+    const stale = new Date(lastMs + 200 * 24 * 60 * 60 * 1000);
+    maybePricingStaleWarn(stale, warn);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = warn.mock.calls[0]![0] as string;
+    expect(msg).toContain(LAST_VERIFIED);
+    expect(msg).toContain('200 days ago');
+    expect(msg).toContain('anthropic.com/pricing');
   });
 });

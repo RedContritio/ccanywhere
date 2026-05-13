@@ -4,9 +4,7 @@ import { App } from './app.js';
 import { ErrorBoundary } from './components/error-boundary.js';
 import { recordOp } from './state/ops-log.js';
 import './styles/tokens.css';
-import './styles/reset.css';
-import './styles/themes.css';
-import './styles/app.css';
+import './styles/xterm-overrides.css';
 
 // Capture any uncaught error / unhandled promise rejection into ops-log so
 // the next feedback submission carries the trace. Mobile users can't open
