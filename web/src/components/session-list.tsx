@@ -89,7 +89,7 @@ export function SessionList({
                   </span>
                 </Link>
                 {!isDeleted && (
-                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5 transition-opacity max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                     <button
                       type="button"
                       onClick={(e) => {

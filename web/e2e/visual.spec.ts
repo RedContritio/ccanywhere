@@ -374,6 +374,57 @@ test.describe('m-design-system-unify visual', () => {
         ).first(),
       ).toBeVisible({ timeout: 2000 });
     });
+
+    // Touch devices have no hover state, so session-list row actions
+    // (share / delete) cannot rely on group-hover to appear. Regression
+    // for user-reported "界面没有分享" on Xiaomi 17 Pro.
+    test('session row share/delete buttons stay visible on mobile (no hover)', async ({
+      page,
+    }) => {
+      const LIVE_ID = '44444444-4444-4444-4444-444444444444';
+      const PROJ_ID = 'p-live-mobile';
+      await page.route('**/api/sessions', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            sessions: [
+              {
+                id: LIVE_ID,
+                projectId: PROJ_ID,
+                mode: 'create',
+                resumeSessionId: null,
+                state: 'live',
+                createdAt: Date.now() - 30_000,
+                deletedAt: null,
+              },
+            ],
+          }),
+        }),
+      );
+      await page.route('**/api/projects', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            projects: [{ id: PROJ_ID, name: 'live-mobile', path: '/tmp/m' }],
+          }),
+        }),
+      );
+      await page.goto('/workspace');
+      await page.waitForLoadState('networkidle');
+      // On mobile the sidebar starts closed; open the drawer so the
+      // session list is on screen.
+      await page.getByRole('button', { name: '打开侧边栏' }).tap();
+      const shareBtn = page.getByRole('button', { name: /^分享 / });
+      const deleteBtn = page.getByRole('button', { name: /^删除 / });
+      await expect(shareBtn).toBeVisible();
+      await expect(deleteBtn).toBeVisible();
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, 'visual-session-row-actions-mobile.png'),
+        fullPage: false,
+      });
+    });
   });
 
   test('new-session step 2 history with long preview truncates (regression: dialog must not overflow)', async ({
