@@ -72,9 +72,6 @@ proposal，统一流程）。
 
 ## 大项（在 `openspec/changes/<slug>/`，本表只列出处指针）
 
-- **m-logout-preserve-pairing**（~50-80 LOC + 测试 ~30）— 登出保留
-  webauthn 配对身份，不再要求重输设备名。`changes/m-logout-preserve-
-  pairing/`
 - **m-toolbar-presets**（~80 LOC）— 内置 toolbar 模板 + swap。
   `changes/m-toolbar-presets/`
 - **m-touch-scroll-one-line**（~50 LOC，blocked-on-data）— 偶发滑动一行

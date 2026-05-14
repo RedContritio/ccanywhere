@@ -1,10 +1,30 @@
 ---
-status: planned
+status: shipped
 ---
 
-# Proposal: m-logout-preserve-pairing — 登出保留 webauthn 配对，不再重复输入设备名
+# Proposal: m-logout-preserve-pairing — 登出保留配对身份 + 双轨多 token
 
 ## 状态
+
+**shipped 2026-05-15。** 原始 brainstorm（单 token / 保 deviceId）保留下方
+作为 audit 轨迹；实际 ship 期间 user feedback 把 scope 扩展为：
+
+1. **双轨独立缓存** — owner stored slot + limitedUsers[] list 互不清除，
+   同设备可同时记住"已配对 owner"和"曾用 alice/bob 等 limited user 登过"
+2. **多 user 多 token** — `limitedUsers[i].tokens[]`，dedup-by-plaintext
+   upsert；按 `expiresAt` 降序自动顺序尝试
+3. **指数退让** — `runTokenLogin` 返 `TokenLoginResult` discriminated
+   (`ok / invalid / transient`)，transient 退让 4 次 (500ms / 1s / 2s /
+   4s) **永不**误删合法 token
+4. **保留 user record** — 所有 token 都 invalid 后**保留 user record**
+   (tokens 空) 让设备记住"曾以此 user 登录过"，提示输入新 token
+5. **RequireAuth 自动跳页** — `clearSession` 清 active session →
+   RequireAuth 软导航到 /login，删 api.ts 的 `window.location.href` 硬跳
+
+最终 spec 见 `openspec/specs/auth/spec.md` 内 `Requirement: 登出保留配对
+身份`。
+
+## 状态（原 brainstorm）
 
 planned。源自用户反馈：同一台设备点"登出"后，下次回 login 页又要重新输设备
 名重新走 register → mac approve 全流程。期望"登出"仅清 server cookie + 本地

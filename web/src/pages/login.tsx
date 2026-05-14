@@ -3,29 +3,41 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { probeSession, runLogin, runPair, runTokenLogin } from '../auth-flow.js';
+import {
+  probeSession,
+  runLogin,
+  runPair,
+  runTokenLogin,
+  type TokenLoginResult,
+} from '../auth-flow.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
-import { useAuthStore } from '../state/auth.js';
+import {
+  useAuthStore,
+  type LimitedUserRecord,
+  type TokenRecord,
+} from '../state/auth.js';
 
 type Mode =
   | { kind: 'probing' }
-  | { kind: 'idle'; suggestLogin: boolean }
+  | { kind: 'idle' }
   | { kind: 'pairing-create'; label: string }
   | { kind: 'pairing-await' }
   | { kind: 'logging-in' }
+  | { kind: 'trying-user'; username: string }
   | { kind: 'token-input' }
   | { kind: 'token-submitting' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; suggestTokenInput?: boolean };
 
 export function LoginPage(): JSX.Element {
   const navigate = useNavigate();
   const setPaired = useAuthStore((s) => s.setPaired);
   const setLimitedSession = useAuthStore((s) => s.setLimitedSession);
   const markVerified = useAuthStore((s) => s.markVerified);
-  const logout = useAuthStore((s) => s.logout);
-  const deviceId = useAuthStore((s) => s.deviceId);
-  const storedKind = useAuthStore((s) => s.kind);
-  const storedLabel = useAuthStore((s) => s.label);
+  const forgetToken = useAuthStore((s) => s.forgetToken);
+  const forgetOwnerCredential = useAuthStore((s) => s.forgetOwnerCredential);
+  const ownerDeviceId = useAuthStore((s) => s.ownerDeviceId);
+  const ownerLabel = useAuthStore((s) => s.ownerLabel);
+  const limitedUsers = useAuthStore((s) => s.limitedUsers);
 
   const [mode, setMode] = useState<Mode>({ kind: 'probing' });
   const [labelInput, setLabelInput] = useState('');
@@ -33,31 +45,23 @@ export function LoginPage(): JSX.Element {
   const abortRef = useRef<AbortController | null>(null);
 
   // Boot: probe existing cookie session; if it's live, go straight to /workspace.
-  // probeSession returns { id, label, kind } — for owner we set paired with
-  // device id, for limited we set the limited-session shape (deviceId field
-  // doubles as user id; RequireAuth only cares it's non-null).
-  //
-  // Edge case: cookie still valid but localStorage was wiped (manual clear,
-  // older client logged out before we shipped the server-side logout call,
-  // etc.). probeSession returns identity even with empty store — rebuild
-  // the snapshot so RequireAuth sees non-null and doesn't loop.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const me = await probeSession();
       if (cancelled) return;
       if (me !== null) {
-        if (me.kind === 'limited') setLimitedSession(me.id, me.label);
+        if (me.kind === 'limited') setLimitedSession(me.id, me.label, null);
         else setPaired(me.id, me.label);
         navigate('/workspace', { replace: true });
         return;
       }
-      setMode({ kind: 'idle', suggestLogin: deviceId !== null });
+      setMode({ kind: 'idle' });
     })();
     return () => {
       cancelled = true;
     };
-  }, [deviceId, setPaired, setLimitedSession, navigate]);
+  }, [setPaired, setLimitedSession, navigate]);
 
   useEffect(() => {
     return () => {
@@ -89,22 +93,19 @@ export function LoginPage(): JSX.Element {
   };
 
   const onLoginClick = (): void => {
-    // Limited users don't have webauthn credentials — only owner devices
-    // can run navigator.credentials.get. Defensive check; UI shouldn't
-    // have presented the button anyway.
-    if (deviceId === null || storedKind !== 'owner') return;
+    if (ownerDeviceId === null) return;
     setMode({ kind: 'logging-in' });
-    void runLogin(deviceId)
+    void runLogin(ownerDeviceId)
       .then((ok) => {
         if (ok) {
           markVerified();
+          setPaired(ownerDeviceId, ownerLabel ?? '');
           navigate('/workspace', { replace: true });
         } else {
-          // Credential miss / device revoked — wipe local state.
-          logout();
+          forgetOwnerCredential();
           setMode({
             kind: 'error',
-            message: 'login failed — device may have been revoked, please pair again',
+            message: '生物识别登入失败 — 设备可能已被撤销，请重新配对',
           });
         }
       })
@@ -116,38 +117,109 @@ export function LoginPage(): JSX.Element {
       });
   };
 
-  const onTokenSubmit = (e: FormEvent<HTMLFormElement>): void => {
-    e.preventDefault();
-    const t = tokenInput.trim();
+  // Try one plaintext token against the server with capped exponential
+  // backoff for transient failures. Returns the final TokenLoginResult
+  // so the caller can decide whether to forget the token (invalid) or
+  // preserve it (transient).
+  //
+  // On `ok: true`, also updates the store via probeSession → setLimitedSession.
+  const tryToken = async (
+    t: string,
+    fallbackUsername: string,
+  ): Promise<TokenLoginResult> => {
+    // 500ms, 1s, 2s, 4s — give up after 4 attempts (~7.5s total).
+    const BACKOFF_MS = [500, 1000, 2000, 4000];
+    let result: TokenLoginResult = {
+      ok: false,
+      reason: 'transient',
+      message: '未尝试',
+    };
+    for (let i = 0; i <= BACKOFF_MS.length; i++) {
+      result = await runTokenLogin(t);
+      if (result.ok) {
+        const me = await probeSession();
+        if (me !== null && me.kind === 'limited') {
+          setLimitedSession(me.id, me.label, t);
+        } else {
+          setLimitedSession(result.user.username, fallbackUsername, t);
+        }
+        return result;
+      }
+      // Invalid = server-authoritative rejection. No point retrying.
+      if (result.reason === 'invalid') return result;
+      // Transient — back off and retry (unless we're out of attempts).
+      const delay = BACKOFF_MS[i];
+      if (delay === undefined) break;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    return result;
+  };
+
+  const submitNewToken = (t: string): void => {
     if (t.length < 32) return;
     setMode({ kind: 'token-submitting' });
-    void runTokenLogin(t)
-      .then((user) => {
-        // We don't know the user id without another probe round-trip;
-        // re-fetch /api/auth/me so the store ends up with the canonical
-        // id rather than the token plaintext.
-        void probeSession().then((me) => {
-          if (me !== null && me.kind === 'limited') {
-            setLimitedSession(me.id, me.label);
-          } else {
-            // Defensive: probe disagreed (shouldn't happen). Fall back to
-            // setting username so RequireAuth at least sees non-null.
-            setLimitedSession(user.username, user.username);
-          }
+    void (async () => {
+      const r = await tryToken(t, t);
+      if (r.ok) {
+        navigate('/workspace', { replace: true });
+        return;
+      }
+      // submitNewToken's token isn't in the store yet — invalid /
+      // transient both surface as plain error messages here. Nothing
+      // to forget either way.
+      setMode({ kind: 'error', message: r.message });
+    })();
+  };
+
+  const onTokenSubmit = (e: FormEvent<HTMLFormElement>): void => {
+    e.preventDefault();
+    submitNewToken(tokenInput.trim());
+  };
+
+  // Click a stored user → try its tokens newest-expiry-first.
+  // - invalid token → forget it, move to next token
+  // - transient (network glitch / 5xx, after backoff cap) → stop, KEEP
+  //   the token, surface "network issue, please retry"
+  // - all tokens exhausted as invalid → KEEP the user record (with
+  //   empty tokens) so the device remembers it's been used here;
+  //   surface a hint nudging the user to paste a fresh token.
+  const onPickUser = (user: LimitedUserRecord): void => {
+    if (user.tokens.length === 0) {
+      setTokenInput('');
+      setMode({ kind: 'token-input' });
+      return;
+    }
+    setMode({ kind: 'trying-user', username: user.username });
+    void (async () => {
+      const sorted: TokenRecord[] = [...user.tokens].sort(
+        (a, b) => b.expiresAt - a.expiresAt,
+      );
+      for (const t of sorted) {
+        const r = await tryToken(t.token, user.username);
+        if (r.ok) {
           navigate('/workspace', { replace: true });
-        });
-      })
-      .catch((err: unknown) => {
-        setMode({
-          kind: 'error',
-          message: err instanceof Error ? err.message : 'token 登录失败',
-        });
+          return;
+        }
+        if (r.reason === 'transient') {
+          setMode({
+            kind: 'error',
+            message: `网络异常，未能完成 ${user.username} 的登录：${r.message}`,
+          });
+          return;
+        }
+        forgetToken(user.userId, t.token);
+      }
+      setMode({
+        kind: 'error',
+        message: `${user.username} 的已存 token 都已失效，请输入新 token`,
+        suggestTokenInput: true,
       });
+    })();
   };
 
   const cancelPair = (): void => {
     abortRef.current?.abort();
-    setMode({ kind: 'idle', suggestLogin: deviceId !== null });
+    setMode({ kind: 'idle' });
   };
 
   return (
@@ -159,73 +231,27 @@ export function LoginPage(): JSX.Element {
         <header className="space-y-1">
           <h1 className="text-lg font-semibold tracking-tight">CC anywhere</h1>
           <p className="text-xs text-fg-muted">
-            把本地 cc 映射到 web 的远程入口
+            在任何屏幕上，继续你的 cc。
           </p>
         </header>
 
         {mode.kind === 'probing' && <Hint>检查会话状态…</Hint>}
 
-        {mode.kind === 'idle' && mode.suggestLogin && (
-          <div className="space-y-3">
-            <p className="text-sm text-fg-muted">
-              已配对设备
-              {storedLabel !== null && (
-                <>
-                  ：<span className="font-mono text-fg">{storedLabel}</span>
-                </>
-              )}
-            </p>
-            <Button type="button" className="w-full" onClick={onLoginClick}>
-              用本机生物识别登入
-            </Button>
-            <LinkButton
-              onClick={() => {
-                logout();
-                setMode({ kind: 'idle', suggestLogin: false });
-              }}
-            >
-              重新配对其他设备
-            </LinkButton>
-          </div>
-        )}
-
-        {mode.kind === 'idle' && !mode.suggestLogin && (
-          <form onSubmit={onPairSubmit} className="space-y-4">
-            <Field>
-              <Label htmlFor="login-label">设备名</Label>
-              <Input
-                id="login-label"
-                type="text"
-                value={labelInput}
-                onChange={(e) => setLabelInput(e.target.value)}
-                placeholder="iPhone / 工作 mac / 朋友的笔记本"
-                required
-                autoFocus
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-            <Hint>
-              点击「申请配对」会调用浏览器的生物识别（Touch ID / Face ID /
-              指纹），然后等待 mac 上{' '}
-              <Code>ccanywhere approve</Code> 命令通过。
-            </Hint>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={labelInput.trim().length === 0}
-            >
-              申请配对
-            </Button>
-            <LinkButton
-              onClick={() => {
-                setTokenInput('');
-                setMode({ kind: 'token-input' });
-              }}
-            >
-              用 token 登录（受限用户）
-            </LinkButton>
-          </form>
+        {mode.kind === 'idle' && (
+          <IdleChoices
+            ownerDeviceId={ownerDeviceId}
+            ownerLabel={ownerLabel}
+            limitedUsers={limitedUsers}
+            labelInput={labelInput}
+            setLabelInput={setLabelInput}
+            onPairSubmit={onPairSubmit}
+            onLoginClick={onLoginClick}
+            onPickUser={onPickUser}
+            onSwitchToTokenInput={() => {
+              setTokenInput('');
+              setMode({ kind: 'token-input' });
+            }}
+          />
         )}
 
         {mode.kind === 'token-input' && (
@@ -245,11 +271,6 @@ export function LoginPage(): JSX.Element {
                 className="font-mono"
               />
             </Field>
-            <Hint>
-              owner 通过 mac CLI <Code>ccanywhere user create</Code> 或{' '}
-              <Code>ccanywhere token issue</Code> 颁发的 plaintext token。
-              限 7 天有效期。
-            </Hint>
             <Button
               type="submit"
               className="w-full"
@@ -257,17 +278,17 @@ export function LoginPage(): JSX.Element {
             >
               登录
             </Button>
-            <LinkButton
-              onClick={() =>
-                setMode({ kind: 'idle', suggestLogin: deviceId !== null })
-              }
-            >
+            <LinkButton onClick={() => setMode({ kind: 'idle' })}>
               返回
             </LinkButton>
           </form>
         )}
 
         {mode.kind === 'token-submitting' && <Hint>正在验证 token…</Hint>}
+
+        {mode.kind === 'trying-user' && (
+          <Hint>正在用 {mode.username} 的已存 token 登录…</Hint>
+        )}
 
         {mode.kind === 'pairing-create' && (
           <Hint>
@@ -291,12 +312,20 @@ export function LoginPage(): JSX.Element {
             <p className="text-sm text-danger" role="alert">
               {mode.message}
             </p>
-            <LinkButton
-              onClick={() =>
-                setMode({ kind: 'idle', suggestLogin: deviceId !== null })
-              }
-            >
-              重试
+            {mode.suggestTokenInput === true && (
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  setTokenInput('');
+                  setMode({ kind: 'token-input' });
+                }}
+              >
+                输入新 token
+              </Button>
+            )}
+            <LinkButton onClick={() => setMode({ kind: 'idle' })}>
+              返回
             </LinkButton>
           </div>
         )}
@@ -338,5 +367,119 @@ function LinkButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Renders the idle login screen: owner webauthn (if any) → stored
+ * limited-user buttons (one per user) → "用新 token 登录" link. Each
+ * limited-user button delegates to onPickUser which runs the auto-try
+ * sequence over that user's tokens (newest-expiry first).
+ *
+ * When no credentials are stored at all, the form falls back to the
+ * pair flow (owner first-time setup) plus a token-input escape link.
+ */
+function IdleChoices(props: {
+  ownerDeviceId: string | null;
+  ownerLabel: string | null;
+  limitedUsers: readonly LimitedUserRecord[];
+  labelInput: string;
+  setLabelInput: (s: string) => void;
+  onPairSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  onLoginClick: () => void;
+  onPickUser: (u: LimitedUserRecord) => void;
+  onSwitchToTokenInput: () => void;
+}): JSX.Element {
+  const {
+    ownerDeviceId,
+    ownerLabel,
+    limitedUsers,
+    labelInput,
+    setLabelInput,
+    onPairSubmit,
+    onLoginClick,
+    onPickUser,
+    onSwitchToTokenInput,
+  } = props;
+  const hasOwner = ownerDeviceId !== null;
+  const hasLimited = limitedUsers.length > 0;
+
+  if (hasOwner || hasLimited) {
+    return (
+      <div className="space-y-3">
+        {hasOwner && (
+          <>
+            <p className="text-sm text-fg-muted">
+              已配对设备
+              {ownerLabel !== null && ownerLabel !== '' && (
+                <>
+                  ：<span className="font-mono text-fg">{ownerLabel}</span>
+                </>
+              )}
+            </p>
+            <Button type="button" className="w-full" onClick={onLoginClick}>
+              用本机生物识别登入
+            </Button>
+          </>
+        )}
+        {hasLimited && (
+          <div className="space-y-2">
+            {hasOwner && (
+              <p className="text-xs text-fg-muted">或继续以受限用户身份登录</p>
+            )}
+            {limitedUsers.map((u) => (
+              <Button
+                key={u.userId}
+                type="button"
+                variant="outline"
+                className="w-full justify-between gap-2"
+                onClick={() => onPickUser(u)}
+              >
+                <span className="truncate font-mono">{u.username}</span>
+                {u.tokens.length > 1 && (
+                  <span className="text-xs text-fg-muted">
+                    {u.tokens.length} token
+                  </span>
+                )}
+              </Button>
+            ))}
+          </div>
+        )}
+        <LinkButton onClick={onSwitchToTokenInput}>用新 token 登录</LinkButton>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={onPairSubmit} className="space-y-4">
+      <Field>
+        <Label htmlFor="login-label">设备名</Label>
+        <Input
+          id="login-label"
+          type="text"
+          value={labelInput}
+          onChange={(e) => setLabelInput(e.target.value)}
+          placeholder="iPhone / 工作 mac / 朋友的笔记本"
+          required
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </Field>
+      <Hint>
+        点击「申请配对」会调用浏览器的生物识别（Touch ID / Face ID /
+        指纹），然后等待 mac 上 <Code>ccanywhere approve</Code> 命令通过。
+      </Hint>
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={labelInput.trim().length === 0}
+      >
+        申请配对
+      </Button>
+      <LinkButton onClick={onSwitchToTokenInput}>
+        用 token 登录（受限用户）
+      </LinkButton>
+    </form>
   );
 }

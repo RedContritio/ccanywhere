@@ -56,10 +56,21 @@ describe('api wrapper', () => {
     expect(headers?.['Idempotency-Key']).toBeUndefined();
   });
 
-  it('triggers logout on 401 and throws unauthorized', async () => {
+  it('triggers soft logout on 401 — clears active session, preserves stored slots', async () => {
+    useAuthStore.getState().setPaired('dev-1', 'laptop');
+    useAuthStore
+      .getState()
+      .setLimitedSession('user-1', 'alice', 'a'.repeat(64));
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
     await expect(api('/api/x')).rejects.toMatchObject({ code: 'unauthorized' });
-    expect(useAuthStore.getState().deviceId).toBeNull();
+    const after = useAuthStore.getState();
+    expect(after.deviceId).toBeNull();
+    expect(after.kind).toBeNull();
+    expect(after.verifiedAt).toBeNull();
+    // Stored owner slot + limited users survive — /login offers
+    // whichever path the user prefers.
+    expect(after.ownerDeviceId).toBe('dev-1');
+    expect(after.limitedUsers).toHaveLength(1);
   });
 
   it('parses error envelope on 4xx', async () => {

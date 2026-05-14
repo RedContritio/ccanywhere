@@ -50,7 +50,11 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   }
 
   if (res.status === 401) {
-    useAuthStore.getState().logout();
+    // Soft logout: clear the active session so RequireAuth auto-routes
+    // to /login on the next render. Stored owner / limited slots
+    // survive (clearSession only touches active), letting /login offer
+    // one-tap re-auth on whichever path the user previously used.
+    useAuthStore.getState().clearSession();
     throw makeError('unauthorized', 401, 'session expired');
   }
 

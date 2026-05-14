@@ -67,7 +67,7 @@ export function WorkspacePage(): JSX.Element {
 
   const label = useAuthStore((s) => s.label);
   const deviceId = useAuthStore((s) => s.deviceId);
-  const logout = useAuthStore((s) => s.logout);
+  const clearSession = useAuthStore((s) => s.clearSession);
 
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -147,8 +147,11 @@ export function WorkspacePage(): JSX.Element {
     // login page still sees a valid session and bounces straight back to
     // /workspace, where RequireAuth (deviceId === null) bounces it to
     // /login again — infinite loop, blank screen.
+    //
+    // clearSession (not unpair): keep deviceId/label so the login page
+    // can offer one-tap webauthn re-auth without forcing a fresh pair.
     await logoutServer();
-    logout();
+    clearSession();
     navigate('/login', { replace: true });
   };
 

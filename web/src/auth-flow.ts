@@ -116,21 +116,39 @@ export async function probeSession(): Promise<SessionProbe | null> {
 }
 
 /**
- * Limited-user login: POST a plaintext token plaintext to
- * `/api/auth/token`, server sets the session cookie. Returns the user
- * info (username + kind) on success, throws on failure.
+ * Result of a token-login attempt. `invalid` means the server
+ * authoritatively rejected the token (401) — caller should forget it.
+ * `transient` means the request never got an authoritative answer
+ * (network down, 5xx, fetch threw) — caller should NOT forget the
+ * token; back off and retry. Other 4xx are also surfaced as
+ * `transient` to err on the side of preserving credentials; UX shows
+ * the message so the user can decide.
  */
+export type TokenLoginResult =
+  | { ok: true; user: { username: string; kind: 'limited' } }
+  | { ok: false; reason: 'invalid'; message: string }
+  | { ok: false; reason: 'transient'; message: string };
+
 export async function runTokenLogin(
   plaintext: string,
-): Promise<{ username: string; kind: 'limited' }> {
-  const res = await fetch('/api/auth/token', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ token: plaintext }),
-  });
+): Promise<TokenLoginResult> {
+  let res: Response;
+  try {
+    res = await fetch('/api/auth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ token: plaintext }),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'transient',
+      message: err instanceof Error ? err.message : '网络错误',
+    };
+  }
   if (res.status === 401) {
-    throw new Error('token 无效或已过期');
+    return { ok: false, reason: 'invalid', message: 'token 无效或已过期' };
   }
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
@@ -140,13 +158,13 @@ export async function runTokenLogin(
     } catch {
       // body not JSON; keep generic message
     }
-    throw new Error(detail);
+    return { ok: false, reason: 'transient', message: detail };
   }
   const body = (await res.json()) as {
     ok: boolean;
     user: { username: string; kind: 'limited' };
   };
-  return body.user;
+  return { ok: true, user: body.user };
 }
 
 export async function logoutServer(): Promise<void> {

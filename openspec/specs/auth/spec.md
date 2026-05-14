@@ -305,3 +305,109 @@ owner 的 `quota.cost.usedUsd` / `quota.tokens.used` MUST NOT 被服务端写入
 - WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
 - THEN  `userStore.findById(owner.id).quota.cost.usedUsd === 0`（pre-quota
         初始值保留）
+
+### Requirement: 登出保留配对身份（m-logout-preserve-pairing）
+
+前端 auth store 把**活动会话** (`deviceId / label / kind / verifiedAt`)
+与**已存凭证缓存** (`ownerDeviceId / ownerLabel / limitedUsers[]`) 分开。
+
+凭证缓存模型：
+
+- **owner slot** 单 slot：`ownerDeviceId / ownerLabel`，一台设备一个
+  webauthn 配对。
+- **limited slot** 列表：`LimitedUserRecord[]`，每个 user 含 `username` +
+  `tokens: { token, expiresAt }[]`。同一 user 可累积多 token，token
+  dedup-by-plaintext upsert。`expiresAt` 是 client-side 估算
+  (`Date.now() + DEFAULT_TOKEN_TTL_MS`)，仅用于排序"试最长 lifetime 优先"。
+
+操作语义：
+
+- **clearSession**：清活动会话，保留 owner + limited 所有 stored 凭证。
+  RequireAuth 检测 `deviceId === null` 自动跳 `/login`。
+- **unpair**：全清。测试 / 显式重置用。
+- **forgetOwnerCredential**：仅清 owner slot（若 active 是 owner，同时
+  清 active），保留 limitedUsers。
+- **forgetToken(userId, token)**：仅删某 user 的某一个 token。
+- **forgetLimitedUser(userId)**：删该 user 整条记录（若 active 是该
+  user，同时清 active）。
+- **token-login 错误分类**：`runTokenLogin` 返 `TokenLoginResult` —
+  `invalid`（server 401，明确拒）/ `transient`（fetch throw / 5xx /
+  其他网络错）/ `ok`。
+
+调用点契约：
+
+- workspace 顶部「登出」按钮 → `logoutServer` + `clearSession`
+- api.ts 全局 401 → `clearSession`（依靠 RequireAuth 自动跳 /login）
+- `runLogin` 失败（owner 401） → `forgetOwnerCredential`，**保留** 所有
+  limited user
+- 一键 token-login 序列尝试某 user 的 token：
+  - `invalid` → `forgetToken`，试下一个
+  - `transient` → 退让重试 4 次（500ms / 1s / 2s / 4s），仍 transient
+    则**永不删 token**，停止序列，提示「网络异常」
+  - 全部 token 序列 `invalid` 用完 → **保留 user 记录**（tokens 列空），
+    提示「输入新 token」
+
+#### Scenario: 主动登出后保留所有已存凭证
+
+- GIVEN owner 已 pair (`ownerDeviceId='dev-1'`) 且曾以 alice token 登过
+        (`limitedUsers=[{userId:'alice-uid', tokens:[{token:T1}]}]`)
+- WHEN  user 点 workspace 「登出」
+- THEN  服务端 cookie revoke (`/api/auth/logout` 204)
+- AND   active session 全 null (`deviceId / kind / verifiedAt`)
+- AND   `ownerDeviceId='dev-1'` 与 alice 的 token 列表完整保留
+- AND   /login 页同时显示「用本机生物识别登入」与 alice 的快捷登录按钮
+
+#### Scenario: 401 fallback 触发 RequireAuth 自动跳 /login
+
+- GIVEN owner 在 workspace 操作中，server-side cookie 已过期
+- WHEN  任一 `/api/*` 请求收到 401
+- THEN  `clearSession()` 调（active 全 null，stored 不动）
+- AND   `RequireAuth` 检测 `deviceId === null` 自动 `<Navigate to="/login">`
+- AND   /login 页基于 stored 渲染（webauthn 入口 + 已存 user 列表）
+
+#### Scenario: webauthn credential revoke 触发硬解配对
+
+- GIVEN owner 用户存有 deviceId，但服务端已对该 device 调 revoke
+- WHEN  user 在 /login 页点「用本机生物识别登入」
+- AND   `runLogin` 因 server 401 返 false
+- THEN  `forgetOwnerCredential()` 调（仅清 owner stored slot；若 active
+        是 owner 则同时 clear active）
+- AND   `limitedUsers` 列表不动 — 之前以 limited token 登过的用户仍可在
+        /login 页选择
+- AND   /login 页 owner 入口消失，但 limited user 列表保留
+
+#### Scenario: 多 token-per-user 自动按 expiresAt 降序尝试
+
+- GIVEN alice 有两个 stored token T1 (`expiresAt=now+1d`) 与 T2
+        (`expiresAt=now+6d`)，server 已 revoke T2 但 T1 仍 valid
+- WHEN  user 在 /login 点 alice 按钮
+- THEN  先试 T2 → 退让重试上限后均返 `invalid`
+- AND   `forgetToken('alice-uid', T2)` 调（仅删 T2）
+- AND   接着试 T1 → 返 `ok` → `setLimitedSession` + 跳 /workspace
+
+#### Scenario: 网络异常不删 token，指数退让后给用户重试机会
+
+- GIVEN alice 有 token T1，网络断连
+- WHEN  user 点 alice 按钮
+- AND   `runTokenLogin` fetch 抛 → 返 `{reason: 'transient'}`
+- THEN  退让 500ms / 1s / 2s / 4s 重试（共 4 次尝试）
+- AND   所有尝试均 transient → 停止序列尝试，T1 **保留**
+- AND   UI 显示「网络异常，未能完成 alice 的登录」错误 + 「返回」link
+
+#### Scenario: 所有 token 都失效后保留 user record
+
+- GIVEN alice 有 1 个 token T1，server 已 revoke
+- WHEN  user 点 alice 按钮
+- AND   T1 退让重试均 `invalid` → `forgetToken` 调，alice.tokens 变空
+- THEN  循环结束，alice 记录**保留**（设备仍记得"曾以 alice 登录过"）
+- AND   /login 页 alice 按钮仍存在（无 token count badge）
+- AND   error 提示「alice 的已存 token 都已失效，请输入新 token」+
+        主按钮直跳 token-input
+
+#### Scenario: 双轨设备同时支持 owner + 多 limited user
+
+- GIVEN 同一设备先后用作 owner 配对、以 alice 登录、以 bob 登录
+- WHEN  /login 渲染 idle 区
+- THEN  顶部显示「用本机生物识别登入」(owner)
+- AND   下方依次显示 alice / bob 按钮，每个标 `{count} token` (仅当 >1)
+- AND   底部「用新 token 登录」link 可切到 token 输入
