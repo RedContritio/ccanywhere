@@ -1,13 +1,15 @@
 import { Button } from '@/components/ui/button';
 
-/** Right-slot icons for an active terminal session header. */
+/**
+ * Right-slot icons for an active terminal session header. Only contextual
+ * (per-current-session) actions live here — global config (settings,
+ * quota) moved to the sidebar in m-nav-restructure-globals.
+ */
 export function ActiveHeaderIcons({
-  onQuota,
-  onSettings,
+  onShare,
   onReload,
 }: {
-  onQuota: () => void;
-  onSettings: () => void;
+  onShare: () => void;
   onReload: () => void;
 }): JSX.Element {
   return (
@@ -16,21 +18,11 @@ export function ActiveHeaderIcons({
         type="button"
         variant="outline"
         size="icon-xs"
-        onClick={onQuota}
-        title="配额"
-        aria-label="查看配额"
+        onClick={onShare}
+        title="分享当前 session"
+        aria-label="分享当前 session"
       >
-        💰
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon-xs"
-        onClick={onSettings}
-        title="设置"
-        aria-label="设置"
-      >
-        ⚙
+        ↗
       </Button>
       <Button
         type="button"
@@ -43,6 +35,57 @@ export function ActiveHeaderIcons({
         ↻
       </Button>
     </>
+  );
+}
+
+/**
+ * Sidebar bottom row: global config entrypoints (settings / quota /
+ * feedback). Sits below the session list — these are user-level, not
+ * tied to any current session. m-nav-restructure-globals moved them out
+ * of the topbar so per-session and global actions are visually split.
+ */
+export function SidebarGlobalActions({
+  onSettings,
+  onQuota,
+  onFeedback,
+}: {
+  onSettings: () => void;
+  onQuota: () => void;
+  onFeedback: () => void;
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-3 gap-1 border-t border-border p-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onSettings}
+        title="设置"
+        aria-label="设置"
+      >
+        ⚙ 设置
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onQuota}
+        title="查看配额"
+        aria-label="查看配额"
+      >
+        💰 配额
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onFeedback}
+        title="反馈"
+        aria-label="反馈"
+      >
+        💬 反馈
+      </Button>
+    </div>
   );
 }
 

@@ -1,5 +1,5 @@
 ---
-status: planned
+status: shipped
 ---
 
 # Proposal: m-nav-restructure-globals — 全局配置入 sidebar，分享入 session topbar

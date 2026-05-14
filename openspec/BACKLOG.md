@@ -18,12 +18,7 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### ~~B15. 快捷键设置脱离 session~~（已并入 m-nav-restructure-globals）
-
-- 2026-05-14 update：用户新诉求"设置应该放在 sidebar 里"等同于解读 (a)
-  "settings 入口可发现性"。已合并进
-  `changes/m-nav-restructure-globals/` proposal——⚙ 设置从 topbar 移到
-  sidebar，提升发现性。本条目不再单独追踪。
+（无）
 
 ---
 
@@ -77,8 +72,6 @@ proposal，统一流程）。
 
 ## 大项（在 `openspec/changes/<slug>/`，本表只列出处指针）
 
-- **m-nav-restructure-globals**（~80-120 LOC + 测试 ~40）— 全局配置入
-  sidebar，分享入 session topbar。`changes/m-nav-restructure-globals/`
 - **m-logout-preserve-pairing**（~50-80 LOC + 测试 ~30）— 登出保留
   webauthn 配对身份，不再要求重输设备名。`changes/m-logout-preserve-
   pairing/`

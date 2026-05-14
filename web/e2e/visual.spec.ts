@@ -375,10 +375,10 @@ test.describe('m-design-system-unify visual', () => {
       ).toBeVisible({ timeout: 2000 });
     });
 
-    // Touch devices have no hover state, so session-list row actions
-    // (share / delete) cannot rely on group-hover to appear. Regression
-    // for user-reported "界面没有分享" on Xiaomi 17 Pro.
-    test('session row share/delete buttons stay visible on mobile (no hover)', async ({
+    // Touch devices have no hover state, so session-list row delete
+    // button cannot rely on group-hover to appear. Share moved to topbar
+    // in m-nav-restructure-globals; only × delete remains on rows.
+    test('session row delete button stays visible on mobile (no hover)', async ({
       page,
     }) => {
       const LIVE_ID = '44444444-4444-4444-4444-444444444444';
@@ -416,15 +416,41 @@ test.describe('m-design-system-unify visual', () => {
       // On mobile the sidebar starts closed; open the drawer so the
       // session list is on screen.
       await page.getByRole('button', { name: '打开侧边栏' }).tap();
-      const shareBtn = page.getByRole('button', { name: /^分享 / });
       const deleteBtn = page.getByRole('button', { name: /^删除 / });
-      await expect(shareBtn).toBeVisible();
       await expect(deleteBtn).toBeVisible();
+      // Share is no longer a row action — confirm it's gone from rows.
+      const rowShareBtn = page.getByRole('button', { name: /^分享 / });
+      await expect(rowShareBtn).toHaveCount(0);
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, 'visual-session-row-actions-mobile.png'),
         fullPage: false,
       });
     });
+
+    // m-nav-restructure-globals: sidebar bottom row holds the three
+    // global config buttons (settings / quota / feedback). They must be
+    // visible on mobile drawer (touch, no hover).
+    test('sidebar global actions (settings / quota / feedback) visible on mobile', async ({
+      page,
+    }) => {
+      await page.goto('/workspace');
+      await page.waitForLoadState('networkidle');
+      await page.getByRole('button', { name: '打开侧边栏' }).tap();
+      await expect(page.getByRole('button', { name: '设置' })).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: '查看配额' }),
+      ).toBeVisible();
+      await expect(page.getByRole('button', { name: '反馈' })).toBeVisible();
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, 'visual-sidebar-globals-mobile.png'),
+        fullPage: false,
+      });
+    });
+
+    // ActiveHeaderIcons topbar render (↗ share + ↻ reload) is covered by
+    // web/src/components/workspace-header-actions.test.tsx — e2e against
+    // a real live session route hits a SPA URL/store race that's not
+    // worth fighting here.
   });
 
   test('new-session step 2 history with long preview truncates (regression: dialog must not overflow)', async ({

@@ -1,10 +1,8 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { Project } from '../state/projects.js';
 import type { Session } from '../state/sessions.js';
-import { ShareCreateDialog } from './share-create-dialog.js';
 import { StatusBadge } from './status-badge.js';
 
 interface Props {
@@ -30,16 +28,6 @@ export function SessionList({
 }: Props): JSX.Element {
   const sorted = [...sessions].sort((a, b) => b.createdAt - a.createdAt);
   const liveCount = sessions.filter((s) => s.deletedAt === null).length;
-  const [shareId, setShareId] = useState<string | null>(null);
-  const shareProj =
-    shareId === null
-      ? ''
-      : (projects.find(
-          (p) =>
-            p.id === sessions.find((s) => s.id === shareId)?.projectId,
-        )?.name ??
-        sessions.find((s) => s.id === shareId)?.projectId ??
-        '');
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-bg-elevated">
@@ -89,46 +77,25 @@ export function SessionList({
                   </span>
                 </Link>
                 {!isDeleted && (
-                  <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5 transition-opacity max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setShareId(s.id);
-                      }}
-                      title="分享"
-                      aria-label={`分享 ${proj?.name ?? s.projectId}`}
-                      className="rounded-sm px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:text-brand"
-                    >
-                      ↗
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onDelete(s.id);
-                      }}
-                      title="删除"
-                      aria-label={`删除 ${proj?.name ?? s.projectId}`}
-                      className="rounded-sm px-1.5 py-0.5 text-sm text-fg-muted transition-colors hover:text-danger"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDelete(s.id);
+                    }}
+                    title="删除"
+                    aria-label={`删除 ${proj?.name ?? s.projectId}`}
+                    className="absolute top-1/2 right-1 -translate-y-1/2 rounded-sm px-1.5 py-0.5 text-sm text-fg-muted transition-opacity transition-colors hover:text-danger max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                  >
+                    ×
+                  </button>
                 )}
               </li>
             );
           })
         )}
       </ul>
-      <ShareCreateDialog
-        open={shareId !== null}
-        sessionId={shareId}
-        projectName={shareProj}
-        onClose={() => setShareId(null)}
-      />
     </section>
   );
 }

@@ -3,10 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { DeadSessionSnapshot } from '../components/dead-session-pane.js';
+import { EmptyPane } from '../components/empty-pane.js';
 import { MobileToolbar } from '../components/mobile-toolbar.js';
 import {
   ActiveHeaderIcons,
   DeadHeaderActions,
+  SidebarGlobalActions,
 } from '../components/workspace-header-actions.js';
 import {
   NewSessionDialog,
@@ -16,6 +18,7 @@ import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { FeedbackDialog } from '../components/feedback-dialog.js';
 import { QuotaPanel } from '../components/quota-panel.js';
+import { ShareCreateDialog } from '../components/share-create-dialog.js';
 import { StatusBadge } from '../components/status-badge.js';
 import { TerminalView, type TerminalHandle } from '../components/terminal.js';
 import type { DeadReason } from '../ws.js';
@@ -70,6 +73,7 @@ export function WorkspacePage(): JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [quotaOpen, setQuotaOpen] = useState(false);
+  const [shareSessionId, setShareSessionId] = useState<string | null>(null);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
 
@@ -289,17 +293,11 @@ export function WorkspacePage(): JSX.Element {
           onNew={onOpenNew}
           onDelete={(sid) => void onDelete(sid)}
         />
-        <div className="border-t border-border p-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="w-full"
-            onClick={() => setFeedbackOpen(true)}
-          >
-            反馈
-          </Button>
-        </div>
+        <SidebarGlobalActions
+          onSettings={() => navigate('/settings')}
+          onQuota={() => setQuotaOpen(true)}
+          onFeedback={() => setFeedbackOpen(true)}
+        />
       </aside>
       {drawerOpen && (
         <button
@@ -397,8 +395,7 @@ export function WorkspacePage(): JSX.Element {
                   />
                 ) : (
                   <ActiveHeaderIcons
-                    onQuota={() => setQuotaOpen(true)}
-                    onSettings={() => navigate('/settings')}
+                    onShare={() => setShareSessionId(currentSession.id)}
                     onReload={() => location.reload()}
                   />
                 )}
@@ -466,28 +463,22 @@ export function WorkspacePage(): JSX.Element {
         onClose={() => setFeedbackOpen(false)}
       />
       <QuotaPanel open={quotaOpen} onClose={() => setQuotaOpen(false)} />
-    </div>
-  );
-}
-
-function EmptyPane({
-  children,
-  onOpenDrawer,
-}: {
-  children: React.ReactNode;
-  onOpenDrawer: () => void;
-}): JSX.Element {
-  return (
-    <div className="relative flex flex-1 items-center justify-center p-4 text-center text-sm text-fg-muted">
-      <button
-        type="button"
-        aria-label="打开侧边栏"
-        onClick={onOpenDrawer}
-        className="absolute top-3 left-3 rounded-md border border-border px-2 py-1 leading-none md:hidden"
-      >
-        ☰
-      </button>
-      {children}
+      <ShareCreateDialog
+        open={shareSessionId !== null}
+        sessionId={shareSessionId}
+        projectName={
+          shareSessionId === null
+            ? ''
+            : (projects.find(
+                (p) =>
+                  p.id ===
+                  sessions.find((s) => s.id === shareSessionId)?.projectId,
+              )?.name ??
+              sessions.find((s) => s.id === shareSessionId)?.projectId ??
+              '')
+        }
+        onClose={() => setShareSessionId(null)}
+      />
     </div>
   );
 }
