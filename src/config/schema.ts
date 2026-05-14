@@ -68,6 +68,14 @@ export const ConfigSchema = z.object({
    * other than the config file's home (rare).
    */
   configDir: z.string().optional(),
+  /**
+   * Optional TTL (ms) for shared session HTML exports. Default 7d
+   * applied in the route handler when unset; explicit body `ttlMs:
+   * null` on POST /api/share bypasses both this default and the
+   * per-share cap. Kept optional so existing prod config files don't
+   * need a schema-bump migration (m-share-static-export D3).
+   */
+  shareTtlMs: z.number().int().positive().optional(),
 }).superRefine((cfg, ctx) => {
   const a = resolve(cfg.projectsRoot);
   const b = resolve(cfg.guestProjectsRoot);

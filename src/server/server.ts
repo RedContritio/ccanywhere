@@ -21,6 +21,8 @@ import { registerInternalMultiUserRoutes } from './routes/internal-multi-user.js
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerSessionResumeRoutes } from './routes/sessions-resume.js';
+import { registerShareRoutes } from './routes/share.js';
+import type { ShareStore } from '../share/store.js';
 import { registerHookRoutes } from './routes/hook.js';
 
 export interface BuildServerOptions {
@@ -42,6 +44,12 @@ export interface BuildServerOptions {
    */
   readonly userStore?: UserStore;
   readonly tokenStore?: TokenStore;
+  /**
+   * m-share-static-export. Optional in tests; production wires the real
+   * instance from serve.ts. When undefined the share routes simply
+   * aren't registered (cleaner than emitting 503s).
+   */
+  readonly shareStore?: ShareStore;
   readonly internalHookToken: string;
   readonly cliToken: string;
   readonly historyRoot?: string;
@@ -142,6 +150,15 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   if (opts.injectCcSessionId !== undefined) sessionOpts.injectCcSessionId = opts.injectCcSessionId;
   await registerSessionRoutes(app, opts.config, opts.manager, opts.projectStore, sessionOpts);
   await registerSessionResumeRoutes(app, opts.config, opts.manager, opts.projectStore);
+  if (opts.shareStore !== undefined) {
+    await registerShareRoutes(
+      app,
+      opts.config,
+      opts.shareStore,
+      opts.manager,
+      opts.projectStore,
+    );
+  }
   await registerHookRoutes(
     app,
     opts.manager,

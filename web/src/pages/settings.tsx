@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { MySharesSection } from '../components/my-shares-section.js';
 import { ThemeToggle } from '../components/theme-toggle.js';
 import { ToolbarConfigSection } from '../components/toolbar-config-section.js';
 import { usePrefsStore } from '../state/prefs.js';
@@ -40,6 +41,7 @@ export function SettingsPage(): JSX.Element {
           </p>
         )}
         <ToolbarConfigSection />
+        <MySharesSection />
       </div>
     </main>
   );

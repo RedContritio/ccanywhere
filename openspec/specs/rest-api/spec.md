@@ -518,3 +518,19 @@ manager 查询）。其它字段 MUST 用宽松 schema（passthrough），允许
 
 路由 MUST 按 `openspec/specs/hooks/spec.md` 驱动 session 状态机。
 路由 MUST NOT 消费请求 body（hook 命令不发 body）。
+
+### Requirement: share endpoints（m-share-static-export）
+
+四个 endpoints 覆盖 share 颁码 / 管理 / 公开查看。完整语义、UUID
+路径校验、cache 头、cross-user 404 不泄漏、frozen snapshot、lazy
+GC、shareTtlMs 配置等 see `openspec/specs/share/spec.md`。
+
+| 路由 | 鉴权 | 状态 |
+|---|---|---|
+| `POST /api/share` | cookie session | 201 / 400 / 401 / 404 |
+| `GET /api/share/list` | cookie session | 200 / 401 |
+| `DELETE /api/share/:code` | cookie session | 204 / 401 / 404 |
+| `GET /share/:code` | **无鉴权**（公开 URL） | 200 / 404 |
+
+`/share/:code` 路径不以 `/api/` 或 `/ws/` 开头，由 `server/auth.ts`
+onRequest hook line 119-122 自动公开放行；本 spec 不重复约束。

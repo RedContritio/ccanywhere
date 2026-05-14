@@ -12,6 +12,7 @@ import { maybePricingStaleWarn } from '../quota/pricing.js';
 import { buildServer } from '../server/server.js';
 import { SessionManager } from '../session/manager.js';
 import { SessionRegistry } from '../session/registry.js';
+import { ShareStore } from '../share/store.js';
 import { TokenStore } from '../tokens/store.js';
 import { UserStore } from '../users/store.js';
 
@@ -125,6 +126,14 @@ export async function runServe(configPathArg?: string): Promise<void> {
     registry: sessionRegistry,
   });
   manager.loadDeadStubs();
+
+  // m-share-static-export: sweep expired snapshots at boot (per D6 lazy
+  // GC). loadAllSync's side effect unlinks any record whose expiresAt
+  // is past — we don't capture the return because the route handlers
+  // re-read fresh.
+  const shareStore = new ShareStore(join(configDir, 'shares'));
+  shareStore.loadAllSync();
+
   const internalHookToken = randomBytes(32).toString('hex');
 
   const app = await buildServer({
@@ -135,6 +144,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
     deviceStore,
     userStore,
     tokenStore,
+    shareStore,
     internalHookToken,
     cliToken,
   });

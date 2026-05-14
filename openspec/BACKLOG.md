@@ -72,8 +72,6 @@ proposal，统一流程）。
 
 ## 大项（在 `openspec/changes/<slug>/`，本表只列出处指针）
 
-- **m-share-static-export**（v1+，~600 LOC）— programmatic jsonl→HTML
-  导出。`changes/m-share-static-export/`
 - **m-toolbar-presets**（~80 LOC）— 内置 toolbar 模板 + swap。
   `changes/m-toolbar-presets/`
 - **m-touch-scroll-one-line**（~50 LOC，blocked-on-data）— 偶发滑动一行
