@@ -229,7 +229,7 @@ export function LoginPage(): JSX.Element {
       </div>
       <div className="w-full max-w-sm space-y-5 rounded-lg border border-border bg-bg-elevated p-6">
         <header className="space-y-1">
-          <h1 className="text-lg font-semibold tracking-tight text-claude">CC anywhere</h1>
+          <h1 className="text-lg font-semibold tracking-tight"><span className="text-claude">C</span>C anywhere</h1>
           <p className="text-xs text-fg-muted">
             在任何屏幕上，继续你的 cc。
           </p>
