@@ -205,3 +205,85 @@ route handler fallback 到 7d (DEFAULT_TTL_MS)。
 - GIVEN config.json 不含 shareTtlMs
 - WHEN  POST /api/share { sessionId, ttlMs 缺省 }
 - THEN  201 + `expiresAt = now + 7d`
+
+### Requirement: 导出仅含 active path + tool 调用 footer 化（m-share-export-cleanup）
+
+share 导出渲染 jsonl → HTML 时必须：
+
+1. **active path 过滤**：cc 在 jsonl 里写 `{"type":"last-prompt",
+   "leafUuid":"..."}` 行，每次 rewind / 新 prompt 追加一条。最后一个
+   last-prompt 的 leafUuid 是当前 active tip。从 tip 沿 `parentUuid`
+   回溯到 root 即为 active uuid set；off-path 行（dead 分支）不渲染。
+2. **fallback**：若 jsonl 完全没有 last-prompt 行（旧 cc 客户端），
+   退到顺序渲染（向后兼容）。
+3. **tool 调用 body 完全不渲染到 HTML**：tool_use 的 name / input、
+   tool_result 的 content 都**不**进入输出 HTML——不是隐藏，是源码
+   里就没有。保留的只有 tool_use_id（用于 footer 计数去重）。
+4. **以 user 为段边界合并 assistant**：在两个 real user prompt 之间，
+   多个连续 assistant rows + 中间的 synthetic user-role tool_result
+   rows 全部合并成**一个** assistant article。混合 user message
+   （text + tool_result）：text 部分照渲染为新 user message（关闭当前
+   assistant 段），tool_result 部分仅为 footer 计数。
+5. **tools used footer**：合并后的 assistant article 末尾追加
+   `<div class="tools-footer">{N} tool[s] used</div>`，N = 该段内
+   tool_use_id 去重后总数（assistant 自己的 tool_use `id` 与
+   user-role tool_result 的 `tool_use_id` 配对算 1，不双计）。
+
+#### Scenario: last-prompt.leafUuid 驱动 active path 过滤
+
+- GIVEN jsonl 含 user u1 → assistant u2(parent=u1, "DEAD") +
+        assistant u3(parent=u1, "ACTIVE") + user u4(parent=u3) +
+        `{type:'last-prompt', leafUuid:'u4'}`
+- WHEN  renderShareHtml 处理
+- THEN  输出含 "ACTIVE"，不含 "DEAD"
+
+#### Scenario: 多 last-prompt 取最后一个（rewind 累积）
+
+- GIVEN 同一 jsonl 内先后写两条 last-prompt（leafUuid=u2 然后 u3）
+- WHEN  renderShareHtml 处理
+- THEN  active tip 为 u3，u2 分支若 off-path 则不渲染
+
+#### Scenario: 无 last-prompt 时退到顺序渲染（向后兼容）
+
+- GIVEN jsonl 不含 last-prompt 行（旧 cc session）
+- WHEN  renderShareHtml 处理
+- THEN  所有 user / assistant 行按 jsonl 顺序渲染（现行 v1 行为）
+
+#### Scenario: synthetic user-role tool_result 整行不渲染
+
+- GIVEN assistant message 内含 tool_use(id=t1) + 紧接 user-role
+        message 内含 tool_result(tool_use_id=t1, content="some output")
+- WHEN  renderShareHtml 处理
+- THEN  输出含 1 个 `<article class="msg assistant">`，无独立 user
+        article
+- AND   输出**不**含 "some output"、`<details>`、`<pre>` 等 tool body
+        痕迹
+- AND   该 assistant article 末尾仅有 `<div class="tools-footer">1
+        tool used</div>`
+
+#### Scenario: 多 assistant rows 合并为单 article（以 user 为段边界）
+
+- GIVEN user "do something" → assistant(text="first", tool_use t1) →
+        user(tool_result t1) → assistant(text="second", tool_use t2) →
+        user(tool_result t2) → assistant(text="final") → user "next"
+- WHEN  renderShareHtml 处理
+- THEN  恰好 2 个 user article + 1 个 assistant article（中间 3 个
+        assistant rows 合并）
+- AND   assistant article 含 "first" / "second" / "final" 全部 text
+- AND   仅 1 个 `tools-footer` 显示 "2 tools used"
+
+#### Scenario: 混合 user message 拆分（text 留 user，tool_result 仅计数）
+
+- GIVEN assistant(u2 含 tool_use t1) + user(u3 含 text + tool_result
+        t1)
+- WHEN  renderShareHtml 处理
+- THEN  user u3 的 text 部分输出为新 user article
+- AND   user u3 的 tool_result content **不**出现在 HTML 中
+- AND   tool_use_id t1 计入 u2 assistant article 的 footer
+
+#### Scenario: footer 计数按 tool_use_id 去重
+
+- GIVEN assistant 含 2 个 tool_use(id=A, id=B)，user 含对应
+        tool_result(tool_use_id=A, tool_use_id=B)
+- WHEN  renderShareHtml 处理
+- THEN  footer 显示 "2 tools used"（不是 4 — A 和 B 各算 1）

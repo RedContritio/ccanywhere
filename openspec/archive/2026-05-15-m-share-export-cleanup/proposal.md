@@ -1,8 +1,24 @@
 ---
-status: planned
+status: shipped
 ---
 
-# Proposal: m-share-export-cleanup — 导出过滤 rewind 分支 + 合并 tool 调用到消息底部
+# Proposal: m-share-export-cleanup — 导出过滤 rewind 分支 + tool 调用 footer 化
+
+## 状态
+
+**shipped 2026-05-15。** 原 brainstorm（"tool 调用合并到上一条消息底部 +
+保留 `<details>` collapsed 让接收方可展开"）保留下方作为 audit 轨迹。
+ship 期间 user 反馈连续把 scope 收紧：
+
+1. tool 调用应**以 user 为段边界**合并 — 多个连续 assistant rows + 中间
+   的 synthetic user tool_result rows 折叠成**一个** assistant article
+2. tool 调用 **完全不显示** — 不仅是默认 collapsed，HTML 源码里也不含
+   tool body / input / output；仅保留 tool_use_id 用于 footer 计数
+
+最终 spec 见 `openspec/specs/share/spec.md` 内 `Requirement: 导出仅含
+active path + tool 调用 footer 化`。
+
+# Proposal: m-share-export-cleanup — 原 brainstorm (rewind 分支过滤 + tool 折叠)
 
 ## 状态
 

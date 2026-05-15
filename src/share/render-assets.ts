@@ -119,21 +119,9 @@ export const STYLES = `
     border-left: 2px solid var(--border);
   }
   .text a { color: var(--brand); }
-  details.tool-use, details.tool-result {
-    margin: 6px 0; border: 1px solid var(--border);
-    border-radius: 4px; background: var(--bg);
-  }
-  details.tool-result.error { border-color: var(--danger); }
-  details summary {
-    cursor: pointer; padding: 4px 10px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12px; color: var(--fg-muted);
-  }
-  details.tool-result.error summary { color: var(--danger); }
-  details[open] summary { border-bottom: 1px solid var(--border); }
-  details pre {
-    margin: 0; padding: 8px 10px; background: var(--bg);
-    overflow-x: auto; font-size: 12px; line-height: 1.4;
+  .tools-footer {
+    margin: 6px 0 0;
+    font-size: 11px; color: var(--fg-muted); text-align: right;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   footer.page {

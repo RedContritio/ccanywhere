@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { renderShareHtml, type RenderInput } from './render.js';
 
+/**
+ * Core renderShareHtml tests — page chrome, text rendering, privacy,
+ * non-message rows, XSS, truncation. Tool-folding + rewind cases live
+ * in `render-rewind.test.ts`.
+ */
+
 function input(jsonl: string, overrides: Partial<RenderInput> = {}): RenderInput {
   return {
     jsonl,
@@ -59,62 +65,6 @@ describe('renderShareHtml', () => {
     const html = renderShareHtml(input(row));
     expect(html).not.toContain('INTERNAL_COT_LEAK');
     expect(html).toContain('visible response');
-  });
-
-  it('renders tool_use as collapsed details with name + input', () => {
-    const row = JSON.stringify({
-      type: 'assistant',
-      message: {
-        role: 'assistant',
-        content: [
-          { type: 'tool_use', name: 'Bash', input: { command: 'ls' } },
-        ],
-      },
-    });
-    const html = renderShareHtml(input(row));
-    expect(html).toContain('<details class="tool-use"');
-    expect(html).toContain('<summary>Bash</summary>');
-    expect(html).toContain('&quot;command&quot;');
-  });
-
-  it('renders tool_result as collapsed details under user role', () => {
-    const row = JSON.stringify({
-      type: 'user',
-      message: {
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: 'toolu_1',
-            content: 'total 24\nfoo bar',
-          },
-        ],
-      },
-    });
-    const html = renderShareHtml(input(row));
-    expect(html).toContain('<details class="tool-result"');
-    expect(html).toContain('tool result');
-    expect(html).toContain('total 24');
-  });
-
-  it('marks errored tool_result with the error class', () => {
-    const row = JSON.stringify({
-      type: 'user',
-      message: {
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: 'toolu_2',
-            content: 'boom',
-            is_error: true,
-          },
-        ],
-      },
-    });
-    const html = renderShareHtml(input(row));
-    expect(html).toContain('tool-result error');
-    expect(html).toContain('tool result (error)');
   });
 
   it('skips permission-mode / file-history-snapshot / system / attachment rows', () => {
@@ -177,10 +127,20 @@ describe('renderShareHtml', () => {
     expect(html).toContain('<p>good</p>');
   });
 
-  it('truncates oversized tool_result (4000 char cap) and tool_use input (2000 char cap)', () => {
+  it('strips tool_use bodies entirely (only footer count survives)', () => {
+    // m-share-export-cleanup followed up by "完全不显示": tool I/O
+    // never appears in HTML. Even huge tool inputs/outputs drop to
+    // zero bytes in the rendered share.
     const big = 'x'.repeat(5000);
     const bigInput = { huge: 'y'.repeat(5000) };
     const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 't', name: 'Bash', input: bigInput }],
+        },
+      }),
       JSON.stringify({
         type: 'user',
         message: {
@@ -190,17 +150,12 @@ describe('renderShareHtml', () => {
           ],
         },
       }),
-      JSON.stringify({
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [{ type: 'tool_use', name: 'Bash', input: bigInput }],
-        },
-      }),
     ];
     const html = renderShareHtml(input(lines.join('\n')));
-    expect(html).toContain('…');
-    expect(html).not.toContain('x'.repeat(4500));
+    expect(html).not.toContain('xxxx');
+    expect(html).not.toContain('yyyy');
+    expect(html).not.toContain('<details');
+    expect(html).toContain('<div class="tools-footer">1 tool used</div>');
   });
 
   it('sets noindex meta + footer share code for traceability', () => {

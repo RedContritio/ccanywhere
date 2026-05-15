@@ -72,9 +72,6 @@ proposal，统一流程）。
 
 ## 大项（在 `openspec/changes/<slug>/`，本表只列出处指针）
 
-- **m-share-export-cleanup**（~80-130 LOC + 测试 ~35）— share 导出过滤
-  rewind dead 分支 + tool 调用合并到上一条消息底部 footer。
-  `changes/m-share-export-cleanup/`
 - **m-toolbar-presets**（~80 LOC）— 内置 toolbar 模板 + swap。
   `changes/m-toolbar-presets/`
 - **m-touch-scroll-one-line**（~50 LOC，blocked-on-data）— 偶发滑动一行
