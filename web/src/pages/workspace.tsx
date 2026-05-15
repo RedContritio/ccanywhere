@@ -268,7 +268,7 @@ export function WorkspacePage(): JSX.Element {
             onClick={() => navigate('/workspace')}
             aria-label="返回主页"
             title="返回主页"
-            className="text-sm font-semibold tracking-tight hover:text-brand"
+            className="text-sm font-semibold tracking-tight text-claude hover:opacity-80"
           >
             CC anywhere
           </button>
@@ -319,7 +319,7 @@ export function WorkspacePage(): JSX.Element {
           ) : id === undefined ? (
             <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
               <div className="flex max-w-md flex-col items-center gap-4 text-center">
-                <h2 className="text-xl font-semibold tracking-tight">
+                <h2 className="text-xl font-semibold tracking-tight text-claude">
                   CC anywhere
                 </h2>
                 <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-xs">

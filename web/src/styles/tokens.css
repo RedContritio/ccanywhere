@@ -11,6 +11,7 @@
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-brand: var(--brand);
+  --color-claude: #c15f3c;
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);

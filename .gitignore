@@ -10,5 +10,6 @@ coverage/
 test-results/
 playwright-report/
 .playwright/
+.playwright-mcp/
 .auth/
 .husky/_/
