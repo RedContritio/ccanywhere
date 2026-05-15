@@ -40,6 +40,19 @@ export type SpawnResult =
   | { readonly kind: 'created'; readonly session: Session }
   | { readonly kind: 'attached'; readonly existingId: string };
 
+/**
+ * m-quota-inline: optional per-session lifecycle observer, decoupled
+ * from QuotaWatcher class via this interface so SessionManager doesn't
+ * import the quota module. Manager calls `start` after spawn /
+ * resumeDeadStub, and `stop` on PTY exit + markDeleted teardown. Used
+ * for jsonl fs.watch → setQuotaUsage refresh; future observers (e.g.
+ * audit log, metrics) can plug in via the same shape.
+ */
+export interface SessionLifecycleObserver {
+  start(session: Session): void;
+  stop(sessionId: string): void;
+}
+
 export interface SessionManagerOptions {
   /**
    * Time after `deletedAt` a soft-deleted session is physically removed
@@ -54,6 +67,12 @@ export interface SessionManagerOptions {
    * leave this undefined.
    */
   readonly registry?: SessionRegistry;
+  /**
+   * Optional per-session lifecycle observer (m-quota-inline). When set,
+   * `start(session)` fires after each successful spawn and `stop(id)`
+   * fires on PTY exit and on markDeleted teardown.
+   */
+  readonly lifecycleObserver?: SessionLifecycleObserver;
 }
 
 export function buildEnv(

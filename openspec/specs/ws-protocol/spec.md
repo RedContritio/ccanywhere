@@ -66,10 +66,11 @@ delta 协商（详见"连接初始化序列"）。N 缺失、非整数、负数�
 服务端发往客户端的帧 MUST 是以下之一：
 
 ```json
-{ "type": "snapshot", "upToSeq": <int>, "data": "<UTF-8 minimal-ANSI screen>" }
-{ "type": "output",   "seq": <int>,     "data": "<UTF-8 since last flush>" }
-{ "type": "status",   "state": "starting|idle|busy|dead" }
-{ "type": "error",    "message": "<人类可读>" }
+{ "type": "snapshot",          "upToSeq": <int>, "data": "<UTF-8 minimal-ANSI screen>" }
+{ "type": "output",            "seq": <int>,     "data": "<UTF-8 since last flush>" }
+{ "type": "status",            "state": "starting|idle|busy|dead" }
+{ "type": "error",             "message": "<人类可读>" }
+{ "type": "quota_exhausted",   "reason": "<人类可读 e.g. 'tokens quota exhausted: 1234 / 1000'>" }
 { "type": "pong" }
 ```
 
@@ -216,7 +217,8 @@ session 上其它已 attach 的 client 的实时 PTY 输出 broadcast。该约�
 
 ### Requirement: 客户端→PTY 输入
 
-收到 `input` 帧时，服务端 MUST 把 `data` 字符串原样写入 session 的 PTY，
+收到 `input` 帧时，服务端 MUST 先做 quota gate 检查（m-quota-inline，详见
+下一 Requirement）；通过后 MUST 把 `data` 字符串原样写入 session 的 PTY，
 不做转义、不做缓冲。session 处于 `dead` 时写入是 no-op。
 
 #### Scenario: input 透传
@@ -224,6 +226,43 @@ session 上其它已 attach 的 client 的实时 PTY 输出 broadcast。该约�
 - GIVEN 客户端已连接到一个跑 `sh` 的 session
 - WHEN  客户端发 `{ "type": "input", "data": "echo cc-marker\n" }`
 - THEN  客户端最终会收到一个 `output` 帧，其 `data` 包含 `cc-marker`
+
+### Requirement: input 帧 quota gate（m-quota-inline）
+
+每次 `input` 帧到达，服务端 MUST 在写入 PTY **之前** 同步评估当前 user 的
+quota 状态：
+
+1. 缺 `userStore` 注入（legacy fixture）→ pass through。
+2. `manager.get(sessionId).info.userId` → `userStore.findById(...)` 找不到
+   user → pass through（无主 session）。
+3. `user.kind === 'owner'` → pass through（owner 无限额）。
+4. `user.quota.cost.limitUsd !== null && usedUsd >= limitUsd` →
+   blocked，reason = `cost quota exhausted: $<used> / $<limit>`。
+5. `user.quota.tokens.limit !== null && used >= limit` → blocked，
+   reason = `tokens quota exhausted: <used> / <limit>`。
+6. blocked → 服务端 MUST 推 `{ type: 'quota_exhausted', reason }` 帧给该
+   client，**不** 写入 PTY；session 状态 / 其他 client 不变。
+7. 通过 → 写 PTY。
+
+`user.quota.used` 由 `QuotaWatcher` 在 cc 写 jsonl 后异步刷新（见
+`openspec/specs/hooks/spec.md` "quota 实时刷新走 jsonl fs.watch"），所以
+gate 评估的是"上一次 cc turn 结束后的累计"——首轮 prompt 必通过，第二轮
+起若已超额会被拦。
+
+#### Scenario: user 已超 tokens.limit → 下一次 input 触发 quota_exhausted
+
+- GIVEN user alice 持 `tokens.limit=100`，watcher 已写回
+        `quota.tokens.used=200`
+- WHEN  alice client 发 `{ type: 'input', data: 'echo blocked\r' }`
+- THEN  alice client 收到 `{ type: 'quota_exhausted', reason: 'tokens quota exhausted: 200 / 100' }`
+- AND   PTY 没有 `echo blocked` 输出
+- AND   session.state 不变
+
+#### Scenario: owner input 永不被 gate 拦
+
+- GIVEN owner session，jsonl 假设已含巨量 usage
+- WHEN  owner client 发任何 `input` 帧
+- THEN  服务端不发 `quota_exhausted`，input 写入 PTY
 
 ### Requirement: resize 与多 client
 

@@ -10,6 +10,8 @@ export interface TerminalSocketHandlers {
   onConnected?: () => void;
   onReconnecting?: () => void;
   onDead?: (reason: DeadReason) => void;
+  /** m-quota-inline: server-side input gate rejected this turn's input. */
+  onQuotaExhausted?: (reason: string) => void;
 }
 
 /**
@@ -21,6 +23,10 @@ export interface TerminalSocketHandlers {
  *
  * `getHandlers` is invoked at every event so the latest props.* callbacks
  * are picked up without rebuilding the socket on every render.
+ *
+ * Note: server-side input gate white-lists xterm auto-emitted focus
+ * tracking sequences (`\x1b[I`/`\x1b[O`), so onQuotaExhausted only
+ * fires for actual user input — no client-side filtering needed here.
  */
 export function setupTerminalSocket(
   sessionId: string,
@@ -42,5 +48,6 @@ export function setupTerminalSocket(
     onConnected: () => getHandlers().onConnected?.(),
     onReconnecting: () => getHandlers().onReconnecting?.(),
     onDead: (reason: DeadReason) => getHandlers().onDead?.(reason),
+    onQuotaExhausted: (reason: string) => getHandlers().onQuotaExhausted?.(reason),
   });
 }

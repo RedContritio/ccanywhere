@@ -47,16 +47,22 @@ export class SessionManager {
   private readonly _activeResumeTargets = new Map<string, string>();
   private readonly deletedSessionTtlMs: number;
   private readonly registry: SessionRegistry | undefined;
+  /** m-quota-inline: late-wired by buildServer after building QuotaWatcher. */
+  private lifecycleObserver: SessionManagerOptions['lifecycleObserver'];
   private readonly pendingWrites = new Set<Promise<unknown>>();
 
   constructor(options: SessionManagerOptions = {}) {
     this.deletedSessionTtlMs = options.deletedSessionTtlMs ?? DEFAULT_DELETED_TTL_MS;
     if (this.deletedSessionTtlMs <= 0) {
-      throw new RangeError(
-        `deletedSessionTtlMs must be positive, got ${this.deletedSessionTtlMs}`,
-      );
+      throw new RangeError(`deletedSessionTtlMs must be positive, got ${this.deletedSessionTtlMs}`);
     }
     this.registry = options.registry;
+    this.lifecycleObserver = options.lifecycleObserver;
+  }
+
+  /** m-quota-inline: late-wire observer after SessionManager construction. */
+  setLifecycleObserver(observer: SessionManagerOptions['lifecycleObserver']): void {
+    this.lifecycleObserver = observer;
   }
 
   /** Boot-time sync recovery: GC stale soft-deleted, load rest as dead stubs. */
@@ -76,23 +82,17 @@ export class SessionManager {
         makeDeadStub(p.info, p.deletedAt, p.lastScreen, p.deletedAt ?? now),
       );
     }
-    logger.info(
-      { count: this.deadStubs.size },
-      'session registry loaded dead stubs',
-    );
+    logger.info({ count: this.deadStubs.size }, 'session registry loaded dead stubs');
   }
 
   spawn(opts: SpawnOptions): SpawnResult {
     this.gc(Date.now());
-
     const attached = this.tryAttachExisting(opts);
     if (attached !== null) return attached;
-
     const id = opts.forcedSessionId ?? randomUUID();
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
-    // Inherit parent env (HOME, PATH, …) so cc reads ~/.claude/. MUST
-    // NOT override CLAUDE_CONFIG_DIR (M5 regression).
+    // Inherit parent env (HOME, PATH, …); MUST NOT override CLAUDE_CONFIG_DIR (M5).
     const pty = ptySpawn(opts.command, [...opts.args], {
       cwd: opts.cwd,
       cols,
@@ -100,7 +100,6 @@ export class SessionManager {
       env: buildEnv(opts.env),
       name: 'xterm-256color',
     });
-
     const info = makeSessionInfo(id, opts);
     const session = new SessionImpl(
       info,
@@ -115,11 +114,9 @@ export class SessionManager {
       this.trackWrite(this.registry.save(info, null));
       this.trackWrite(this.registry.deleteScreen(id)); // stale snapshot
     }
-
     if (opts.mode === 'resume' && opts.resumeSessionId !== undefined) {
       this.bindResumeLock(opts.resumeSessionId, id, session);
     }
-
     session.setState('idle');
     logger.debug(
       {
@@ -134,7 +131,8 @@ export class SessionManager {
       },
       'session spawned',
     );
-
+    // m-quota-inline: observer must swallow its own errors (QuotaWatcher does).
+    this.lifecycleObserver?.start(session);
     return { kind: 'created', session };
   }
 
@@ -290,6 +288,7 @@ export class SessionManager {
       this.trackWrite(this.registry.save(session.info, deletedAt));
       this.trackWrite(this.registry.saveScreen(id, lastScreen));
     }
+    this.lifecycleObserver?.stop(id);
   }
 
   private trackWrite(p: Promise<unknown>): void {

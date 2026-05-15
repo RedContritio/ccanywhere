@@ -6,6 +6,13 @@ export type ServerFrame =
   | { type: 'output'; seq: number; data: string }
   | { type: 'status'; state: SessionState }
   | { type: 'error'; message: string }
+  /**
+   * m-quota-inline: server input gate dropped this turn's input because
+   * user.quota.{cost,tokens} would be exceeded. cc never saw the bytes;
+   * UI should toast `reason` and refetch /api/me/quota. Session stays
+   * alive — only this single input was rejected.
+   */
+  | { type: 'quota_exhausted'; reason: string }
   | { type: 'pong' };
 
 export type ClientFrame =
@@ -32,6 +39,8 @@ export interface SocketHandlers {
   onConnected?: () => void;
   onReconnecting?: () => void;
   onDead?: (reason: DeadReason) => void;
+  /** m-quota-inline: server-side input gate rejected user input. */
+  onQuotaExhausted?: (reason: string) => void;
 }
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -226,6 +235,10 @@ export class TerminalSocket {
         return;
       case 'error':
         this.handlers.onError?.(frame.message);
+        return;
+      case 'quota_exhausted':
+        recordOp('ws.quota_exhausted', { reason: frame.reason });
+        this.handlers.onQuotaExhausted?.(frame.reason);
         return;
       case 'pong':
         return;

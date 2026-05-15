@@ -17,6 +17,7 @@ import {
 import { NotificationBanner } from '../components/notification-banner.js';
 import { SessionList } from '../components/session-list.js';
 import { FeedbackDialog } from '../components/feedback-dialog.js';
+import { QuotaExhaustedDialog } from '../components/quota-exhausted-dialog.js';
 import { QuotaPanel } from '../components/quota-panel.js';
 import { ShareCreateDialog } from '../components/share-create-dialog.js';
 import { StatusBadge } from '../components/status-badge.js';
@@ -73,6 +74,7 @@ export function WorkspacePage(): JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [quotaOpen, setQuotaOpen] = useState(false);
+  const [quotaExhaustedReason, setQuotaExhaustedReason] = useState<string | null>(null);
   const [shareSessionId, setShareSessionId] = useState<string | null>(null);
   const idemKeyRef = useRef<string>('');
   const terminalRef = useRef<TerminalHandle | null>(null);
@@ -434,6 +436,7 @@ export function WorkspacePage(): JSX.Element {
                       onConnected={onWsConnected}
                       onReconnecting={onWsReconnecting}
                       onDead={onWsDead}
+                      onQuotaExhausted={(reason) => setQuotaExhaustedReason(reason)}
                     />
                   )}
                 </div>
@@ -466,6 +469,11 @@ export function WorkspacePage(): JSX.Element {
         onClose={() => setFeedbackOpen(false)}
       />
       <QuotaPanel open={quotaOpen} onClose={() => setQuotaOpen(false)} />
+      <QuotaExhaustedDialog
+        reason={quotaExhaustedReason}
+        onClose={() => setQuotaExhaustedReason(null)}
+        onOpenQuotaPanel={() => setQuotaOpen(true)}
+      />
       <ShareCreateDialog
         open={shareSessionId !== null}
         sessionId={shareSessionId}

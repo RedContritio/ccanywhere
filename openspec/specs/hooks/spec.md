@@ -126,114 +126,83 @@ cc 的 hook 是 fire-and-forget HTTP 调用，cc 自身不重试。本服务端
 延伸：服务端 MUST NOT 根据 PTY 输出静默时间猜测 idle，因 TUI 重绘会让启发式
 经常误判。状态机由 hook 主导（user 自愿配置）。
 
-### Requirement: UserPromptSubmit 是 quota 单一 enforcement 点（m-quota-cost-tracking）
+### Requirement: hook 不再做 quota enforcement（m-quota-inline）
 
-`UserPromptSubmit` event 处理器 MUST 在 state transition 之前做配额检查；
-任何其他事件（`SessionStart` / `PreToolUse` / `PostToolUse` / `Notification` /
-`Stop` / `SubagentStop`）MUST NOT 触发配额检查。
+m-quota-inline reframe：quota enforcement 已从 `UserPromptSubmit` hook
+回环搬到 ws input gate 内嵌；hook 路由仅做 state machine，**不再** 调
+UserStore、不再算 ccusage、不再返 block JSON。
 
-服务端 MUST：
+`POST /api/hook/:sessionId/:event` 处理器 MUST：
 
-1. 解析 `session.info.userId` → User；找不到（legacy session）→ 跳过配额，
-   继续 state-machine 路径。
-2. `user.kind === 'owner'` → 跳过配额，继续 state-machine 路径。
-3. user 路径：派生 cc-internal sessionId `ccSessionId =
-   info.resumeSessionId ?? info.id`，算 `jsonlPath = ccJsonlPathOf(info.cwd,
-   ccSessionId)`。
-4. `jsonl` 文件不存在（first-prompt edge：cc 还没 flush）→ treat as 0，
-   **不** 触发 setQuotaUsage（保留任何旧 `user.quota.*.used` 值），不 block，
-   继续 state-machine 路径。
-5. jsonl 存在 → `ccusageCalc(jsonlPath, since=user.createdAt)` → 累加
-   ALL `type='assistant'` 且 `timestamp >= user.createdAt` 行的 token usage
-   与 cost。
-6. `userStore.setQuotaUsage(user.id, costUsd, totalTokens)` 持久化。
-7. 双限制按先触达：cost 先于 tokens；任一命中 → 返回 200 + cc 协议
-   block JSON `{ decision: 'block', reason, continue: false, stopReason }`，
-   **不** 转 `busy`（pre-block 状态保持）。
-8. 都未命中 → 转 `busy`（按状态机表）+ 204。
+1. 校验 `event` 是 STATE_TRANSITIONS 表内合法事件，否则 `400 invalid_event`。
+2. 校验 `session = manager.get(sessionId)` 存在，否则 `404 not_found`。
+3. 按 STATE_TRANSITIONS 表执行 setState（不切换的事件保持当前 state）。
+4. 始终返 `204 No Content`，**绝不** 返 200 + block JSON。
 
-`since=user.createdAt` 而 **非** token.createdAt：用户换发 token 不重置
-quota；configured limit 反映用户帐户生命周期的累计上限。
+**MUST NOT**：
 
-cc 协议的 block JSON `decision='block'` MUST 用 status 200 返回，**不能**
-用 4xx — curl 在 4xx 上 exit 非 0，cc 把 hook 视为失败而不是 block。
-`continue: false` + `stopReason` 字段同时填充，覆盖 cc 2.x 两种字段命名。
+- 解析 `session.info.userId`、读 `userStore`、调 `ccusageCalc`、写
+  `setQuotaUsage`。这些路径全部在 `QuotaWatcher` + ws input gate 实现。
+- 依赖 `UserStore` 注入；hook 路由签名不接受 `userStore` 参数。
 
-#### Scenario: user 未超 limit → 204 + 转 busy + persist usage
+#### Scenario: hook UserPromptSubmit 永远 204 + 转 busy
 
-- GIVEN user alice 持有 `cost.limitUsd=100, tokens.limit=null`,
-        jsonl 已含 sonnet 1000 input + 500 output（约 $0.0105，1500 tokens）
+- GIVEN session 处于 `idle`，user 已大幅超 `cost.limitUsd`
 - WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
 - THEN  状态 `204`
-- AND   `session.state === 'busy'`
-- AND   `userStore.findById(alice.id).quota.cost.usedUsd ≈ 0.0105`
-- AND   `userStore.findById(alice.id).quota.tokens.used === 1500`
+- AND   `session.state === 'busy'`（不再 pre-block hold）
+- AND   响应 body 为空，**不** 含 `decision` 字段
 
-#### Scenario: 超 cost limit → 200 + block JSON + 状态保持 idle
+### Requirement: quota 实时刷新走 jsonl fs.watch（m-quota-inline）
 
-- GIVEN user 持有 `cost.limitUsd=5`，jsonl 已含 opus $15 用量
-- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
-- THEN  状态 `200`，body `{ decision: 'block', reason: 'cost quota exhausted: $15.00 / $5.00', continue: false, stopReason: '...' }`
-- AND   `session.state === 'idle'`（pre-block 状态）
+服务端 MUST 维护一个 `QuotaWatcher`：每个 spawn 的非 owner session 启动
+一个 fs.watch 监听该 session 的 `ccJsonlPathOf(cwd, ccSessionId)` 父目录，
+debounce 默认 500 ms 后调 `ccusageCalc` 算 jsonl 累计 usage 并通过
+`userStore.setQuotaUsage(user.id, costUsd, totalTokens)` 持久化。
 
-#### Scenario: jsonl 不存在 → 不 block + 不 persist
+watcher MUST：
 
-- GIVEN user 已创建但尚未发任何 prompt（jsonl 文件未生成）
-- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
-- THEN  状态 `204`
-- AND   `session.state === 'busy'`
-- AND   `userStore.findById(user.id).quota.cost.usedUsd === 0`（保留初始值）
+- owner kind session 不分配 watcher（owner 无 quota，零 fs 开销）。
+- session PTY 退出 / markDeleted / killAll 时 close watcher（防 fd 泄漏）。
+- 路径派生与原 hook 路径一致：`ccSessionId = info.resumeSessionId ?? info.id`。
+- jsonl 不存在时 recompute MUST no-op（不写 setQuotaUsage、不抛错）。
+- ccusage 算累计 since `user.createdAt`（与原 hook 行为一致），换发 token
+  不重置 quota。
 
-#### Scenario: owner 全程旁路配额检查
+#### Scenario: 非 owner session jsonl 写入触发 quota.used 刷新
 
-- GIVEN owner session，jsonl 含极大用量
-- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
-- THEN  状态 `204`
-- AND   `userStore.findById(owner.id).quota.cost.usedUsd === 0`（不 persist）
+- GIVEN user alice spawn 一个 session，ccanywhere 启动 watcher
+- WHEN  cc 写 jsonl 行（任意 assistant 行 with usage）
+- THEN  约 500 ms 内 `userStore.findById(alice.id).quota.tokens.used` 反映
+        `ccusageCalc` 的最新累计
 
-#### Scenario: 双限制按先触达——cost 先到
+#### Scenario: owner session 不启动 watcher
 
-- GIVEN user 持有 `cost.limitUsd=1, tokens.limit=10_000_000`,
-        usage 累计 $3 / 1M tokens
-- WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
-- THEN  block reason 含 `cost quota exhausted`，不含 `tokens`
+- GIVEN owner spawn session
+- WHEN  cc 写 jsonl 任意量
+- THEN  没有 fs.watch entry 被分配
+- AND   `userStore.findById(owner.id).quota.cost.usedUsd === 0`
 
-#### Scenario: 非 UserPromptSubmit 事件不触发配额
+### Requirement: UserPromptSubmit hook stdout 不再要求保留（m-quota-inline）
 
-- GIVEN user 已超 `cost.limitUsd`
-- WHEN  POST `/api/hook/<sid>/Stop` 或 `/PreToolUse` 或 `/SessionStart`
-- THEN  状态 `204`，不返 block JSON
-
-### Requirement: UserPromptSubmit hook stdout 直通（m-quota-cost-tracking）
-
-`UserPromptSubmit` 事件下的 curl 命令 MUST 保留 stdout（仅丢 stderr），
-形如：
+reframe 之前 UserPromptSubmit hook command MUST 保留 stdout（cc 从 stdout
+读 block JSON）；reframe 后 hook 不再返 block JSON，所有事件统一
+fire-and-forget，stdout 与 stderr 都可丢弃：
 
 ```
-curl -fsS -m 2 -X POST -H "Authorization: Bearer <token>" "<url>" 2>/dev/null || true
+curl -fsS -m 2 -X POST -H "Authorization: Bearer <token>" "<url>" >/dev/null 2>&1 || true
 ```
 
-其它事件 MUST 双重重定向（fire-and-forget 状态机通知，无返回值）：
+`docs/hooks.md` 模板里 UserPromptSubmit 仍可保留 stdout（向后兼容旧粘贴
+的 settings.json 不破坏），但**不再是必需**。
 
-```
-curl ... >/dev/null 2>&1 || true
-```
+#### Scenario: UserPromptSubmit hook 漏配 → quota 仍工作
 
-理由：UserPromptSubmit 的服务端响应可能含 cc 协议的 block JSON，cc 从
-hook command stdout 读取并解析；丢 stdout 会让 quota 决策失效。
-
-#### Scenario: UserPromptSubmit stdout 保留
-
-- GIVEN `~/.claude/settings.json` 含本规范 hook 段（见 `docs/hooks.md`）
-- WHEN  读取 `UserPromptSubmit` 事件下第一条 hook 的 `command`
-- THEN  命令含 `2>/dev/null`
-- AND   命令 **不含** `>/dev/null 2>&1`
-
-#### Scenario: 其它事件 stdout 双重丢弃
-
-- GIVEN 同上
-- WHEN  读取 `Stop` / `PreToolUse` / `SessionStart` 等事件的命令
-- THEN  命令含 `>/dev/null 2>&1`
+- GIVEN user 的 `~/.claude/settings.json` **没有** UserPromptSubmit hook 配置
+- AND   user 已超 `tokens.limit`
+- WHEN  user 在 web UI 输入 prompt 触发 ws `input` frame
+- THEN  服务端推 `quota_exhausted` server frame，cc 不会收到 input
+- AND   `user.quota.tokens.used` 由 `QuotaWatcher` 在 cc 写 jsonl 后异步刷新
 
 ### Requirement: 启动期 cc jsonl path encoding sanity check（m-quota-cost-tracking）
 

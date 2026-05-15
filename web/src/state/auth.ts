@@ -134,10 +134,11 @@ const initial: AuthSnapshot = {
 };
 
 /**
- * Add or refresh one token under one limited user. Returns the new
- * limitedUsers list (immutable). Dedup is by plaintext token — if the
- * caller passes a token we've already stored for this user we just
- * bump `expiresAt`.
+ * Add or refresh one token under one limited user. Dedup is by
+ * **username** (not userId) per B19: if the operator deletes + recreates
+ * a user, the server picks a fresh userId for the same name, but the
+ * login page should still show one entry, not two. Token-level dedup is
+ * by plaintext (same plaintext just bumps expiresAt).
  */
 function upsertToken(
   users: readonly LimitedUserRecord[],
@@ -146,7 +147,7 @@ function upsertToken(
   token: string,
   expiresAt: number,
 ): LimitedUserRecord[] {
-  const existing = users.find((u) => u.userId === userId);
+  const existing = users.find((u) => u.username === username);
   if (existing === undefined) {
     return [...users, { userId, username, tokens: [{ token, expiresAt }] }];
   }
@@ -155,8 +156,9 @@ function upsertToken(
         t.token === token ? { token, expiresAt } : t,
       )
     : [...existing.tokens, { token, expiresAt }];
+  // Replace userId with the freshest reference (server-side rename / recreate).
   return users.map((u) =>
-    u.userId === userId ? { userId, username, tokens } : u,
+    u.username === username ? { userId, username, tokens } : u,
   );
 }
 
@@ -187,10 +189,10 @@ export const useAuthStore = create<AuthStore>()(
               ? // Probe rehydration: we know the user is logged in but
                 // never saw the plaintext token. Make sure the user has
                 // a record (with empty token list if new), don't fake
-                // tokens we never observed.
-                s.limitedUsers.some((u) => u.userId === userId)
+                // tokens we never observed. Dedup by username (B19).
+                s.limitedUsers.some((u) => u.username === username)
                 ? s.limitedUsers.map((u) =>
-                    u.userId === userId ? { ...u, username } : u,
+                    u.username === username ? { ...u, userId } : u,
                   )
                 : [...s.limitedUsers, { userId, username, tokens: [] }]
               : upsertToken(
@@ -243,6 +245,43 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'ccanywhere.auth',
       storage: createJSONStorage(() => localStorage),
+      // m-quota-inline B19: bump to v2 so existing localStorage runs the
+      // dedupe-by-username migration once. Operators who deleted +
+      // recreated a user (or had pre-dedup duplicates) collapse to one
+      // entry on next page load.
+      version: 2,
+      migrate: (persisted, fromVersion) => {
+        const s = (persisted ?? {}) as Partial<AuthSnapshot>;
+        if (fromVersion < 2) {
+          const users = s.limitedUsers ?? [];
+          const byUsername = new Map<string, LimitedUserRecord>();
+          for (const u of users) {
+            const prev = byUsername.get(u.username);
+            const merged: LimitedUserRecord = {
+              userId: u.userId,
+              username: u.username,
+              tokens:
+                prev === undefined
+                  ? u.tokens
+                  : // Concat + dedup by plaintext (keep latest expiresAt).
+                    Array.from(
+                      [...prev.tokens, ...u.tokens]
+                        .reduce<Map<string, TokenRecord>>((acc, t) => {
+                          const existing = acc.get(t.token);
+                          if (existing === undefined || t.expiresAt > existing.expiresAt) {
+                            acc.set(t.token, t);
+                          }
+                          return acc;
+                        }, new Map())
+                        .values(),
+                    ),
+            };
+            byUsername.set(u.username, merged);
+          }
+          return { ...s, limitedUsers: Array.from(byUsername.values()) };
+        }
+        return s;
+      },
       partialize: (s) => ({
         deviceId: s.deviceId,
         label: s.label,

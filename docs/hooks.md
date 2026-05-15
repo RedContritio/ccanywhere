@@ -77,12 +77,15 @@ curl -fsS -m 2 \
 | `>/dev/null 2>&1` | 静默——cc 的 hook 阶段是 fire-and-forget |
 | `\|\| true` | 即使 curl 因网络问题失败也让 cc 继续 |
 
-**例外**：`UserPromptSubmit` 命令用 `2>/dev/null`（仅丢 stderr）而非
-`>/dev/null 2>&1`——服务端在 quota 耗尽时会返回 cc 协议的 block JSON，
-cc 从 hook command stdout 读取并解析；丢 stdout 会让 quota 决策失效。
-其它事件 fire-and-forget 无需保留 stdout。详见
-`openspec/specs/hooks/spec.md` "UserPromptSubmit hook stdout 直通"
-Requirement。
+**m-quota-inline 后**：所有事件统一 fire-and-forget，stdout 与 stderr
+都可丢弃。reframe 之前 UserPromptSubmit 命令用 `2>/dev/null`（保留 stdout
+让 cc 读 quota block JSON）；reframe 后 quota enforcement 已搬到 ws input
+gate，UserPromptSubmit hook 不再返 block JSON。两种写法都兼容（旧粘贴
+不破），但新部署推荐统一 `>/dev/null 2>&1`。
+
+**hook 不再是 quota 必需配置**：UserPromptSubmit hook 完全漏配也不影响
+quota 工作（input gate 直接拦超额；jsonl fs.watch 自动刷新 used）。
+hook 仍然是 session state machine（busy↔idle 标识）的唯一信号源。
 
 ## 4. 验证 hook 工作
 

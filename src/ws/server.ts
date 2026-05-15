@@ -3,8 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { logger } from '../log.js';
 import type { Session, SessionManager } from '../session/manager.js';
+import type { UserStore } from '../users/store.js';
 import { attachHeartbeatToWs, type HeartbeatConfig } from './heartbeat.js';
 import { ClientFrameSchema, type ServerFrame } from './protocol.js';
+import { evaluateQuotaGate } from './quota-gate.js';
 import { sendFrame } from './send-frame.js';
 
 export interface WebSocketRoutesOptions {
@@ -14,6 +16,13 @@ export interface WebSocketRoutesOptions {
    * Defaults to ~60fps (17ms) when omitted.
    */
   readonly outputFlushIntervalMs?: number;
+  /**
+   * m-quota-inline: when set, every input frame is gated by
+   * `evaluateQuotaGate(userStore, session)` before being written to the
+   * PTY. Owner kind / unknown userId pass through. Without userStore the
+   * gate is disabled (legacy / fixture mode).
+   */
+  readonly userStore?: UserStore;
 }
 
 // 17ms ≈ 60Hz; trailing flush lands on next paintable tick. Override via config.outputFps.
@@ -72,12 +81,9 @@ export async function registerWebSocketRoutes(
       }
     }
     bundle.disposers = [];
-    // Close code by death cause: DELETE-driven teardown (markDeleted set
-    // deletedAt before the kill that led to this exit) sends 4002 so
-    // clients can distinguish "session was deleted, do not reconnect"
-    // from "cc exited, do not reconnect" (1000) and from "session not
-    // found, do not reconnect" (1008 sent at upgrade time). See
-    // openspec/specs/ws-protocol/spec.md "Close code 表".
+    // Close code by death cause: 4002 = DELETE-driven teardown (markDeleted
+    // set deletedAt pre-kill); 1000 = cc self-exit; 1008 = not-found at
+    // upgrade. See openspec/specs/ws-protocol/spec.md "Close code 表".
     const closeCode = bundle.session.deletedAt !== null ? 4002 : 1000;
     const closeReason = bundle.session.deletedAt !== null ? 'session deleted' : 'session ended';
     for (const c of bundle.clients) {
@@ -105,14 +111,12 @@ export async function registerWebSocketRoutes(
     };
     bundles.set(session.info.id, bundle);
 
+    // Leading-edge debounce: first byte after idle flushes immediately
+    // (keyboard echo never waits FLUSH_INTERVAL_MS); rapid follow-up
+    // bytes (Ink TUI repaint storms) batch into one trailing frame.
     bundle.disposers.push(
       session.on('data', ({ data }) => {
         bundle.pending += data;
-        // Leading-edge debounce: when no timer is armed (this is the
-        // first byte after an idle period), flush immediately so the
-        // user never waits FLUSH_INTERVAL_MS for keyboard echo. Then
-        // arm a window for any rapid-fire follow-up bytes (Ink TUI
-        // repaint storms) to be batched into a single trailing frame.
         if (bundle.flushTimer === null) {
           flush(bundle);
           const t = setTimeout(() => {
@@ -166,20 +170,14 @@ export async function registerWebSocketRoutes(
       const bundle = attach(session);
       bundle.clients.add(sock);
       // Gate broadcast frames until sendInitialState delivers snapshot/
-      // delta + status. Without this, PTY data flushed in this window
-      // arrives before snapshot and breaks the client's "snapshot →
-      // term.reset → write" ordering.
+      // delta + status — preserves client's "snapshot → reset → write" order.
       bundle.pendingClients.set(sock, []);
-
       const detachHeartbeat = options.heartbeat
         ? attachHeartbeatToWs(sock, options.heartbeat)
         : null;
-
-      // Initial state delivery, gated on the first 'resize' so that the
-      // server-side screenState's cols/rows match the client xterm before
-      // SerializeAddon emits cursor-positioned ANSI. For reconnects with
-      // ?lastSeq=N, send incremental delta instead of a full snapshot —
-      // client xterm keeps its existing buffer and just appends.
+      // Initial state delivery, gated on the first 'resize' so screenState
+      // cols/rows match client xterm before SerializeAddon emits ANSI. For
+      // reconnects with ?lastSeq=N, send incremental delta instead of full.
       const lastSeqRaw = (req.query as { lastSeq?: string } | undefined)?.lastSeq;
       const parsedLastSeq = typeof lastSeqRaw === 'string' ? Number.parseInt(lastSeqRaw, 10) : 0;
       const lastSeq = Number.isFinite(parsedLastSeq) && parsedLastSeq >= 0 ? parsedLastSeq : 0;
@@ -248,9 +246,16 @@ export async function registerWebSocketRoutes(
         }
         const f = result.data;
         switch (f.type) {
-          case 'input':
+          case 'input': {
+            // m-quota-inline: gate before PTY write; cc never sees blocked bytes.
+            const gate = evaluateQuotaGate(options.userStore, session, f.data);
+            if (gate.blocked) {
+              sendFrame(sock, { type: 'quota_exhausted', reason: gate.reason ?? 'quota exhausted' });
+              return;
+            }
             session.write(f.data);
             return;
+          }
           case 'resize':
             try {
               session.resize(f.cols, f.rows);
@@ -261,14 +266,10 @@ export async function registerWebSocketRoutes(
               });
               return;
             }
-            // First resize after connect — dimensions are now aligned.
-            // session.resize() returns synchronously (PTY ioctl), but cc
-            // reacts to SIGWINCH asynchronously and its redraw bytes need
-            // to flow through PTY data → screenState.feed before the
-            // serialize call captures the new layout. Give it a short
-            // window so the snapshot reflects the post-resize grid; if
-            // we serialize too early it carries the old cols/rows and
-            // the client sees broken row widths.
+            // First resize after connect: brief delay so cc's SIGWINCH
+            // redraw bytes reach screenState before we serialize, else
+            // the snapshot carries old cols/rows and the client renders
+            // broken row widths.
             if (!snapshotSent) {
               clearTimeout(fallbackTimer);
               setTimeout(sendInitialState, 200);

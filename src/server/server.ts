@@ -8,6 +8,7 @@ import type { Config } from '../config/schema.js';
 import type { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
 import { ensureProjectsRoot, ProjectStore } from '../projects/store.js';
+import { QuotaWatcher } from '../quota/watcher.js';
 import type { SessionManager } from '../session/manager.js';
 import type { TokenStore } from '../tokens/store.js';
 import type { UserStore } from '../users/store.js';
@@ -181,14 +182,28 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
       resolveProjectStore,
     );
   }
-  await registerHookRoutes(
-    app,
-    opts.manager,
-    opts.userStore !== undefined ? { userStore: opts.userStore } : {},
-  );
+  // m-quota-inline: hook routes no longer carry quota responsibility
+  // (only state machine transitions). registerHookRoutes signature
+  // accepts options-less mode as the new default.
+  await registerHookRoutes(app, opts.manager);
+
+  // m-quota-inline: build per-instance QuotaWatcher (jsonl fs.watch +
+  // debounce + setQuotaUsage) and wire it as the SessionManager's
+  // lifecycle observer + share the gate userStore reference with the
+  // WS input handler. Skip when there is no UserStore (legacy fixture).
+  let quotaWatcher: QuotaWatcher | undefined;
+  if (opts.userStore !== undefined) {
+    quotaWatcher = new QuotaWatcher({ userStore: opts.userStore });
+    opts.manager.setLifecycleObserver(quotaWatcher);
+    app.addHook('onClose', () => {
+      quotaWatcher?.closeAll();
+    });
+  }
+
   await registerWebSocketRoutes(app, opts.manager, {
     heartbeat: opts.config.wsHeartbeat,
     outputFlushIntervalMs: Math.max(1, Math.round(1000 / opts.config.outputFps)),
+    ...(opts.userStore !== undefined ? { userStore: opts.userStore } : {}),
   });
 
   const webDist =
