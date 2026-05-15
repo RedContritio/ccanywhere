@@ -30,7 +30,30 @@ proposal，统一流程）。
 
 ## 维护类 / 不做但记录
 
-（无）
+### B14. routes/auth.ts 拆三段（webauthn / multi-user / session-mgmt）
+
+- **状态**：deferred（ROI 边际，仅 ~0 LOC 净减，可读性边际提升）
+- **scope**：~0 LOC 净（290 行 → 三个 ~100 行文件 + 1 个共享 helper）
+- **背景**：`src/server/routes/auth.ts` 290 行含 5 个 webauthn 路由 +
+  multi-user mount + logout + me。每段 30-50 行带 zod schema，密度合理
+  但单文件长。
+- **触发信号**：下次大改 auth（例如加 passkey resident credential 或
+  webauthn level 3 conditional UI）时顺手做
+- **出处**：本评审 A4
+
+### B16. archive commit hash 回填脚本
+
+- **状态**：低优先（cheap polish）
+- **scope**：~30 LOC scripts/backfill-archive-commits.mjs + 一次性扫
+- **背景**：CLAUDE.md 写 "tasks.md 关联 commit hash（ship 时回填）"
+  但抽 m-share-export-cleanup / m-logout-preserve-pairing / m-nav-
+  restructure-globals 等最新 archive 的 tasks.md，commit hash 字段空。
+  commit subject 含 slug，git log grep slug 能定位，所以信息没丢只是
+  查询便利。
+- **方案**：scripts/backfill-archive-commits.mjs 扫
+  `openspec/archive/<date>-<slug>/`，grep slug 在 `git log` 出现的
+  commits，在 tasks.md 末追加 `## Ship\n- <hash>: <msg>`。
+- **出处**：本评审 C3
 
 ---
 
@@ -52,6 +75,17 @@ proposal，统一流程）。
 - **决策点**：scrollback 大小（默认 1024 行 ~50-200 KB）/ format
   （raw ANSI 还是 plain text）/ 是否压缩
 - **出处**：m-session-persistence proposal D8 "不做" 段标记 follow-up
+
+### B17. login.tsx useLoginMode state machine hook
+
+- **状态**：deferred（触发条件未到）
+- **scope**：~60 LOC（抽 `useLoginMode()` hook 集中 8-kind Mode
+  discriminated union 状态机）
+- **背景**：`web/src/pages/login.tsx:20-29` 定义 8 kind Mode union，
+  `:42` setMode 在 11 处直接调用。已经把 IdleChoices 拆出来了（说明
+  作者愿意拆）。下次加新 mode（如 SSO / OAuth）时顺手抽。
+- **触发信号**：第三种登录方式被引入（当前仅 webauthn + token）
+- **出处**：本评审 B2
 
 ### B13. dead session retention policy
 
@@ -78,3 +112,19 @@ proposal，统一流程）。
   bug。`changes/m-touch-scroll-one-line/`
 - **m-fit-cols-off-by-one**（in-flight，blocked-on-data）— Phase 1 trace
   已 ship；等用户反馈触发 Phase 2/3。`changes/m-fit-cols-off-by-one/`
+- **m-write-queue-extract**（~80 LOC）— 抽 share/store + session/registry
+  公共 WriteQueue helper，删 50 LOC 重复。`changes/m-write-queue-extract/`
+- **m-store-zod-load**（~70 LOC）— share/store + session/registry 加载
+  JSON 改用 zod schema + 公共 loadJsonRecord helper。`changes/m-store-zod-load/`
+- **m-webauthn-routes-test**（~150 LOC 测试新增）— 覆盖 webauthn 5 路由
+  的信封 + 状态机 + mock verify 后行为（happy 真签名留 e2e）。
+  `changes/m-webauthn-routes-test/`
+- **m-workspace-page-split**（~150 LOC 主文件减）— workspace.tsx 488
+  行拆 useWorkspaceRouting hook + WorkspaceMainPane + WorkspaceSidebar
+  Header 子组件。`changes/m-workspace-page-split/`
+- **m-new-session-dialog-steps**（~120 LOC 主文件减）— NewSessionDialog
+  411 行拆 Step1ProjectPicker + Step2HistoryPicker 受控子组件。
+  `changes/m-new-session-dialog-steps/`
+- **m-diag-collectors-split**（~100 LOC 重排）— diag.ts collectDiag 156
+  行单函数拆 8 个内部 collector，主函数变 ~25 行 composition。
+  `changes/m-diag-collectors-split/`

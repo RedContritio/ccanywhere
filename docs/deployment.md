@@ -175,26 +175,16 @@ launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
 
 ### ⚠️ 从 quota 之前的版本升级（重要）
 
-m-quota-cost-tracking ship 后 `buildHookSettings` 的 `UserPromptSubmit`
-事件的 curl 命令改成保留 stdout（旧版用 `>/dev/null 2>&1` 丢掉 stdout）。
-服务端在配额耗尽时返回 cc 协议 JSON `{ decision: 'block', reason: ... }`
-让 cc 停 prompt——前提是 hook command 把这段 JSON 透传给 cc。
+m-quota-cost-tracking ship 后 `UserPromptSubmit` hook 命令的 curl 必须
+保留 stdout（旧版用 `>/dev/null 2>&1` 丢掉 stdout）。服务端在配额耗尽时
+返回 cc 协议 JSON `{ decision: 'block', reason: ... }` 让 cc 停 prompt
+——前提是 hook command 把这段 JSON 透传给 cc。
 
 如果你以前手动贴过 `~/.claude/settings.json` hook 段，配额功能上线后
-**必须** 重新生成并替换。否则 limited user 超限时 cc 收不到 block 决策
-（hook 静默 fire-and-forget），prompt 照常发送 → 上限失效。
-
-重生成方法：
-
-```bash
-# 拉一下当前实例的 internalHookToken（每次 serve 启动重新生成）
-launchctl print gui/$(id -u)/com.<you>.ccanywhere | grep internalHookToken
-# 或看启动日志：
-log show --predicate 'process == "node" AND eventMessage CONTAINS "internalHookToken"' --last 5m
-
-# 用 ccanywhere CLI 生成新 hook 段（待实现：本工程暂时通过 ccanywhere
-# 启动日志读 `internalHookToken` 后手动替换 settings.json 对应字段）
-```
+**必须** 把 `UserPromptSubmit` 事件下 curl 命令末尾的 `>/dev/null 2>&1`
+改成 `2>/dev/null`（其它事件保持 `>/dev/null 2>&1`）。否则 limited user
+超限时 cc 收不到 block 决策（hook 静默 fire-and-forget），prompt 照常
+发送 → 上限失效。最新示例见 [`docs/hooks.md`](./hooks.md) §2。
 
 owner 不受影响（owner 全程 quota skip）。
 

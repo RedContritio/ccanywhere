@@ -4,5 +4,6 @@
   "claudeBin": "claude",
 
   "projectsRoot": "/Users/<you>/Projects",
+  "guestProjectsRoot": "/Users/<you>/.ccanywhere-guests",
   "webOrigin": "https://ccanywhere.example.com"
 }

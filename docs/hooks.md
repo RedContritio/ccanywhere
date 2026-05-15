@@ -44,7 +44,7 @@ grep internalHookToken ~/.config/ccanywhere/server.log | tail -1
         ]
       }
     ],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/UserPromptSubmit\" >/dev/null 2>&1 || true" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/UserPromptSubmit\" 2>/dev/null || true" }] }],
     "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/PreToolUse\" >/dev/null 2>&1 || true" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/Stop\" >/dev/null 2>&1 || true" }] }],
     "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/SubagentStop\" >/dev/null 2>&1 || true" }] }]
@@ -77,6 +77,13 @@ curl -fsS -m 2 \
 | `>/dev/null 2>&1` | 静默——cc 的 hook 阶段是 fire-and-forget |
 | `\|\| true` | 即使 curl 因网络问题失败也让 cc 继续 |
 
+**例外**：`UserPromptSubmit` 命令用 `2>/dev/null`（仅丢 stderr）而非
+`>/dev/null 2>&1`——服务端在 quota 耗尽时会返回 cc 协议的 block JSON，
+cc 从 hook command stdout 读取并解析；丢 stdout 会让 quota 决策失效。
+其它事件 fire-and-forget 无需保留 stdout。详见
+`openspec/specs/hooks/spec.md` "UserPromptSubmit hook stdout 直通"
+Requirement。
+
 ## 4. 验证 hook 工作
 
 1. 启动 ccanywhere（确保 internalHookToken 是 settings.json 里那个）
@@ -98,21 +105,3 @@ curl -fsS -m 2 \
 - `internalHookToken` 仅本机 cc 子进程使用——不要从外部网络访问 `/api/hook/*`
 - 把 settings.json 权限收紧：`chmod 600 ~/.claude/settings.json`
 - ccanywhere 重启后 token 会变；同步更新 settings.json，否则 hook 全 401
-
-## 6. 通过 `buildHookSettings()` 自动生成
-
-如果你想脚本化（比如 ccanywhere 每次启动自动生成 hook 段）：
-
-```ts
-import { buildHookSettings } from 'ccanywhere/dist/index.js';
-
-const settings = buildHookSettings(sessionId, {
-  host: '127.0.0.1',
-  port: 62275,
-  internalToken: '...',
-});
-console.log(JSON.stringify(settings, null, 2));
-```
-
-不过这个函数原本是给 M5 内部用的——签名跟当前 hook semantics（`$CLAUDE_SESSION_ID`
-vs ccanywhere sessionId）有差异。先按上面手贴方案为准。
