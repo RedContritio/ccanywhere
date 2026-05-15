@@ -270,7 +270,7 @@ export function WorkspacePage(): JSX.Element {
             title="返回主页"
             className="text-sm font-semibold tracking-tight hover:text-brand"
           >
-            <span className="text-claude">C</span>C anywhere
+            <span className="text-claude">CC</span> anywhere
           </button>
           <div className="flex-1 max-md:hidden" />
           <div className="flex items-center gap-2 max-md:justify-between">
@@ -320,7 +320,7 @@ export function WorkspacePage(): JSX.Element {
             <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
               <div className="flex max-w-md flex-col items-center gap-4 text-center">
                 <h2 className="text-xl font-semibold tracking-tight">
-                  <span className="text-claude">C</span>C anywhere
+                  <span className="text-claude">CC</span> anywhere
                 </h2>
                 <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-xs">
                   <dt className="text-right text-fg-muted">设备</dt>
