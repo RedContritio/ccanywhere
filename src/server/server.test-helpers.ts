@@ -20,32 +20,32 @@ export const baseConfig: Config = {
   deletedSessionTtlMs: 600_000,
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
-  // Placeholder: each describe block creates a real tmp dir + ProjectStore;
-  // buildServer reads from projectStore, not config.projectsRoot. Tests that
-  // exercise multi-user cwd guard MUST override `projectsRoot` /
-  // `guestProjectsRoot` to the tmp dirs in `TestProjectsEnv`.
-  projectsRoot: '/tmp/ccanywhere-test-placeholder',
-  guestProjectsRoot: '/tmp/ccanywhere-test-guest-placeholder',
+  // Placeholder: each describe block creates a real tmp workspace + ProjectStore;
+  // buildServer reads from projectStore, not config.workspace. Tests that
+  // exercise multi-user cwd guard MUST override `workspace` to the tmp dir
+  // in `TestProjectsEnv`.
+  workspace: '/tmp/ccanywhere-test-placeholder',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
 };
 
-export interface LimitedUserWithToken {
+export interface UserWithToken {
   readonly user: User;
   readonly token: Token;
   readonly plaintext: string;
   readonly authCookie: string;
 }
 
-export interface CreateLimitedUserOpts {
+export interface CreateUserOpts {
   readonly costLimitUsd?: number | null;
   readonly tokensLimit?: number | null;
   readonly ttlMs?: number;
 }
 
 export interface TestProjectsEnv {
-  projectsRoot: string;
-  guestProjectsRoot: string;
+  workspace: string;
+  /** owner ProjectStore root (legacy "projectsRoot"); lives at <workspace>/owner/. */
+  ownerProjectsRoot: string;
   projectStore: ProjectStore;
   deviceStore: DeviceStore;
   userStore: UserStore;
@@ -56,46 +56,49 @@ export interface TestProjectsEnv {
   authCookie: string;
   /** sessionId extracted from authCookie. */
   sessionId: string;
-  /** Create a limited user + active token; default ttl 24h, costLimitUsd 10. */
-  createLimitedUserWithToken: (
+  /** Create a user + active token; default ttl 24h, costLimitUsd 10. */
+  createUserWithToken: (
     username: string,
-    opts?: CreateLimitedUserOpts,
-  ) => LimitedUserWithToken;
+    opts?: CreateUserOpts,
+  ) => UserWithToken;
   cleanup: () => void;
 }
 
 export function setupProjects(): TestProjectsEnv {
-  const projectsRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-projects-'));
-  const guestProjectsRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-guests-'));
-  mkdirSync(join(projectsRoot, 'demo'));
-  const statePath = join(projectsRoot, '.projects-state.json');
-  const projectStore = new ProjectStore({ projectsRoot, statePath });
+  // m-user-symmetric: workspace 是所有 user 项目根的父目录。owner 走默认
+  // <workspace>/owner/，便于测试覆盖默认路径解析。
+  const workspace = mkdtempSync(join(tmpdir(), 'ccanywhere-workspace-'));
+  const ownerProjectsRoot = join(workspace, 'owner');
+  mkdirSync(ownerProjectsRoot);
+  mkdirSync(join(ownerProjectsRoot, 'demo'));
+  const statePath = join(ownerProjectsRoot, '.projects-state.json');
+  const projectStore = new ProjectStore({ projectsRoot: ownerProjectsRoot, statePath });
   const userStore = new UserStore({
-    statePath: join(projectsRoot, '.users.json'),
-    guestProjectsRoot,
+    statePath: join(workspace, '.users.json'),
+    workspace,
   });
   const owner = userStore.getOwner();
   const tokenStore = new TokenStore({
-    statePath: join(projectsRoot, '.tokens.json'),
+    statePath: join(workspace, '.tokens.json'),
   });
   const deviceStore = new DeviceStore({
-    statePath: join(projectsRoot, '.devices.json'),
+    statePath: join(workspace, '.devices.json'),
     ownerId: owner.id,
   });
   const { sessionId } = deviceStore.__seedActiveDevice('test-device');
   return {
-    projectsRoot,
-    guestProjectsRoot,
+    workspace,
+    ownerProjectsRoot,
     projectStore,
     deviceStore,
     userStore,
     tokenStore,
     owner,
-    demoCwd: join(projectsRoot, 'demo'),
+    demoCwd: join(ownerProjectsRoot, 'demo'),
     authCookie: `ccanywhere_session=${sessionId}`,
     sessionId,
-    createLimitedUserWithToken: (username, opts = {}) => {
-      const user = userStore.createLimitedUser({
+    createUserWithToken: (username, opts = {}) => {
+      const user = userStore.createUser({
         username,
         costLimitUsd: opts.costLimitUsd === undefined ? 10 : opts.costLimitUsd,
         tokensLimit: opts.tokensLimit === undefined ? null : opts.tokensLimit,
@@ -112,8 +115,7 @@ export function setupProjects(): TestProjectsEnv {
       };
     },
     cleanup: () => {
-      rmSync(projectsRoot, { recursive: true, force: true });
-      rmSync(guestProjectsRoot, { recursive: true, force: true });
+      rmSync(workspace, { recursive: true, force: true });
     },
   };
 }

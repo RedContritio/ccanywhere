@@ -11,11 +11,11 @@ import {
 } from './server.test-helpers.js';
 
 /**
- * Integration tests for token-based limited-user login (#44 m-multi-user).
+ * Integration tests for token-based user login (#44 m-multi-user).
  *
  * Covers:
  *   POST /api/auth/token  — happy path / wrong token / revoked / short body
- *   GET  /api/me/quota    — owner null limits / limited returns quota / no cookie 401
+ *   GET  /api/me/quota    — owner null limits / user returns quota / no cookie 401
  *
  * Builds the server with userStore + tokenStore wired so hookEarlyAuth
  * exercises the token-session path (cookie value === token plaintext).
@@ -31,8 +31,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     app = await buildServer({
       config: {
         ...baseConfig,
-        projectsRoot: env.projectsRoot,
-        guestProjectsRoot: env.guestProjectsRoot,
+        workspace: env.workspace,
       },
       manager: mgr,
       projectStore: env.projectStore,
@@ -53,7 +52,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('POST /api/auth/token → 200 + Set-Cookie + user info', async () => {
-    const { user, plaintext } = env.createLimitedUserWithToken('alice');
+    const { user, plaintext } = env.createUserWithToken('alice');
 
     const res = await app.inject({
       method: 'POST',
@@ -66,7 +65,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     const body = res.json() as { ok: boolean; user: { username: string; kind: string } };
     expect(body.ok).toBe(true);
     expect(body.user.username).toBe('alice');
-    expect(body.user.kind).toBe('limited');
+    expect(body.user.kind).toBe('user');
 
     const setCookie = res.headers['set-cookie'];
     const cookieHeader = Array.isArray(setCookie) ? setCookie.join('; ') : setCookie ?? '';
@@ -79,7 +78,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('POST /api/auth/token wrong token → 401', async () => {
-    env.createLimitedUserWithToken('alice');
+    env.createUserWithToken('alice');
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/token',
@@ -90,7 +89,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('POST /api/auth/token revoked token → 401', async () => {
-    const { token, plaintext } = env.createLimitedUserWithToken('alice');
+    const { token, plaintext } = env.createUserWithToken('alice');
     env.tokenStore.revoke(token.id);
 
     const res = await app.inject({
@@ -112,8 +111,8 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('GET /api/me/quota with limited cookie → 200 + quota object', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice', {
+  it('GET /api/me/quota with user cookie → 200 + quota object', async () => {
+    const { authCookie } = env.createUserWithToken('alice', {
       costLimitUsd: 5,
       tokensLimit: 100_000,
     });
@@ -129,7 +128,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
       cost: { limitUsd: number | null; usedUsd: number };
       tokens: { limit: number | null; used: number };
     };
-    expect(body.kind).toBe('limited');
+    expect(body.kind).toBe('user');
     expect(body.cost.limitUsd).toBe(5);
     expect(body.cost.usedUsd).toBe(0);
     expect(body.tokens.limit).toBe(100_000);
@@ -158,8 +157,8 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('GET /api/auth/me with limited cookie → 200 + kind=limited', async () => {
-    const { user, authCookie } = env.createLimitedUserWithToken('alice');
+  it('GET /api/auth/me with user cookie → 200 + kind=user', async () => {
+    const { user, authCookie } = env.createUserWithToken('alice');
     const res = await app.inject({
       method: 'GET',
       url: '/api/auth/me',
@@ -172,7 +171,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
       kind: string;
       lastUsedAt: number | null;
     };
-    expect(body.kind).toBe('limited');
+    expect(body.kind).toBe('user');
     expect(body.id).toBe(user.id);
     expect(body.label).toBe('alice');
   });
@@ -195,8 +194,8 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('GET /api/me/preferences with limited cookie → 200 + empty by default', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice');
+  it('GET /api/me/preferences with user cookie → 200 + empty by default', async () => {
+    const { authCookie } = env.createUserWithToken('alice');
     const res = await app.inject({
       method: 'GET',
       url: '/api/me/preferences',
@@ -207,7 +206,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('PUT /api/me/preferences round-trips a toolbar layout', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const { authCookie } = env.createUserWithToken('alice');
     const layout = {
       rows: 1,
       cols: 3,
@@ -235,7 +234,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('PUT /api/me/preferences { toolbar: null } clears the override', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const { authCookie } = env.createUserWithToken('alice');
     await app.inject({
       method: 'PUT',
       url: '/api/me/preferences',
@@ -255,7 +254,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('PUT /api/me/preferences invalid rows → 400', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const { authCookie } = env.createUserWithToken('alice');
     const res = await app.inject({
       method: 'PUT',
       url: '/api/me/preferences',
@@ -266,7 +265,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('PUT /api/me/preferences ctrl-letter payload must be a..z → 400', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const { authCookie } = env.createUserWithToken('alice');
     const res = await app.inject({
       method: 'PUT',
       url: '/api/me/preferences',
@@ -287,7 +286,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('GET /api/me/active-session → 200 + null by default', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const { authCookie } = env.createUserWithToken('alice');
     const res = await app.inject({
       method: 'GET',
       url: '/api/me/active-session',
@@ -298,7 +297,7 @@ describe('REST API: /api/auth/token + /api/me/quota (multi-user)', () => {
   });
 
   it('PUT /api/me/active-session round-trips id and clears with null', async () => {
-    const { authCookie } = env.createLimitedUserWithToken('alice');
+    const { authCookie } = env.createUserWithToken('alice');
     const sid = '11111111-2222-3333-4444-555555555555';
     const put = await app.inject({
       method: 'PUT',

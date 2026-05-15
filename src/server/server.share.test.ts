@@ -180,7 +180,7 @@ describe('share endpoints', () => {
     });
 
     it('404 when caller is not session owner (no existence leak)', async () => {
-      const other = env.createLimitedUserWithToken('intruder');
+      const other = env.createUserWithToken('intruder');
       const res = await app.inject({
         method: 'POST',
         url: '/api/share',
@@ -317,7 +317,7 @@ describe('share endpoints', () => {
         headers: { cookie: env.authCookie, 'content-type': 'application/json' },
         payload: { sessionId },
       });
-      const other = env.createLimitedUserWithToken('other');
+      const other = env.createUserWithToken('other');
       const list = await app.inject({
         method: 'GET',
         url: '/api/share/list',
@@ -356,7 +356,7 @@ describe('share endpoints', () => {
         payload: { sessionId },
       });
       const { code } = create.json() as { code: string };
-      const other = env.createLimitedUserWithToken('other');
+      const other = env.createUserWithToken('other');
       const del = await app.inject({
         method: 'DELETE',
         url: `/api/share/${code}`,

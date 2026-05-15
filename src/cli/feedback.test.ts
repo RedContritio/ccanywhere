@@ -37,8 +37,7 @@ describe('runFeedbackList / runFeedbackShow', () => {
     writeFileSync(
       configPath,
       JSON.stringify({
-        projectsRoot: '/tmp/cc-fb-proj',
-        guestProjectsRoot: '/tmp/cc-fb-guest',
+        workspace: '/tmp/cc-fb-workspace',
         webOrigin: 'http://127.0.0.1:65432',
       }),
     );

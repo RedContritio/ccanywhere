@@ -180,50 +180,63 @@ mac CLI `ccanywhere revoke <device-id>` MUST 调用
 - AND   浏览器再次 `GET /api/projects`
 - THEN  服务端响应 `401 unauthorized`
 
-### Requirement: 用户与令牌（m-multi-user）
+### Requirement: 用户与令牌（m-multi-user + m-user-symmetric）
 
-服务端 MUST 实现 owner/limited 二元用户模型 + 令牌登录：
+服务端 MUST 实现 owner/user 二元身份模型 + 令牌登录。m-user-symmetric
+reframe 把 m-multi-user 的 `'owner' | 'limited'` 字面值改名为
+`'owner' | 'user'`（"limited" 描述不再成立——所有 user 在数据层对称，
+policy 才区分），同时数据层去 owner-special 假设：device.userId 必填、
+任意 user 可走 token 登。policy 层仍 enforce `kind === 'owner'` 的有：
+WebAuthn pair-init + hook quota check（owner 跳过）。
 
-- 用户首次启动时 MUST 自动建一个 owner（`username='owner'`），且 owner 唯一。
-- owner MUST 走 WebAuthn pair → cookie session 流程（同上）；device 全部
-  归属 owner（`device.userId = owner.id`）。
-- limited user MUST 由 owner CLI 显式创建（`ccanywhere user create`），
-  通过 token 登录而非 WebAuthn。
+- 用户首次启动时 MUST 自动建一个 owner（`username='owner'`），且 owner
+  唯一。
+- owner MUST 通过 WebAuthn pair → cookie session 流程；device 当前 pair
+  policy 在 mac CLI approve 时一律赋 `device.userId = owner.id`（数据层
+  允许任意 userId，但 pair-time policy 暂仅许 owner）。
+- 普通 user MUST 由 owner CLI 显式创建（`ccanywhere user create`），首选
+  通过 token 登录；owner 也可自签 token 登入（admin / 自动化路径）。
 - `POST /api/auth/token { token }` MUST 用 sha256 hash + constant-time 比对
-  验 token plaintext；成功后 set cookie（value 即 token plaintext，ttl ≤
-  token.expiresAt），返回 `{ ok: true, user: { username, kind } }`；
-  失败 401。
-- `POST /api/auth/webauthn/login-init` MUST 拒绝 device.userId 不指向
-  owner 的请求（403）。limited user 没有 device 走不进该路径，本检查是
-  defensive。
+  验 token plaintext；user kind 不限。成功后 set cookie（value 即 token
+  plaintext，ttl ≤ token.expiresAt），返回 `{ ok: true, user:
+  { username, kind } }`；失败 401。
+- `POST /api/auth/webauthn/login-init` MUST 拒绝 device.userId dangling
+  的请求（403：device 关联的 user 已被删除）。**MUST NOT** hardcode
+  `kind === 'owner'`——pair-time policy 已是 enforcement 点；这里只校验
+  数据完整性，便于将来 pair policy 扩展。
 - 每个 request 的 cookie value MUST 通过 hookEarlyAuth 解析：先 try
   deviceStore.authenticateSession（device-session）；不命中再 try
   tokenStore.verify（token-session）。两者都不命中 → 401。`req.user`
   字段被填充以让下游 handler（sessions / ws / quota）使用。
 - user.quota 字段（`cost.limitUsd` / `cost.usedUsd` / `tokens.limit` /
-  `tokens.used`）owner 端 limits 均为 null（不限）；limited 端至少一个
+  `tokens.used`）owner 端 limits 均为 null（不限）；普通 user 端至少一个
   非 null（创建时强制）。`GET /api/me/quota` 返回当前 user 的 quota 状态。
 - `GET /api/auth/me` MUST 返回统一形状 `{ id, label, kind, lastUsedAt }`
   让 web 客户端不区分身份层判定登录态：
-  - owner cookie → `{ id: device.id, label: device.label,
-    kind: 'owner', lastUsedAt: device.lastUsedAt }`
-  - limited cookie → `{ id: user.id, label: user.username,
-    kind: 'limited', lastUsedAt: user.lastLoginAt }`
+  - device cookie → `{ id: device.id, label: <device.userId 对应 user.username
+    或 fallback "owner">, kind: <user.kind 或 'owner'>,
+    lastUsedAt: device.lastUsedAt }`（数据层支持任意 user kind 持有
+    device，但当前 pair policy 始终 owner）
+  - token cookie → `{ id: user.id, label: user.username, kind: user.kind,
+    lastUsedAt: user.lastLoginAt }`
   - 无 cookie → 401
+- 旧 `users.json`（kind === 'limited'）MUST 在 UserStore.load 时 in-memory
+  migrate 成 'user' 并 persist 一次，保持鉴权可用性（已签发 token 不
+  作废，已登 cookie 仍有效）。
 
 ### Requirement: 用户级偏好与活跃 session（m-user-prefs）
 
 User 记录 MUST 含两个跨设备同步字段：
 
 - `preferences: UserPreferences` —— UI 偏好对象（首期含 `toolbar?:
-  ToolbarLayout`，未来可扩 theme override 等）。**owner 与 limited 同等
+  ToolbarLayout`，未来可扩 theme override 等）。**owner 与 user 同等
   支持**。
 - `lastActiveSessionId: string | null` —— 用户最后选中的 cc session id
   （ephemeral state，与 preferences 语义分离）。客户端访问 /workspace 时
   作为默认选中，stale id 由客户端 join 实时 sessions list 时 silently
   忽略。
 
-API（cookie-gated，owner / limited 同等可用）：
+API（cookie-gated，owner / user 同等可用）：
 
 ```
 GET  /api/me/preferences       → 200 UserPreferences (默认 {})
@@ -249,7 +262,7 @@ PUT  /api/me/active-session     body { sessionId: string | null }
 
 #### Scenario: 颁发后默认空
 
-- GIVEN owner 自动建 或 limited 通过 CLI 创建
+- GIVEN owner 自动建 或 user 通过 CLI 创建
 - WHEN  `GET /api/me/preferences` + `GET /api/me/active-session`
 - THEN  分别返 `{}` 与 `{ sessionId: null }`
 
@@ -268,7 +281,7 @@ PUT  /api/me/active-session     body { sessionId: string | null }
 
 #### Scenario: token login 颁 cookie
 
-- GIVEN limited user alice 已由 owner 创建，token plaintext 已颁
+- GIVEN user alice 已由 owner 创建，token plaintext 已颁
 - WHEN  浏览器 `POST /api/auth/token` body `{ token }`
 - THEN  返回 200 + Set-Cookie 含 token plaintext，maxAge ≤ token.expiresAt
 - AND   后续 `GET /api/me/quota` 返回 alice 的 quota
@@ -292,7 +305,7 @@ owner 的 `quota.cost.usedUsd` / `quota.tokens.used` MUST NOT 被服务端写入
 
 #### Scenario: token 轮换不重置 quota
 
-- GIVEN limited user alice `createdAt = T0`，`cost.usedUsd = $4.50`，
+- GIVEN user alice `createdAt = T0`，`cost.usedUsd = $4.50`，
         已颁 token T1 + revoked
 - WHEN  owner 给 alice 颁新 token T2（同 user.id，新 expiresAt）
 - AND   alice 用 T2 登录 + 触发 UserPromptSubmit
@@ -322,7 +335,7 @@ owner 的 `quota.cost.usedUsd` / `quota.tokens.used` MUST NOT 被服务端写入
 
 操作语义：
 
-- **clearSession**：清活动会话，保留 owner + limited 所有 stored 凭证。
+- **clearSession**：清活动会话，保留 owner + user 所有 stored 凭证。
   RequireAuth 检测 `deviceId === null` 自动跳 `/login`。
 - **unpair**：全清。测试 / 显式重置用。
 - **forgetOwnerCredential**：仅清 owner slot（若 active 是 owner，同时
@@ -339,7 +352,7 @@ owner 的 `quota.cost.usedUsd` / `quota.tokens.used` MUST NOT 被服务端写入
 - workspace 顶部「登出」按钮 → `logoutServer` + `clearSession`
 - api.ts 全局 401 → `clearSession`（依靠 RequireAuth 自动跳 /login）
 - `runLogin` 失败（owner 401） → `forgetOwnerCredential`，**保留** 所有
-  limited user
+  user
 - 一键 token-login 序列尝试某 user 的 token：
   - `invalid` → `forgetToken`，试下一个
   - `transient` → 退让重试 4 次（500ms / 1s / 2s / 4s），仍 transient
@@ -374,7 +387,7 @@ owner 的 `quota.cost.usedUsd` / `quota.tokens.used` MUST NOT 被服务端写入
         是 owner 则同时 clear active）
 - AND   `limitedUsers` 列表不动 — 之前以 limited token 登过的用户仍可在
         /login 页选择
-- AND   /login 页 owner 入口消失，但 limited user 列表保留
+- AND   /login 页 owner 入口消失，但 user 列表保留
 
 #### Scenario: 多 token-per-user 自动按 expiresAt 降序尝试
 
@@ -404,7 +417,7 @@ owner 的 `quota.cost.usedUsd` / `quota.tokens.used` MUST NOT 被服务端写入
 - AND   error 提示「alice 的已存 token 都已失效，请输入新 token」+
         主按钮直跳 token-input
 
-#### Scenario: 双轨设备同时支持 owner + 多 limited user
+#### Scenario: 双轨设备同时支持 owner + 多 user
 
 - GIVEN 同一设备先后用作 owner 配对、以 alice 登录、以 bob 登录
 - WHEN  /login 渲染 idle 区

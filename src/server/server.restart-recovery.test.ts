@@ -61,8 +61,7 @@ describe('m-session-persistence: restart recovery (server-level)', () => {
     app1 = await buildServer({
       config: {
         ...baseConfig,
-        projectsRoot: env.projectsRoot,
-        guestProjectsRoot: env.guestProjectsRoot,
+        workspace: env.workspace,
       },
       manager: mgr1,
       projectStore: env.projectStore,
@@ -111,8 +110,7 @@ describe('m-session-persistence: restart recovery (server-level)', () => {
     const app2 = await buildServer({
       config: {
         ...baseConfig,
-        projectsRoot: env.projectsRoot,
-        guestProjectsRoot: env.guestProjectsRoot,
+        workspace: env.workspace,
       },
       manager: mgr2,
       projectStore: env.projectStore,

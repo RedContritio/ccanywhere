@@ -134,7 +134,7 @@ describe('REST API', () => {
     expect(res.statusCode).toBe(201);
     const body = res.json() as { id: string; name: string; cwd: string };
     expect(body.id).toBe('fresh');
-    expect(body.cwd).toBe(join(env.projectsRoot, 'fresh'));
+    expect(body.cwd).toBe(join(env.ownerProjectsRoot, 'fresh'));
 
     const list = await app.inject({
       method: 'GET',

@@ -5,12 +5,12 @@ import { z } from 'zod';
 
 import type { Config } from '../../config/schema.js';
 import { logger } from '../../log.js';
-import type { ProjectStore } from '../../projects/store.js';
 import type { SessionManager } from '../../session/manager.js';
 import { generateShareCode, isValidShareCode } from '../../share/code.js';
 import { renderShareHtml } from '../../share/render.js';
 import type { ShareRecord, ShareStore } from '../../share/store.js';
 import { ccJsonlPathOf } from '../../quota/path.js';
+import type { ResolveProjectStore } from './projects.js';
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Cap user-supplied TTL to ~10 years; an explicit `null` body field
@@ -43,12 +43,12 @@ export async function registerShareRoutes(
   config: Config,
   shareStore: ShareStore,
   manager: SessionManager,
-  projectStore: ProjectStore,
+  resolveStore: ResolveProjectStore,
 ): Promise<void> {
   const fallbackTtlMs = config.shareTtlMs ?? DEFAULT_TTL_MS;
 
-  // POST /api/share — owner / limited create a share for their own
-  // session. Renders the HTML once + persists; returns the public URL.
+  // POST /api/share — any user creates a share for their own session.
+  // Renders the HTML once + persists; returns the public URL.
   app.post('/api/share', async (req, reply) => {
     if (req.user === undefined) {
       await reply
@@ -74,7 +74,9 @@ export async function registerShareRoutes(
       return;
     }
 
-    const project = projectStore.get(row.info.projectId);
+    // m-user-symmetric: resolveStore by req.user — row.info.userId === req.user.id
+    // already verified above.
+    const project = resolveStore(req.user).get(row.info.projectId);
     if (!project) {
       await reply
         .code(404)

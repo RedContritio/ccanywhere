@@ -137,7 +137,7 @@ cc 的 hook 是 fire-and-forget HTTP 调用，cc 自身不重试。本服务端
 1. 解析 `session.info.userId` → User；找不到（legacy session）→ 跳过配额，
    继续 state-machine 路径。
 2. `user.kind === 'owner'` → 跳过配额，继续 state-machine 路径。
-3. limited user 路径：派生 cc-internal sessionId `ccSessionId =
+3. user 路径：派生 cc-internal sessionId `ccSessionId =
    info.resumeSessionId ?? info.id`，算 `jsonlPath = ccJsonlPathOf(info.cwd,
    ccSessionId)`。
 4. `jsonl` 文件不存在（first-prompt edge：cc 还没 flush）→ treat as 0，
@@ -159,9 +159,9 @@ cc 协议的 block JSON `decision='block'` MUST 用 status 200 返回，**不能
 用 4xx — curl 在 4xx 上 exit 非 0，cc 把 hook 视为失败而不是 block。
 `continue: false` + `stopReason` 字段同时填充，覆盖 cc 2.x 两种字段命名。
 
-#### Scenario: limited user 未超 limit → 204 + 转 busy + persist usage
+#### Scenario: user 未超 limit → 204 + 转 busy + persist usage
 
-- GIVEN limited user alice 持有 `cost.limitUsd=100, tokens.limit=null`,
+- GIVEN user alice 持有 `cost.limitUsd=100, tokens.limit=null`,
         jsonl 已含 sonnet 1000 input + 500 output（约 $0.0105，1500 tokens）
 - WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
 - THEN  状态 `204`
@@ -171,14 +171,14 @@ cc 协议的 block JSON `decision='block'` MUST 用 status 200 返回，**不能
 
 #### Scenario: 超 cost limit → 200 + block JSON + 状态保持 idle
 
-- GIVEN limited user 持有 `cost.limitUsd=5`，jsonl 已含 opus $15 用量
+- GIVEN user 持有 `cost.limitUsd=5`，jsonl 已含 opus $15 用量
 - WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
 - THEN  状态 `200`，body `{ decision: 'block', reason: 'cost quota exhausted: $15.00 / $5.00', continue: false, stopReason: '...' }`
 - AND   `session.state === 'idle'`（pre-block 状态）
 
 #### Scenario: jsonl 不存在 → 不 block + 不 persist
 
-- GIVEN limited user 已创建但尚未发任何 prompt（jsonl 文件未生成）
+- GIVEN user 已创建但尚未发任何 prompt（jsonl 文件未生成）
 - WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
 - THEN  状态 `204`
 - AND   `session.state === 'busy'`
@@ -193,14 +193,14 @@ cc 协议的 block JSON `decision='block'` MUST 用 status 200 返回，**不能
 
 #### Scenario: 双限制按先触达——cost 先到
 
-- GIVEN limited user 持有 `cost.limitUsd=1, tokens.limit=10_000_000`,
+- GIVEN user 持有 `cost.limitUsd=1, tokens.limit=10_000_000`,
         usage 累计 $3 / 1M tokens
 - WHEN  POST `/api/hook/<sid>/UserPromptSubmit`
 - THEN  block reason 含 `cost quota exhausted`，不含 `tokens`
 
 #### Scenario: 非 UserPromptSubmit 事件不触发配额
 
-- GIVEN limited user 已超 `cost.limitUsd`
+- GIVEN user 已超 `cost.limitUsd`
 - WHEN  POST `/api/hook/<sid>/Stop` 或 `/PreToolUse` 或 `/SessionStart`
 - THEN  状态 `204`，不返 block JSON
 

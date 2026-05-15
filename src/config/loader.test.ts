@@ -21,9 +21,9 @@ describe('loadConfig', () => {
     writeFileSync(path, JSON.stringify(obj));
   }
 
+  // m-user-symmetric: workspace replaces projectsRoot + guestProjectsRoot.
   const validBase = {
-    projectsRoot: '/tmp/projects-root',
-    guestProjectsRoot: '/tmp/guest-projects-root',
+    workspace: '/tmp/ccanywhere-workspace',
     webOrigin: 'http://localhost:62275',
   };
 
@@ -33,7 +33,7 @@ describe('loadConfig', () => {
     expect(cfg.port).toBe(62275);
     expect(cfg.bindHost).toBe('127.0.0.1');
     expect(cfg.claudeBin).toBe('claude');
-    expect(cfg.projectsRoot).toBe('/tmp/projects-root');
+    expect(cfg.workspace).toBe('/tmp/ccanywhere-workspace');
     expect(cfg.webOrigin).toBe('http://localhost:62275');
     expect(cfg.deletedSessionTtlMs).toBe(600_000);
     expect(cfg.wsHeartbeat.intervalMs).toBe(30_000);
@@ -94,18 +94,18 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/not valid JSON/);
   });
 
-  it('rejects missing projectsRoot', () => {
+  it('rejects missing workspace', () => {
     write({ webOrigin: validBase.webOrigin });
-    expect(() => loadConfig(path)).toThrow(/projectsRoot/);
+    expect(() => loadConfig(path)).toThrow(/workspace/);
   });
 
-  it('rejects empty projectsRoot', () => {
-    write({ ...validBase, projectsRoot: '' });
-    expect(() => loadConfig(path)).toThrow(/projectsRoot/);
+  it('rejects empty workspace', () => {
+    write({ ...validBase, workspace: '' });
+    expect(() => loadConfig(path)).toThrow(/workspace/);
   });
 
   it('rejects missing webOrigin', () => {
-    write({ projectsRoot: validBase.projectsRoot });
+    write({ workspace: validBase.workspace });
     expect(() => loadConfig(path)).toThrow(/webOrigin/);
   });
 
@@ -114,27 +114,70 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/webOrigin/);
   });
 
-  it('rejects missing guestProjectsRoot', () => {
-    write({ projectsRoot: validBase.projectsRoot, webOrigin: validBase.webOrigin });
-    expect(() => loadConfig(path)).toThrow(/guestProjectsRoot/);
-  });
-
-  it('rejects guestProjectsRoot equal to projectsRoot', () => {
-    write({ ...validBase, guestProjectsRoot: validBase.projectsRoot });
-    expect(() => loadConfig(path)).toThrow(/must differ/);
-  });
-
-  it('rejects guestProjectsRoot nested under projectsRoot', () => {
-    write({ ...validBase, guestProjectsRoot: '/tmp/projects-root/guests' });
-    expect(() => loadConfig(path)).toThrow(/must not nest/);
-  });
-
-  it('rejects projectsRoot nested under guestProjectsRoot', () => {
-    write({
-      projectsRoot: '/tmp/guest-projects-root/owned',
-      guestProjectsRoot: '/tmp/guest-projects-root',
-      webOrigin: validBase.webOrigin,
+  describe('users.<name>.workspace override (m-user-symmetric)', () => {
+    it('accepts owner override pointing at an existing project tree', () => {
+      write({
+        ...validBase,
+        users: { owner: { workspace: '/Users/redcontritio/Projects' } },
+      });
+      const cfg = loadConfig(path);
+      expect(cfg.users?.['owner']?.workspace).toBe('/Users/redcontritio/Projects');
     });
-    expect(() => loadConfig(path)).toThrow(/must not nest/);
+
+    it('rejects relative path override', () => {
+      write({
+        ...validBase,
+        users: { alice: { workspace: 'relative/path' } },
+      });
+      expect(() => loadConfig(path)).toThrow(/absolute path/);
+    });
+
+    it('rejects override pointing inside another user default slot', () => {
+      // <workspace>/bob is bob's default root; alice overriding into it
+      // would shadow bob's lazy mkdir.
+      write({
+        ...validBase,
+        users: {
+          alice: { workspace: '/tmp/ccanywhere-workspace/bob' },
+        },
+      });
+      expect(() => loadConfig(path)).toThrow(/shadow that user's default root/);
+    });
+
+    it('rejects two overrides nesting each other', () => {
+      write({
+        ...validBase,
+        users: {
+          alice: { workspace: '/tmp/host/a' },
+          bob: { workspace: '/tmp/host/a/b' },
+        },
+      });
+      expect(() => loadConfig(path)).toThrow(/MUST NOT nest/);
+    });
+
+    it('accepts overrides that are siblings outside workspace', () => {
+      write({
+        ...validBase,
+        users: {
+          alice: { workspace: '/tmp/host/alice' },
+          bob: { workspace: '/tmp/host/bob' },
+        },
+      });
+      const cfg = loadConfig(path);
+      expect(cfg.users?.['alice']?.workspace).toBe('/tmp/host/alice');
+      expect(cfg.users?.['bob']?.workspace).toBe('/tmp/host/bob');
+    });
+
+    it('tolerates self-pinning override (override = default slot for the same user)', () => {
+      // Redundant but harmless; we accept rather than reject.
+      write({
+        ...validBase,
+        users: {
+          alice: { workspace: '/tmp/ccanywhere-workspace/alice' },
+        },
+      });
+      const cfg = loadConfig(path);
+      expect(cfg.users?.['alice']?.workspace).toBe('/tmp/ccanywhere-workspace/alice');
+    });
   });
 });

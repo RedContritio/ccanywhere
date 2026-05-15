@@ -188,17 +188,13 @@ export async function registerAuthRoutes(
         .send({ error: { code: 'not_found', message: 'device not found or revoked' } });
       return;
     }
-    // m-multi-user: webauthn login only for owner kind. v12 invariant says
-    // every device.userId points at the owner; this check defensively rejects
-    // if a legacy / misowned device record sneaks in.
-    if (opts.userStore !== undefined) {
-      const user = opts.userStore.findById(device.userId);
-      if (user === null || user.kind !== 'owner') {
-        await reply.code(403).send({
-          error: { code: 'forbidden', message: 'webauthn login only for owner' },
-        });
-        return;
-      }
+    // m-user-symmetric: only reject dangling device.userId; pair-time
+    // policy decides which kind may be paired.
+    if (opts.userStore !== undefined && opts.userStore.findById(device.userId) === null) {
+      await reply.code(403).send({
+        error: { code: 'forbidden', message: 'device.userId is dangling' },
+      });
+      return;
     }
     const { options, challenge } = await makeAuthenticationOptions({
       rp,
@@ -267,21 +263,25 @@ export async function registerAuthRoutes(
     await reply.code(204).send();
   });
 
-  // label = user identity (owner / limited username), not device label.
+  // m-user-symmetric: label = user identity (username); both device and
+  // token branches resolve user via userStore so response stays accurate
+  // when pairing extends beyond owner.
   app.get('/api/auth/me', async (req, reply) => {
     const device = req.authDevice;
     if (device) {
-      const label = opts.userStore?.getOwner().username ?? 'owner';
+      const user = opts.userStore?.findById(device.userId);
+      const label = user?.username ?? 'owner';
+      const kind = user?.kind ?? 'owner';
       await reply
         .code(200)
-        .send({ id: device.id, label, kind: 'owner', lastUsedAt: device.lastUsedAt });
+        .send({ id: device.id, label, kind, lastUsedAt: device.lastUsedAt });
       return;
     }
     const user = req.user;
-    if (user && user.kind === 'limited') {
+    if (user) {
       await reply
         .code(200)
-        .send({ id: user.id, label: user.username, kind: 'limited', lastUsedAt: user.lastLoginAt });
+        .send({ id: user.id, label: user.username, kind: user.kind, lastUsedAt: user.lastLoginAt });
       return;
     }
     await reply.code(401).send({ error: { code: 'unauthorized', message: 'not logged in' } });

@@ -7,39 +7,53 @@ envelope and shared auth conventions.
 
 ## Requirements
 
-### Requirement: POST /api/auth/token（m-multi-user）
+### Requirement: POST /api/auth/token（m-multi-user + m-user-symmetric）
 
-limited user 通过 token 登录。该路由是 cookie-public（hookEarlyAuth 之前；
-登录路径本身不要求已登录），但只接受存在且未过期的 token plaintext。
+任意 kind 的 user（owner 或 user）通过 token 登录。该路由是 cookie-public
+（hookEarlyAuth 之前；登录路径本身不要求已登录），但只接受存在且未过期的
+token plaintext。
+
+m-user-symmetric reframe 之前曾 hardcode `kind === 'limited'` 阻止 owner
+用 token 登入；reframe 后数据层对称（owner 也可签自己的 token 用于自动化
+/ 脚本场景），policy 仅在 webauthn pair-init 强制 kind=owner。
 
 ```
 请求: { "token": "<≥32 char plaintext>" }
 
-200 { "ok": true, "user": { "username": "<NFC string>", "kind": "limited" } }
+200 { "ok": true, "user": { "username": "<NFC string>", "kind": "owner"|"user" } }
     Set-Cookie: <cookieName>=<token-plaintext>; HttpOnly; SameSite=Lax;
                 Max-Age=<ttl-seconds>; [Secure if https]
 400 invalid_request   body validation 失败（token < 32 / 缺字段）
-401 unauthorized      token verify 失败 / revoked / expired
+401 unauthorized      token verify 失败 / revoked / expired / userId dangling
 ```
 
 服务端 MUST：
 
 1. `TokenStore.verify(plaintext)` 用 sha256 hash + constant-time 比对。
    verify 必须迭代所有 token（不 early-break）防 timing leak。
-2. 命中后 `UserStore.findById(token.userId)` 拿 user；若 `user.kind !==
-   'limited'` → 401（防 owner token 误绕）。
+2. 命中后 `UserStore.findById(token.userId)` 拿 user；若 user 不存在
+   → 401（dangling token reference，user 已被删除/未存在）。**MUST NOT**
+   再检查 `kind`——任意 kind 都接受。
 3. `UserStore.touchLogin(user.id)` 更新 `lastLoginAt`。
 4. cookie value MUST 是 token plaintext（后续请求 hookEarlyAuth 用
    tokenStore.verify 重检）。`maxAge` MUST ≤ token.expiresAt - now，最小
    60 秒（避免立即过期）。
 
-#### Scenario: 合法 token → 颁 cookie
+#### Scenario: 合法 user token → 颁 cookie
 
-- GIVEN limited user alice，其 active token plaintext T
+- GIVEN user alice，其 active token plaintext T
 - WHEN  `POST /api/auth/token { token: T }`
-- THEN  状态 `200`，body `{ ok: true, user: { username: 'alice', kind: 'limited' } }`
+- THEN  状态 `200`，body `{ ok: true, user: { username: 'alice', kind: 'user' } }`
 - AND   `Set-Cookie` 含 `<cookieName>=T`、`HttpOnly`
 - AND   `userStore.findById(alice.id).lastLoginAt` 已更新
+
+#### Scenario: owner 自签 token 也可登入（m-user-symmetric）
+
+- GIVEN owner 通过 `POST /api/internal/tokens { userId: owner.id, ttlMs: 60000 }`
+  签出 plaintext T
+- WHEN  `POST /api/auth/token { token: T }`
+- THEN  状态 `200`，body `{ ok: true, user: { username: 'owner', kind: 'owner' } }`
+- AND   后续 `GET /api/projects` 走 owner 单例 store，看见 owner 项目
 
 #### Scenario: token 被 revoke → 401
 
@@ -58,7 +72,7 @@ limited user 通过 token 登录。该路由是 cookie-public（hookEarlyAuth �
 
 ```
 200 {
-  "kind": "owner" | "limited",
+  "kind": "owner" | "user",
   "cost":   { "limitUsd": number | null, "usedUsd": number },
   "tokens": { "limit":    number | null, "used":    number }
 }
@@ -66,17 +80,17 @@ limited user 通过 token 登录。该路由是 cookie-public（hookEarlyAuth �
 ```
 
 owner kind 的 `cost.limitUsd` 与 `tokens.limit` MUST 均为 `null`（不限额）。
-limited kind 至少一个 limit MUST 非 null（创建时强制）。`usedUsd` / `used`
+user kind 至少一个 limit MUST 非 null（创建时强制）。`usedUsd` / `used`
 是 hook 写回的最新值（自 `user.createdAt` 起累加，详见
 `openspec/specs/hooks/spec.md` "quota 单一 enforcement 点"）。
 
-#### Scenario: limited user 返回 quota 对象
+#### Scenario: user 返回 quota 对象
 
-- GIVEN limited user alice 持 `cost.limitUsd=5, tokens.limit=100000`，
+- GIVEN user alice 持 `cost.limitUsd=5, tokens.limit=100000`，
         当前 used `0`
 - WHEN  `GET /api/me/quota`（alice 的 token cookie）
 - THEN  状态 `200`，body
-        `{ kind: 'limited', cost: { limitUsd: 5, usedUsd: 0 }, tokens: { limit: 100000, used: 0 } }`
+        `{ kind: 'user', cost: { limitUsd: 5, usedUsd: 0 }, tokens: { limit: 100000, used: 0 } }`
 
 #### Scenario: owner 返回 null limits
 
@@ -91,7 +105,7 @@ limited kind 至少一个 limit MUST 非 null（创建时强制）。`usedUsd` /
 
 ### Requirement: Internal user 管理路由（m-multi-user）
 
-owner 通过 mac CLI（cliToken）调以下端点管理 limited user：
+owner 通过 mac CLI（cliToken）调以下端点管理 user：
 
 ```
 POST   /api/internal/users
@@ -99,41 +113,42 @@ POST   /api/internal/users
           "costLimitUsd": number | null,
           "tokensLimit":  number | null,
           "ttlMs": number  // 初始 token 的 ttl，1..7*24*60*60*1000 }
-  201 { "user": { id, username, kind: "limited", createdAt, lastLoginAt: null, quota },
+  201 { "user": { id, username, kind: "user", createdAt, lastLoginAt: null, quota },
         "token": { id, label, createdAt, expiresAt, status: "active" },
         "plaintext": "<32-byte hex; 仅本次返回>" }
   400 invalid_request   username 非法字符 / 两 limit 均 null / ttl 越界
   409 conflict          username 已存在 / fs guard 触发
 
 GET    /api/internal/users
-  200 { "users": [ User, ... ] }   // 含 owner + 全部 limited，按 createdAt 排序
+  200 { "users": [ User, ... ] }   // 含 owner + 全部 user，按 createdAt 排序
 
 PATCH  /api/internal/users/:id/quota
   body: { "costLimitUsd"?: number | null,  // undefined = 不改；null = 清掉
           "tokensLimit"?:  number | null,
           "reset"?: boolean  // true 把 used 清零（保留 limit）}
   200 { "user": User }
-  400 invalid_request   设置后两 limit 均 null（limited 必须 ≥1 个非 null）
+  400 invalid_request   设置后两 limit 均 null（user 必须 ≥1 个非 null）
   404 not_found         user 不存在
   409 conflict          target user.kind === 'owner'（owner 不可设 quota）
 ```
 
 服务端 MUST：
 
-- `username` 创建前 NFC normalize；fs `<guestProjectsRoot>/<username>/`
-  必须不存在，否则 `409 conflict`（防 partial-failure 后残留目录）。
+- `username` 创建前 NFC normalize；fs `<workspace>/<username>/`
+  （或 `users.<name>.workspace` override 路径）必须不存在，否则
+  `409 conflict`（防 partial-failure 后残留目录）。
 - 创建顺序 `mkdir → users.json` 持久化；users.json 写失败 → rmdir
   回滚已建目录。
 - 持久化 token 只存 `sha256(plaintext)`；plaintext **仅** 在 201 response
   返回一次，再也读不到。
 
-#### Scenario: 创建 limited user 返 user + token + plaintext
+#### Scenario: 创建 user 返 user + token + plaintext
 
 - GIVEN owner CLI 持有有效 cliToken
 - WHEN  `POST /api/internal/users { username: "alice", costLimitUsd: 5,
         tokensLimit: null, ttlMs: 86400000 }`
 - THEN  状态 `201`
-- AND   `body.user.kind === 'limited'`
+- AND   `body.user.kind === 'user'`
 - AND   `body.plaintext.length === 64`（32-byte hex）
 - AND   后续 `GET /api/internal/users` 列表含 alice
 
@@ -158,12 +173,12 @@ PATCH  /api/internal/users/:id/quota
 
 ```
 POST   /api/internal/tokens
-  body: { "userId": "<limited user id>",
+  body: { "userId": "<user id>",
           "ttlMs":  number,             // 1..7*24*60*60*1000
           "label":  string | null }
   201 { "token": Token, "plaintext": "<64-char hex>" }
   400 invalid_request   ttl 越界 / userId 缺失
-  404 not_found         userId 不存在 / kind !== 'limited'
+  404 not_found         userId 不存在（任意 kind 都可签 token，含 owner — m-user-symmetric）
 
 GET    /api/internal/tokens?user=<username>?
   200 { "tokens": [ Token, ... ] }  // 不返 hash 字段；user 过滤可选

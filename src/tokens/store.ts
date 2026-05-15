@@ -81,7 +81,7 @@ export class TokenStore {
   /**
    * Constant-time lookup by plaintext. Iterates all tokens regardless of
    * early match so timing leaks no info about which entry matched. Cost
-   * O(N); N is small (one-token-per-limited-user, expect <100).
+   * O(N); N is small (one-token-per-user, expect <100).
    */
   verify(plaintext: string): Token | null {
     const targetBuf = Buffer.from(hashToken(plaintext), 'hex');

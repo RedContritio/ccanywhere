@@ -14,7 +14,8 @@ declare module 'fastify' {
     /**
      * m-multi-user: resolved user behind the request. Set whenever a valid
      * session cookie (device-issued or token-issued) authenticates the
-     * request. Owner-only for device sessions; limited-only for token.
+     * request. Either owner (device session) or any user kind (token
+     * session, m-user-symmetric).
      */
     user?: User;
     /** Legacy: filled when the request's bearer matches an internalHookToken. */
@@ -159,12 +160,13 @@ export async function registerAuth(
       return;
     }
 
-    // Fall back to token session (limited user via POST /api/auth/token).
+    // Fall back to token session (any user kind via POST /api/auth/token,
+    // m-user-symmetric — owner can self-issue and use a token too).
     if (opts.tokenStore !== undefined && opts.userStore !== undefined) {
       const token = opts.tokenStore.verify(sessionId);
       if (token) {
         const user = opts.userStore.findById(token.userId);
-        if (user !== null && user.kind === 'limited') {
+        if (user !== null) {
           req.user = user;
           logger.debug(
             { url, method: req.method, userId: user.id, ip: req.ip },

@@ -20,7 +20,7 @@ const STATE_TRANSITIONS: Readonly<Record<string, SessionState | null>> = {
 export interface HookRoutesOptions {
   /**
    * #46 quota: when set, UserPromptSubmit fires quota check against
-   * `user.quota` and emits cc's block-JSON when the limited user is over.
+   * `user.quota` and emits cc's block-JSON when the user is over.
    * Without userStore the handler runs in pure state-machine mode (legacy
    * / pre-multi-user behavior).
    */

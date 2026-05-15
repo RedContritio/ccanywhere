@@ -33,8 +33,7 @@ const config: Config = {
   deletedSessionTtlMs: 600_000,
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
-  projectsRoot: '/tmp/ccanywhere-test-placeholder',
-  guestProjectsRoot: '/tmp/ccanywhere-test-guest-placeholder',
+  workspace: '/tmp/ccanywhere-test-workspace-placeholder',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
 };

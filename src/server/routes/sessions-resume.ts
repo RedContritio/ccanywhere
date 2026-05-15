@@ -2,9 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
 import { logger } from '../../log.js';
-import type { ProjectStore } from '../../projects/store.js';
 import type { SessionManager } from '../../session/manager.js';
 import { buildResumeArgs } from '../../session/resume-args.js';
+import type { ResolveProjectStore } from './projects.js';
 
 const ResumeBodySchema = z.object({
   cols: z.number().int().min(1).optional(),
@@ -34,7 +34,7 @@ export async function registerSessionResumeRoutes(
   app: FastifyInstance,
   config: Config,
   manager: SessionManager,
-  projectStore: ProjectStore,
+  resolveStore: ResolveProjectStore,
 ): Promise<void> {
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/api/sessions/:id/resume',
@@ -78,7 +78,9 @@ export async function registerSessionResumeRoutes(
         return;
       }
 
-      const project = projectStore.get(stub.info.projectId);
+      // m-user-symmetric: resolveStore by req.user — stub.info.userId === req.user.id
+      // already verified above via the cross-user 404 mask.
+      const project = resolveStore(req.user).get(stub.info.projectId);
       if (!project) {
         await reply
           .code(404)

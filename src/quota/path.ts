@@ -54,7 +54,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.
  * reverse-derive the cwd, and verify `ccJsonlPathOf(reversedCwd, sessionId)`
  * round-trips to the same path. This guards against cc CLI upgrades that
  * change the encoding scheme: if encoding drifts, the runtime quota check
- * would silently miss jsonl files, letting limited users bypass their quota.
+ * would silently miss jsonl files, letting users bypass their quota.
  *
  * - empty `~/.claude/projects/` → `skipped` + warn (new install; the check
  *   will retry implicitly on the first hook fire when a real jsonl appears)

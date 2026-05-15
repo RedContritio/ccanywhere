@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cookiePlugin from '@fastify/cookie';
 import staticPlugin from '@fastify/static';
@@ -7,10 +7,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from '../config/schema.js';
 import type { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
-import type { ProjectStore } from '../projects/store.js';
+import { ensureProjectsRoot, ProjectStore } from '../projects/store.js';
 import type { SessionManager } from '../session/manager.js';
 import type { TokenStore } from '../tokens/store.js';
 import type { UserStore } from '../users/store.js';
+import type { User } from '../users/types.js';
 import { registerWebSocketRoutes } from '../ws/server.js';
 import { registerAuth } from './auth.js';
 import { IdempotencyStore } from './idempotency.js';
@@ -129,10 +130,31 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
 
   app.get('/healthz', () => ({ ok: true }));
 
+  // m-user-symmetric: per-user ProjectStore lazy 构造。owner 复用注入的单例
+  // (caller 用 owner override 或默认 <workspace>/owner 构造)；其他 user 在
+  // 首次访问时 mkdir + 构造 ProjectStore 落到自己的 root（hidden state
+  // 在 <root>/.projects-state.json，root 自包含与 owner state 路径互不嵌套）。
+  // req.user 缺失（老 fixture / 未启 multi-user）时退回单例，保持向后兼容。
+  const userProjectStores = new Map<string, ProjectStore>();
+  const resolveProjectStore = (user: User | undefined): ProjectStore => {
+    if (user === undefined || user.kind === 'owner') return opts.projectStore;
+    if (opts.userStore === undefined) return opts.projectStore;
+    const cached = userProjectStores.get(user.username);
+    if (cached !== undefined) return cached;
+    const root = opts.userStore.projectsRootFor(user);
+    ensureProjectsRoot(root);
+    const store = new ProjectStore({
+      projectsRoot: root,
+      statePath: join(root, '.projects-state.json'),
+    });
+    userProjectStores.set(user.username, store);
+    return store;
+  };
+
   if (opts.historyRoot === undefined) {
-    await registerProjectRoutes(app, opts.projectStore);
+    await registerProjectRoutes(app, resolveProjectStore);
   } else {
-    await registerProjectRoutes(app, opts.projectStore, opts.historyRoot);
+    await registerProjectRoutes(app, resolveProjectStore, opts.historyRoot);
   }
   const idempotencyStore = new IdempotencyStore(opts.idempotencyTtlMs ?? 60 * 60 * 1000);
   app.addHook('onClose', () => {
@@ -148,15 +170,15 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
   if (opts.userStore !== undefined) sessionOpts.userStore = opts.userStore;
   if (opts.injectCcSessionId !== undefined) sessionOpts.injectCcSessionId = opts.injectCcSessionId;
-  await registerSessionRoutes(app, opts.config, opts.manager, opts.projectStore, sessionOpts);
-  await registerSessionResumeRoutes(app, opts.config, opts.manager, opts.projectStore);
+  await registerSessionRoutes(app, opts.config, opts.manager, resolveProjectStore, sessionOpts);
+  await registerSessionResumeRoutes(app, opts.config, opts.manager, resolveProjectStore);
   if (opts.shareStore !== undefined) {
     await registerShareRoutes(
       app,
       opts.config,
       opts.shareStore,
       opts.manager,
-      opts.projectStore,
+      resolveProjectStore,
     );
   }
   await registerHookRoutes(

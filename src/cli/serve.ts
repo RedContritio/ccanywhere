@@ -53,10 +53,36 @@ export async function runServe(configPathArg?: string): Promise<void> {
   }
   const configDir = resolveConfigDir(config, configPath);
 
-  const projectsRoot = resolve(config.projectsRoot);
+  // m-user-symmetric: workspace 是所有 user 项目根的父目录。每 user 默认
+  // 走 <workspace>/<username>/，可通过 users.<username>.workspace 显式
+  // override。owner 的 username 不是字面 'owner'——prod 实例可能用任何
+  // 合法 username（首次 ensureOwner 默认 'owner'，但允许手动改）。
+  const workspace = resolve(config.workspace);
+  mkdirSync(workspace, { recursive: true, mode: 0o700 });
+
+  // UserStore 要先构造以拿到 owner.username（ensureOwner 触发后），再
+  // 算 owner 项目根。后续 DeviceStore 依赖 owner.id 也由这一步提供。
+  const userStore = new UserStore({
+    statePath: join(configDir, 'users.json'),
+    workspace,
+    userOverrides: config.users,
+  });
+  const ownerUser = userStore.getOwner();
+  const ownerOverrideKey = `users.${ownerUser.username}.workspace`;
+  const ownerOverride = config.users?.[ownerUser.username]?.workspace;
+  if (ownerOverride === undefined) {
+    logger.warn(
+      { defaultRoot: join(workspace, ownerUser.username) },
+      `owner 未配 \`${ownerOverrideKey}\` — owner 项目根走默认 ` +
+        `<workspace>/${ownerUser.username}。如需指向其他目录（例如已有的项目` +
+        `仓库），在 config 设 \`${ownerOverrideKey}: "<abs path>"\`。`,
+    );
+  }
+  const ownerProjectsRoot = userStore.projectsRootFor(ownerUser);
+
   let writable = false;
   try {
-    ({ writable } = ensureProjectsRoot(projectsRoot));
+    ({ writable } = ensureProjectsRoot(ownerProjectsRoot));
   } catch (err) {
     if (err instanceof ProjectStoreError) {
       logger.fatal(err.message);
@@ -66,24 +92,14 @@ export async function runServe(configPathArg?: string): Promise<void> {
   }
   if (!writable) {
     logger.warn(
-      { projectsRoot },
-      'projectsRoot is read-only — list/select projects work, but creating new projects will fail',
+      { ownerProjectsRoot },
+      'owner projects root is read-only — list/select projects work, but creating new projects will fail',
     );
   }
 
-  const guestProjectsRoot = resolve(config.guestProjectsRoot);
-  mkdirSync(guestProjectsRoot, { recursive: true, mode: 0o700 });
-
   const projectStore = new ProjectStore({
-    projectsRoot,
+    projectsRoot: ownerProjectsRoot,
     statePath: join(configDir, 'projects-state.json'),
-  });
-  // m-multi-user dependency note: UserStore MUST init before DeviceStore.
-  // DeviceStore step-2 改造将让老 device record fallback userId=ownerUser.id；
-  // 而 ownerUser 在 UserStore constructor 内 ensureOwner() 时创建。
-  const userStore = new UserStore({
-    statePath: join(configDir, 'users.json'),
-    guestProjectsRoot,
   });
   const tokenStore = new TokenStore({
     statePath: join(configDir, 'tokens.json'),
@@ -174,7 +190,8 @@ export async function runServe(configPathArg?: string): Promise<void> {
     {
       configPath,
       bind: `${config.bindHost}:${actualPort}`,
-      projectsRoot,
+      workspace,
+      ownerProjectsRoot,
       projects: projectStore.list().length,
       devices: deviceStore.listDevices().length,
       internalHookToken,

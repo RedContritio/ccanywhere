@@ -16,10 +16,12 @@ resume 路径 / F1-F5 保证）拆分到 [persistence.spec.md](./persistence.spe
 每个 PTY session MUST 在 spawn 时绑当前请求的 `req.user.id`（写入
 `SessionInfo.userId`）。所有 session 操作 MUST 按 user 隔离：
 
-- `POST /api/sessions` MUST 校验请求 project.cwd 落在
-  `userStore.projectsRootFor(req.user, config.projectsRoot)` 子树内
-  （owner = `config.projectsRoot`；limited = `<guestProjectsRoot>/<username>/`）；
-  否则 `403 forbidden`。
+- `POST /api/sessions` MUST 通过 `resolveProjectStore(req.user)` 解析对应
+  user 的 ProjectStore 查 `projectId`；找不到返 `404 not_found`（store
+  隔离 first line，跨 user 项目 id mask 为不存在）。defense-in-depth：
+  cwd MUST 落在 `UserStore.projectsRootFor(req.user)` 子树内（默认
+  `<workspace>/<username>/`，可被 `users.<name>.workspace` override；
+  m-user-symmetric），否则 `403 forbidden`。
 - `GET /api/sessions` MUST 仅返回 `session.info.userId === req.user.id`
   的条目。
 - `DELETE /api/sessions/:id` MUST 在 `session.info.userId !== req.user.id`
@@ -27,12 +29,13 @@ resume 路径 / F1-F5 保证）拆分到 [persistence.spec.md](./persistence.spe
 - `/ws/sessions/:id` upgrade MUST 在 cross-user 时 `sock.close(1008)`
   并发 `error` 帧（mask 为 not-found，统一 close code 语义）。
 
-#### Scenario: cwd 不在 user.projectsRoot 子树时 403
+#### Scenario: 跨 user 用 owner project id → 404 not_found（store 隔离）
 
-- GIVEN limited user alice 已 token 登录，cookie 已带
-- AND   project P 的 cwd 在 owner.projectsRoot 而非 `<guestRoot>/alice/`
-- WHEN  alice `POST /api/sessions { projectId: P.id, mode: create }`
-- THEN  返回 `403` + body `{ error.code: 'forbidden' }`
+- GIVEN user alice 已 token 登录，cookie 已带
+- AND   project `demo` 在 owner 项目根，alice 的 store 中不含此 id
+- WHEN  alice `POST /api/sessions { projectId: 'demo', mode: create }`
+- THEN  返回 `404` + body `{ error.code: 'not_found' }`（store 隔离 first
+  line 在 cwd guard 之前 trip；m-user-symmetric）
 
 #### Scenario: 跨 user 不能看到对方的 sessions
 

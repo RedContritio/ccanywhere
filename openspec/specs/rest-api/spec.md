@@ -25,56 +25,113 @@ REST API 是控制面：web 客户端通过它发现项目、列举/创建/删�
 - THEN  状态 `404`
 - AND   body 等于 `{"error": {"code": "not_found", "message": "route not found"}}`
 
-### Requirement: GET /api/projects
+### Requirement: 路由按 user 解析 ProjectStore（m-user-symmetric）
 
-返回 `projectsRoot` 下当前可见的项目（每次请求实时扫盘 + 过滤隐藏列表）。
+所有 projects / sessions / sessions-resume / share 路由 MUST 通过
+`resolveProjectStore(req.user)` 工厂解析对应 user 的 `ProjectStore`，
+而非使用全局 owner 单例：
+
+- owner kind → 服务端启动时构造的 base store（`config.users.owner.workspace`
+  override 优先，否则 `<config.workspace>/owner`）
+- 其他 user → lazy 构造 `<UserStore.projectsRootFor(user)>` 上的
+  `ProjectStore`（hidden state 落 `<root>/.projects-state.json`），按
+  `username` 缓存到 `Map<string, ProjectStore>`，同进程同 user 永远共享
+  同一实例
+- `req.user === undefined`（pre-multi-user fixture）→ 退回 base store，
+  保持向后兼容
+
+跨 user 操作 MUST 表现为"项目不存在"而非 403：另一 user 的 ProjectStore
+里根本看不到该 id，自然 404 mask；不暴露 owner 项目存在与否。
+
+### Requirement: GET /api/projects（含 m-user-symmetric）
+
+返回**当前 user** 项目根下当前可见的项目（每次请求实时扫盘 + 过滤隐藏列表）。
 
 ```
 200 { "projects": [ { "id", "name", "cwd" }, ... ] }
 ```
 
-响应 MUST 按 `id` 字典序列出**所有**未被隐藏的子目录。系统是单用户的，不做
-用户级过滤。`id` MUST 等于子目录 basename，`cwd` MUST 等于该 basename 在
-`projectsRoot` 下的完整绝对路径。
+响应 MUST 按 `id` 字典序列出**所有**未被隐藏的子目录。`id` MUST 等于子目录
+basename，`cwd` MUST 等于该 basename 在 user 项目根下的完整绝对路径。
 
-### Requirement: POST /api/projects
+#### Scenario: 非 owner user 看不到 owner 项目
 
-在 `projectsRoot` 下创建一个新的项目子目录。
+- GIVEN owner 项目根含 `demo`，user `alice` 项目根 `<workspace>/alice/`
+  为空
+- WHEN  alice 持其 token cookie 调 `GET /api/projects`
+- THEN  状态 `200`，body `{ "projects": [] }`
+- AND   owner 调同一路由仍能看到 `demo`
+
+### Requirement: POST /api/projects（含 m-user-symmetric）
+
+在**当前 user** 项目根下创建一个新的项目子目录。
 
 ```
 请求: { "name": "<basename>" }
-201 { "id": "<basename>", "name": "<basename>", "cwd": "<projectsRoot>/<basename>" }
+201 { "id": "<basename>", "name": "<basename>", "cwd": "<root>/<basename>" }
 400 invalid_request   非空、≤255 字符、不含 `/` 和 0x00-0x1f、非 `.`/`..`
-403 forbidden         projectsRoot 不可写（启动时 `writable=false`）
+403 forbidden         user 项目根不可写
 409 already_exists    同名目录已存在
 ```
+
+非 owner user 创建的项目 MUST 落到该 user 项目根，不得污染 owner 项目根。
 
 若该 name 之前被 hide 过，create 成功后 MUST 自动从 hidden 列表移除（恢复
 可见）。
 
-### Requirement: DELETE /api/projects/:id
+#### Scenario: user 创建项目落自己 workspace 子树
 
-将项目从可见列表中移除（**软删除**：磁盘目录保留）。
+- GIVEN user `alice` 默认项目根 `<workspace>/alice/`
+- WHEN  alice `POST /api/projects { "name": "p1" }`
+- THEN  状态 `201`，`cwd` = `<workspace>/alice/p1`
+- AND   `<workspace>/alice/p1/` 在磁盘上已 mkdir
+- AND   owner 调 `GET /api/projects` 不含 `p1`
+
+### Requirement: DELETE /api/projects/:id（含 m-user-symmetric）
+
+将**当前 user 项目根下**的项目从可见列表中移除（**软删除**：磁盘目录保留）。
 
 ```
 204             成功（首次或重复 DELETE 同 id 都返回 204，幂等）
-404 not_found   :id 不在当前可见列表
+404 not_found   :id 不在当前 user 视角的可见列表
 ```
 
-恢复一个被 hide 的项目：手动编辑 `~/.config/ccanywhere/projects-state.json`
-删掉 `hidden` 数组中的 id；或重新 POST 创建（若磁盘目录已被删，会重建）。
+跨 user 操作 MUST 返回 `404`（同 `not_found`，不区分"不存在"与"属于其他
+user"，避免泄漏 id 是否存在）。
 
-### Requirement: GET /api/projects/:id/history
+恢复一个被 hide 的项目：手动编辑该 user 项目根下的 `.projects-state.json`
+（owner 默认在 `<workspace>/owner/.projects-state.json` 或 owner override
+路径下），删掉 `hidden` 数组中的 id；或重新 POST 创建。
 
-返回该项目 cwd 的历史 cc session，按文件 mtime 倒序（最新在前）。
+#### Scenario: user 拿 owner project id → 404
+
+- GIVEN owner 项目根含 `demo`，user `alice` 项目根中无 `demo`
+- WHEN  alice `DELETE /api/projects/demo`
+- THEN  状态 `404`
+- AND   owner 视角下 `demo` 仍可见（未被软删）
+
+### Requirement: GET /api/projects/:id/history（含 m-user-symmetric）
+
+返回**当前 user 项目根下**的项目 cwd 的历史 cc session，按文件 mtime
+倒序（最新在前）。
 
 ```
 200 { "history": [ { "sessionId", "modifiedAt", "preview" }, ... ] }
-404 :id 非配置项目
+404 not_found   :id 不在当前 user 视角的可见列表
 ```
 
+跨 user 拿 owner project id MUST 返回 `404`，不得透出 owner 项目的 cc 对话
+metadata（标题 / 时间戳 / jsonl 文件名）。
+
 若该项目的历史目录不存在于磁盘，响应 MUST 是 `200 { "history": [] }`——
-空历史不是 404。
+空历史不是 404（仅当 `:id` 在 user 视角可见时这条规则适用）。
+
+#### Scenario: user 拿 owner project id 拉 history → 404
+
+- GIVEN owner 项目 `demo`（可能含 cc 历史 jsonl），user `alice`
+- WHEN  alice `GET /api/projects/demo/history`
+- THEN  状态 `404`
+- AND   响应不含任何 owner 历史 metadata
 
 ### Requirement: POST /api/sessions
 

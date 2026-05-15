@@ -28,19 +28,31 @@ export const ConfigSchema = z.object({
    */
   outputFps: z.number().int().min(1).max(240).default(60),
   /**
-   * Absolute path to a directory whose direct subdirectories are exposed
-   * as projects. Created at startup if missing; readable and (preferably)
-   * writable. Replaces the old `projects[]` array config.
+   * Absolute path to the parent directory of every user's project root
+   * (m-user-symmetric). Each user's project root defaults to
+   * `<workspace>/<username>/`; an optional `users.<name>.workspace`
+   * override (absolute path) supersedes the default for that user. Created
+   * (mode 0700) at startup if missing.
+   *
+   * Replaces the legacy `projectsRoot` (owner-only) +
+   * `guestProjectsRoot` (limited-only) pair.
    */
-  projectsRoot: z.string().min(1, 'projectsRoot must be set'),
+  workspace: z.string().min(1, 'workspace must be set'),
   /**
-   * Absolute path to the parent directory under which each limited user
-   * gets `<guestProjectsRoot>/<username>/` as their project sandbox
-   * (m-multi-user). MUST differ from and MUST NOT nest with `projectsRoot`
-   * — owner uses `projectsRoot`, limited users use this. Created (mode
-   * 0700) at startup if missing.
+   * Per-user configuration. Currently only `workspace` override (absolute
+   * path) is recognized. owner override is optional — when absent, owner
+   * uses the default `<workspace>/owner/` and a startup warning prompts
+   * the operator to set it explicitly if they want to point at an
+   * existing project repository.
    */
-  guestProjectsRoot: z.string().min(1, 'guestProjectsRoot must be set'),
+  users: z
+    .record(
+      z.string().min(1),
+      z.object({
+        workspace: z.string().optional(),
+      }),
+    )
+    .optional(),
   /**
    * Public URL the web SPA is served from (e.g.
    * "https://ccanywhere.example.com"). Used to derive WebAuthn `rpID` and
@@ -77,24 +89,81 @@ export const ConfigSchema = z.object({
    */
   shareTtlMs: z.number().int().positive().optional(),
 }).superRefine((cfg, ctx) => {
-  const a = resolve(cfg.projectsRoot);
-  const b = resolve(cfg.guestProjectsRoot);
-  if (a === b) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'projectsRoot and guestProjectsRoot must differ',
-      path: ['guestProjectsRoot'],
-    });
-    return;
+  // Per-user `workspace` override checks (m-user-symmetric):
+  //   1. absolute path
+  //   2. any two overrides MUST NOT nest
+  //   3. an override MUST NOT collide with `<workspace>/<other-username>`
+  //      (would shadow another user's default root)
+  if (cfg.users === undefined) return;
+  const ws = resolve(cfg.workspace);
+  const wsSep = ws.endsWith(sep) ? ws : ws + sep;
+
+  const overrides: Array<{ username: string; absPath: string }> = [];
+  for (const [username, userCfg] of Object.entries(cfg.users)) {
+    if (userCfg.workspace === undefined) continue;
+    const abs = userCfg.workspace;
+    // Path absoluteness check via path.resolve fixed-point: an absolute path
+    // resolves to itself; a relative path becomes <cwd>/<...>.
+    if (resolve(abs) !== abs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `users.${username}.workspace must be an absolute path`,
+        path: ['users', username, 'workspace'],
+      });
+      continue;
+    }
+    overrides.push({ username, absPath: abs });
   }
-  const aWithSep = a.endsWith(sep) ? a : a + sep;
-  const bWithSep = b.endsWith(sep) ? b : b + sep;
-  if (aWithSep.startsWith(bWithSep) || bWithSep.startsWith(aWithSep)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'projectsRoot and guestProjectsRoot must not nest',
-      path: ['guestProjectsRoot'],
-    });
+
+  for (const { username, absPath } of overrides) {
+    const overrideSep = absPath.endsWith(sep) ? absPath : absPath + sep;
+    // Default-collision: override must not point inside <workspace>/<other>/
+    // for any other user (covers `<ws>/<username>` for self too — pinning
+    // the override to your own default is harmless but oddly redundant; we
+    // tolerate it).
+    if (overrideSep.startsWith(wsSep)) {
+      const tail = absPath.slice(ws.length).replace(/^[\\/]+/, '');
+      const firstSeg = tail.split(sep)[0] ?? '';
+      if (firstSeg.length > 0 && firstSeg !== username) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `users.${username}.workspace points inside default user slot ` +
+            `<workspace>/${firstSeg}/ — would shadow that user's default root`,
+          path: ['users', username, 'workspace'],
+        });
+      }
+    }
+  }
+
+  // Pairwise nesting check across overrides.
+  for (let i = 0; i < overrides.length; i++) {
+    for (let j = i + 1; j < overrides.length; j++) {
+      const ovI = overrides[i];
+      const ovJ = overrides[j];
+      if (ovI === undefined || ovJ === undefined) continue;
+      const a = ovI.absPath.endsWith(sep) ? ovI.absPath : ovI.absPath + sep;
+      const b = ovJ.absPath.endsWith(sep) ? ovJ.absPath : ovJ.absPath + sep;
+      if (a === b) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `users.${ovI.username}.workspace and users.${ovJ.username}.workspace ` +
+            `MUST differ`,
+          path: ['users', ovJ.username, 'workspace'],
+        });
+        continue;
+      }
+      if (a.startsWith(b) || b.startsWith(a)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `users.${ovI.username}.workspace and users.${ovJ.username}.workspace ` +
+            `MUST NOT nest`,
+          path: ['users', ovJ.username, 'workspace'],
+        });
+      }
+    }
   }
 });
 export type Config = z.infer<typeof ConfigSchema>;

@@ -16,12 +16,17 @@ interface PersistedState {
 
 export interface UserStoreOptions {
   readonly statePath: string;
-  /** Absolute path; createLimitedUser mkdirs `<guestProjectsRoot>/<username>/`. */
-  readonly guestProjectsRoot: string;
+  /**
+   * Default user-projects parent directory. Each user's project root
+   * defaults to `<workspace>/<username>/` unless `userOverrides[username]
+   * .workspace` provides an absolute path override (m-user-symmetric).
+   */
+  readonly workspace: string;
+  readonly userOverrides?: Record<string, { workspace?: string | undefined }> | undefined;
   readonly now?: () => number;
 }
 
-export interface CreateLimitedUserInput {
+export interface CreateUserInput {
   readonly username: string;
   readonly costLimitUsd: number | null;
   readonly tokensLimit: number | null;
@@ -36,13 +41,15 @@ export interface SetQuotaLimitInput {
 
 export class UserStore {
   private readonly statePath: string;
-  private readonly guestProjectsRoot: string;
+  private readonly workspace: string;
+  private readonly userOverrides: Record<string, { workspace?: string | undefined }> | undefined;
   private readonly now: () => number;
   private readonly users = new Map<string, User>();
 
   constructor(opts: UserStoreOptions) {
     this.statePath = opts.statePath;
-    this.guestProjectsRoot = resolve(opts.guestProjectsRoot);
+    this.workspace = resolve(opts.workspace);
+    this.userOverrides = opts.userOverrides;
     this.now = opts.now ?? (() => Date.now());
     this.load();
     this.ensureOwner();
@@ -72,37 +79,34 @@ export class UserStore {
   }
 
   /**
-   * Project root for this user — owner uses Config.projectsRoot (caller
-   * supplies); limited user lives under `<guestProjectsRoot>/<username>/`.
+   * Project root for this user. Returns the user's `users.<name>.workspace`
+   * override (absolute path) if present, else `<workspace>/<username>/`.
+   * `kind` does NOT influence the lookup — owner and user resolve through
+   * the same path (m-user-symmetric).
    */
-  projectsRootFor(user: User, ownerProjectsRoot: string): string {
-    return user.kind === 'owner'
-      ? resolve(ownerProjectsRoot)
-      : join(this.guestProjectsRoot, user.username);
+  projectsRootFor(user: User): string {
+    const override = this.userOverrides?.[user.username]?.workspace;
+    if (override !== undefined) return resolve(override);
+    return join(this.workspace, user.username);
   }
 
-  createLimitedUser(input: CreateLimitedUserInput): User {
+  createUser(input: CreateUserInput): User {
     const username = input.username.normalize('NFC');
     if (!USERNAME_RE.test(username)) {
       throw new UserStoreError(`invalid username: ${JSON.stringify(username)}`);
     }
     if (input.costLimitUsd === null && input.tokensLimit === null) {
-      throw new UserStoreError('limited user must set at least one quota limit');
+      throw new UserStoreError('user must set at least one quota limit');
     }
     if (this.findByUsername(username) !== null) {
       throw new UserStoreError(`user already exists: ${username}`);
     }
-    const userDir = join(this.guestProjectsRoot, username);
-    if (existsSync(userDir)) {
-      throw new UserStoreError(`fs guard: ${userDir} already exists`);
-    }
-
-    // mkdir → users.json; persist failure rolls back rmdir to avoid fs guard deadlock
-    mkdirSync(userDir, { mode: 0o700, recursive: false });
-    const user: User = {
+    // Pre-build the User so we can resolve its target dir via the unified
+    // projectsRootFor (honors any override the operator set ahead of time).
+    const candidate: User = {
       id: randomUUID(),
       username,
-      kind: 'limited',
+      kind: 'user',
       createdAt: this.now(),
       lastLoginAt: null,
       quota: {
@@ -112,11 +116,18 @@ export class UserStore {
       preferences: {},
       lastActiveSessionId: null,
     };
-    this.users.set(user.id, user);
+    const userDir = this.projectsRootFor(candidate);
+    if (existsSync(userDir)) {
+      throw new UserStoreError(`fs guard: ${userDir} already exists`);
+    }
+
+    // mkdir → users.json; persist failure rolls back rmdir to avoid fs guard deadlock
+    mkdirSync(userDir, { mode: 0o700, recursive: false });
+    this.users.set(candidate.id, candidate);
     try {
       this.persist();
     } catch (err) {
-      this.users.delete(user.id);
+      this.users.delete(candidate.id);
       try {
         rmdirSync(userDir);
       } catch {
@@ -124,7 +135,7 @@ export class UserStore {
       }
       throw err;
     }
-    return user;
+    return candidate;
   }
 
   touchLogin(userId: string): void {
@@ -195,7 +206,7 @@ export class UserStore {
     const tokensLimit =
       input.tokensLimit !== undefined ? input.tokensLimit : u.quota.tokens.limit;
     if (costLimitUsd === null && tokensLimit === null) {
-      throw new UserStoreError('limited user must keep at least one quota limit');
+      throw new UserStoreError('user must keep at least one quota limit');
     }
     const next: User = {
       ...u,
@@ -250,21 +261,29 @@ export class UserStore {
     } catch {
       return;
     }
-    if (Array.isArray(parsed.users)) {
-      for (const u of parsed.users) {
-        if (typeof u?.id !== 'string') continue;
-        // m-user-prefs migration: legacy records lack `preferences` and
-        // `lastActiveSessionId`. Coerce to defaults so downstream code
-        // (route handlers, ?? fallbacks) always sees defined values.
-        const migrated: User = {
-          ...u,
-          preferences: u.preferences ?? {},
-          lastActiveSessionId:
-            u.lastActiveSessionId === undefined ? null : u.lastActiveSessionId,
-        };
-        this.users.set(u.id, migrated);
+    if (!Array.isArray(parsed.users)) return;
+    let dirty = false;
+    for (const u of parsed.users) {
+      if (typeof u?.id !== 'string') continue;
+      // m-user-symmetric: legacy 'limited' kind migrated to 'user'.
+      // m-user-prefs: legacy records lack `preferences` and
+      // `lastActiveSessionId`. Coerce to defaults so downstream code
+      // (route handlers, ?? fallbacks) always sees defined values.
+      let kind = u.kind;
+      if ((kind as string) === 'limited') {
+        kind = 'user';
+        dirty = true;
       }
+      const migrated: User = {
+        ...u,
+        kind,
+        preferences: u.preferences ?? {},
+        lastActiveSessionId:
+          u.lastActiveSessionId === undefined ? null : u.lastActiveSessionId,
+      };
+      this.users.set(u.id, migrated);
     }
+    if (dirty) this.persist();
   }
 
   private persist(): void {

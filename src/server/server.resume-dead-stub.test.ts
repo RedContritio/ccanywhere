@@ -131,7 +131,7 @@ describe('Dead stub resume + screen endpoints', () => {
     });
 
     it('404 when caller is not the owner', async () => {
-      const other = env.createLimitedUserWithToken('intruder');
+      const other = env.createUserWithToken('intruder');
       await seedDeadStub({ id: 'guarded' });
       const res = await app.inject({
         method: 'POST',
@@ -200,7 +200,7 @@ describe('Dead stub resume + screen endpoints', () => {
     });
 
     it('404 cross-user', async () => {
-      const other = env.createLimitedUserWithToken('peeper');
+      const other = env.createUserWithToken('peeper');
       await seedDeadStub({ id: 'private-frame', lastScreen: 'secret' });
       const res = await app.inject({
         method: 'GET',

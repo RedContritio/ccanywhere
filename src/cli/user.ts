@@ -4,7 +4,7 @@ import { makeInternalClient } from './internal-client.js';
 interface UserRecord {
   id: string;
   username: string;
-  kind: 'owner' | 'limited';
+  kind: 'owner' | 'user';
   createdAt: number;
   lastLoginAt: number | null;
   quota?: {

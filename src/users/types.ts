@@ -1,4 +1,4 @@
-export type UserKind = 'owner' | 'limited';
+export type UserKind = 'owner' | 'user';
 
 export interface UserQuota {
   readonly cost: { readonly limitUsd: number | null; readonly usedUsd: number };
@@ -35,7 +35,7 @@ export interface UserPreferences {
 
 export interface User {
   readonly id: string;
-  /** NFC-normalized; doubles as fs path component for limited users. */
+  /** NFC-normalized; doubles as fs path component under workspace. */
   readonly username: string;
   readonly kind: UserKind;
   readonly createdAt: number;

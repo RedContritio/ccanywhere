@@ -18,7 +18,17 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-（无）
+### B18. resume / attach 等待 PTY 首字节时 UI 不要只说"已连接"
+
+- **scope**：~50 LOC（workspace status 增加 `awaiting-pty-data` 中间态）
+- **背景**：dogfood 时弱网下点 resume，WS upgrade 立刻成功（"已连接"
+  提示出现），但 cc 进程 reload jsonl + 首条 PTY data 推过来要数十秒
+  弱网更长。这段时间用户看到"已连接"但终端空白，以为 resume 失败。
+  实测确认数据最终到达，是网速问题；UI 没区分"WS 已建立"与"PTY 数据已开始流"。
+- **方案**：useWebSocket / WorkspaceMainPane 加 `hasReceivedAnyData` flag；
+  收到首条 `output` frame 前展示 "已连接，等待 cc 输出…" 或类似 spinner；
+  收到第一条 data 后切换正常态。
+- **出处**：m-user-symmetric dogfood 复验 owner 视角弱网场景
 
 ---
 

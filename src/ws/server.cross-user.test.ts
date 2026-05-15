@@ -23,8 +23,7 @@ const baseConfig: Config = {
   deletedSessionTtlMs: 600_000,
   wsHeartbeat: { intervalMs: 30_000, timeoutMs: 60_000 },
   outputFps: 60,
-  projectsRoot: '/tmp/placeholder',
-  guestProjectsRoot: '/tmp/placeholder-guests',
+  workspace: '/tmp/placeholder-workspace',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
 };
@@ -51,29 +50,30 @@ function waitOpen(ws: WebSocket, timeoutMs = 4000): Promise<void> {
  */
 describe('WebSocket /ws/sessions/:id cross-user mask', () => {
   it('alice WS upgrade to owner session → close 1008', async () => {
-    const projectsRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-ws-xuser-projects-'));
-    const guestProjectsRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-ws-xuser-guests-'));
-    mkdirSync(join(projectsRoot, 'demo'));
+    const workspace = mkdtempSync(join(tmpdir(), 'ccanywhere-ws-xuser-workspace-'));
+    const ownerProjectsRoot = join(workspace, 'owner');
+    mkdirSync(ownerProjectsRoot);
+    mkdirSync(join(ownerProjectsRoot, 'demo'));
     const projectStore = new ProjectStore({
-      projectsRoot,
-      statePath: join(projectsRoot, '.projects-state.json'),
+      projectsRoot: ownerProjectsRoot,
+      statePath: join(ownerProjectsRoot, '.projects-state.json'),
     });
     const userStore = new UserStore({
-      statePath: join(projectsRoot, '.users.json'),
-      guestProjectsRoot,
+      statePath: join(workspace, '.users.json'),
+      workspace,
     });
     const owner = userStore.getOwner();
     const tokenStore = new TokenStore({
-      statePath: join(projectsRoot, '.tokens.json'),
+      statePath: join(workspace, '.tokens.json'),
     });
     const deviceStore = new DeviceStore({
-      statePath: join(projectsRoot, '.devices.json'),
+      statePath: join(workspace, '.devices.json'),
       ownerId: owner.id,
     });
     const { sessionId: ownerSessionId } = deviceStore.__seedActiveDevice('owner-dev');
     const ownerCookie = `ccanywhere_session=${ownerSessionId}`;
 
-    const alice = userStore.createLimitedUser({
+    const alice = userStore.createUser({
       username: 'alice',
       costLimitUsd: 10,
       tokensLimit: null,
@@ -86,7 +86,7 @@ describe('WebSocket /ws/sessions/:id cross-user mask', () => {
 
     const manager = new SessionManager();
     const app = await buildServer({
-      config: { ...baseConfig, projectsRoot, guestProjectsRoot },
+      config: { ...baseConfig, workspace },
       manager,
       projectStore,
       deviceStore,
@@ -128,8 +128,7 @@ describe('WebSocket /ws/sessions/:id cross-user mask', () => {
       await manager.killAll();
       app.server.closeAllConnections();
       await app.close();
-      rmSync(projectsRoot, { recursive: true, force: true });
-      rmSync(guestProjectsRoot, { recursive: true, force: true });
+      rmSync(workspace, { recursive: true, force: true });
     }
   }, 8_000);
 });

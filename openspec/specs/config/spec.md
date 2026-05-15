@@ -8,22 +8,83 @@ ccanywhere 启动时读一个 JSON 配置文件，里面包含运行所需的全
 
 ## Requirements
 
-### Requirement: guestProjectsRoot（m-multi-user）
+### Requirement: workspace + per-user override（m-user-symmetric）
 
-配置 MUST 含必填字段 `guestProjectsRoot: string`，为 limited user 项目
-沙盒的父目录。owner 用 `projectsRoot`；每个 limited user 的项目根 =
-`<guestProjectsRoot>/<username (NFC)>/`。
+配置 MUST 含必填字段 `workspace: string`，为所有 user 项目根的父目录。
+每个 user 的项目根 default = `<workspace>/<username (NFC)>/`；可通过可选
+`users.<name>.workspace`（绝对路径）override 覆盖默认。
 
-加载校验 MUST：
-- `projectsRoot` 与 `guestProjectsRoot` MUST NOT 相同。
-- 两者 MUST NOT 互为父子（任一为另一前缀 + 路径分隔符 → reject）。
-- server 启动时 MUST `mkdir -p guestProjectsRoot`（mode 0o700）。
+`workspace` 取代 m-multi-user 时期的 `projectsRoot` (owner-only) +
+`guestProjectsRoot` (user 父目录) 二字段，模型对称化（owner 与其他 user
+通过同一字段解析，`kind` 不影响 ProjectStore 解析）。
 
-#### Scenario: 不重叠校验
+加载校验 MUST（zod superRefine）：
 
-- GIVEN config `projectsRoot: '/a'`, `guestProjectsRoot: '/a/guests'`
+- `users.<name>.workspace` MUST 是绝对路径
+- 任意两个 user override MUST NOT 互相嵌套（任一为另一前缀 + 路径分隔符
+  → reject）
+- override MUST NOT 指向 `<workspace>/<other-username>` 子树（防 alice
+  override 落进 bob 的默认 slot 而 shadow bob 的 lazy mkdir）
+- 自指 override（override 等于自己的默认 slot）容忍但允许（冗余无害）
+
+server 启动时 MUST：
+
+- `mkdir -p <workspace>`（mode 0o700）
+- 若 owner 没配 `users.<owner.username>.workspace`，发**中性警告**（owner
+  username 不是字面 `owner`——首次 ensureOwner 默认 'owner'，但允许手动
+  改成任何合法 username）：
+
+  > owner 未配 `users.<owner.username>.workspace` — owner 项目根走默认
+  > `<workspace>/<owner.username>`。如需指向其他目录（例如已有的项目
+  > 仓库），在 config 设 `users.<owner.username>.workspace: "<abs path>"`。
+
+  警告不假设 first-time / 老用户身份，开源场景与既有项目仓库迁移场景
+  通用。
+
+#### Scenario: workspace 必填
+
+- GIVEN 配置中没有 `workspace` 字段
 - WHEN  `loadConfig`
-- THEN  抛 ConfigError 含 `must not nest`
+- THEN  抛 ConfigError 含 `workspace`
+
+#### Scenario: 默认解析 user 项目根
+
+- GIVEN config `workspace: '/Users/me/ccanywhere-workspace'`，无 `users`
+- WHEN  `UserStore.projectsRootFor(alice)` （alice.username = 'alice'）
+- THEN  返回 `/Users/me/ccanywhere-workspace/alice`
+
+#### Scenario: owner override 优先于默认（owner.username 索引）
+
+- GIVEN owner（默认 username = 'owner'，可被实例自定义）配
+        `users.owner.workspace: "/Users/me/Projects"`
+- WHEN  `UserStore.projectsRootFor(owner)`
+- THEN  返回 `/Users/me/Projects`（不再走 `<workspace>/owner`）
+
+#### Scenario: owner 未配 override 时启动警告
+
+- GIVEN owner.username = 'owner'，config `workspace: '/W'` 且无
+        `users.owner.workspace`
+- WHEN  服务端启动
+- THEN  日志 MUST 含 warn 行，文案含 `users.owner.workspace`
+- AND   `UserStore.projectsRootFor(owner)` 返回 `/W/owner`
+
+#### Scenario: 相对路径 override 被拒绝
+
+- GIVEN config `users.alice.workspace: "relative/path"`
+- WHEN  `loadConfig`
+- THEN  抛 ConfigError 含 `absolute path`
+
+#### Scenario: override 指向其他 user 默认 slot 被拒绝
+
+- GIVEN config `workspace: '/W'`，`users.alice.workspace: '/W/bob'`
+- WHEN  `loadConfig`
+- THEN  抛 ConfigError 含 `shadow that user's default root`
+
+#### Scenario: 两个 override 嵌套被拒绝
+
+- GIVEN config `users.alice.workspace: '/host/a'`，`users.bob.workspace: '/host/a/b'`
+- WHEN  `loadConfig`
+- THEN  抛 ConfigError 含 `MUST NOT nest`
 
 ### Requirement: 配置文件路径
 
@@ -118,7 +179,8 @@ launch agent 用不同的 `--config` 指向不同 config 文件，state 自然�
 | `bindHost`               | string                                | `"127.0.0.1"` | 绑定地址 |
 | `claudeBin`              | string                                | `"claude"`    | cc 二进制路径或 PATH 内名称 |
 | `scrollbackBytes`        | ≥ 65536 的整数                        | `1048576`     | 单 session scrollback 上限 |
-| `projectsRoot`           | string                                | （必填）      | 项目集合根目录的绝对路径；其直接子目录被自动列为可选项目 |
+| `workspace`              | string                                | （必填）      | 所有 user 项目根的父目录（绝对路径）。每 user 默认 root = `<workspace>/<username>`；可被 `users.<name>.workspace` override（m-user-symmetric） |
+| `users`                  | `Record<string, { workspace?: string }>` | `undefined` | 可选 per-user 配置；目前仅识别 `workspace` 子字段（绝对路径 override） |
 | `webOrigin`              | URL                                   | （必填）      | web SPA 实际服务的 origin（如 `https://ccanywhere.example.com`）。WebAuthn `rpID` 由其 hostname 派生；`expectedOrigin` 校验也用它。改变 `webOrigin` 会让所有已配对设备失效 |
 | `deletedSessionTtlMs`    | ≥ 60000 的整数                        | `600000`      | 软删除 session 在 manager 中保留时长（10 分钟，覆盖弱网络重试窗口） |
 | `wsHeartbeat`            | `{ intervalMs, timeoutMs }`           | 见下          | WS 帧级心跳参数 |
@@ -128,10 +190,11 @@ launch agent 用不同的 `--config` 指向不同 config 文件，state 自然�
 `wsHeartbeat.intervalMs` 默认 `30000`，最小 `1000`。
 `wsHeartbeat.timeoutMs` 默认 `60000`，必须严格大于 `intervalMs`。
 
-`projectsRoot` MUST 非空字符串；启动时若该路径不存在 MUST 自动 `mkdir -p`
-创建，若不可读 MUST fatal 退出，若可读不可写则继续运行但记录 warn
-（list/select OK，新建项目会失败）。project id MUST 等于其在
-`projectsRoot` 下的目录 basename。
+`workspace` MUST 非空字符串；启动时若该路径不存在 MUST 自动 `mkdir -p`
+创建（mode 0o700）。owner 项目根（override 解析后的 `<workspace>/owner`
+或显式 override 路径）若不可读 MUST fatal 退出，若可读不可写则继续运行
+但记录 warn（list/select OK，新建项目会失败）。project id MUST 等于其在
+该 user 项目根下的目录 basename。
 
 `webOrigin` MUST 是带 scheme 的 URL；非 https 时 cookie `Secure` 标志关掉
 （仅 `http://localhost` / `http://127.0.0.1` 这类本地 dev 场景）。生产部署
@@ -158,27 +221,28 @@ MUST 使用 https，否则浏览器 WebAuthn API 拒绝调用。
 - AND   带 `Cookie: ccanywhere_session=<id>`（默认名）的请求 MUST 401
 - AND   带 `Cookie: ccanywhere_session_e2e=<id>` 的请求 MUST 通过鉴权
 
-#### Scenario: 缺失 projectsRoot 被拒绝
+#### Scenario: 缺失 workspace 被拒绝
 
-- GIVEN 配置中没有 `projectsRoot` 字段
+- GIVEN 配置中没有 `workspace` 字段
 - WHEN  服务端启动
-- THEN  MUST 退出，错误信息提及 `projectsRoot`，退出码 `2`
+- THEN  MUST 退出，错误信息提及 `workspace`，退出码 `2`
 
-#### Scenario: projectsRoot 不存在时自动创建
+#### Scenario: workspace 不存在时自动创建
 
-- GIVEN 配置 `"projectsRoot": "/path/that/does/not/exist"`
+- GIVEN 配置 `"workspace": "/path/that/does/not/exist"`
 - WHEN  服务端启动
 - THEN  MUST 自动 `mkdir -p` 创建该路径，启动成功
 
-#### Scenario: projectsRoot 不可读 fatal
+#### Scenario: owner 项目根不可读 fatal
 
-- GIVEN `projectsRoot` 指向一个 chmod 0o000 的目录
+- GIVEN owner 解析后的项目根（默认 `<workspace>/owner` 或 override）指向
+  chmod 0o000 的目录
 - WHEN  服务端启动
 - THEN  MUST 退出，错误信息含 "not readable"，退出码 `2`
 
-#### Scenario: projectsRoot 不可写仅 warn
+#### Scenario: owner 项目根不可写仅 warn
 
-- GIVEN `projectsRoot` 指向一个 chmod 0o555 的目录
+- GIVEN owner 项目根指向 chmod 0o555 的目录
 - WHEN  服务端启动
 - THEN  服务正常启动，list/select project OK；POST `/api/projects` MUST 返回 403
 

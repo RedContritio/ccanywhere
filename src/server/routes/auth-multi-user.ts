@@ -76,7 +76,7 @@ export interface AuthMultiUserRoutesOptions {
 }
 
 /**
- * m-multi-user (#44) auth routes for token-based limited-user login + the
+ * m-multi-user (#44) auth routes for token-based user login + the
  * current-user quota endpoint. Mounted by `registerAuthRoutes` only when
  * `userStore` + `tokenStore` are wired.
  */
@@ -101,8 +101,13 @@ export async function registerAuthMultiUserRoutes(
         .send({ error: { code: 'unauthorized', message: 'invalid or expired token' } });
       return;
     }
+    // m-user-symmetric: token route accepts any user (owner or user kind).
+    // Pre-reframe this hardcoded `kind !== 'limited'` to block owner-token
+    // login; the data layer is now symmetric — owner can sign and use a
+    // self-issued token (admin / automation paths). Webauthn pair remains
+    // owner-only via the dedicated policy assert.
     const user = userStore.findById(token.userId);
-    if (user === null || user.kind !== 'limited') {
+    if (user === null) {
       await reply
         .code(401)
         .send({ error: { code: 'unauthorized', message: 'token user invalid' } });

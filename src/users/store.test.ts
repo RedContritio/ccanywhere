@@ -27,7 +27,7 @@ describe('UserStore', () => {
     now = 1_000_000;
     store = new UserStore({
       statePath,
-      guestProjectsRoot: guestRoot,
+      workspace: guestRoot,
       now: () => now,
     });
   });
@@ -57,7 +57,7 @@ describe('UserStore', () => {
       const id = store.getOwner().id;
       const fresh = new UserStore({
         statePath,
-        guestProjectsRoot: guestRoot,
+        workspace: guestRoot,
         now: () => now,
       });
       expect(fresh.list()).toHaveLength(1);
@@ -65,30 +65,30 @@ describe('UserStore', () => {
     });
   });
 
-  describe('createLimitedUser', () => {
+  describe('createUser', () => {
     it('creates user + mkdirs guest dir', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,
       });
-      expect(u.kind).toBe('limited');
+      expect(u.kind).toBe('user');
       expect(u.quota.cost.limitUsd).toBe(5);
       expect(u.quota.tokens.limit).toBeNull();
       expect(existsSync(join(guestRoot, 'alice'))).toBe(true);
     });
 
     it('rejects when username already taken', () => {
-      store.createLimitedUser({ username: 'alice', costLimitUsd: 5, tokensLimit: null });
+      store.createUser({ username: 'alice', costLimitUsd: 5, tokensLimit: null });
       expect(() =>
-        store.createLimitedUser({ username: 'alice', costLimitUsd: 5, tokensLimit: null }),
+        store.createUser({ username: 'alice', costLimitUsd: 5, tokensLimit: null }),
       ).toThrow(/already exists/);
     });
 
     it('rejects when guest dir already on disk (fs guard)', () => {
       mkdirSync(join(guestRoot, 'preexist'), { mode: 0o700 });
       expect(() =>
-        store.createLimitedUser({
+        store.createUser({
           username: 'preexist',
           costLimitUsd: 5,
           tokensLimit: null,
@@ -98,7 +98,7 @@ describe('UserStore', () => {
 
     it('rejects when both quota limits are null', () => {
       expect(() =>
-        store.createLimitedUser({
+        store.createUser({
           username: 'alice',
           costLimitUsd: null,
           tokensLimit: null,
@@ -108,25 +108,25 @@ describe('UserStore', () => {
 
     it('rejects bad username (special char / empty)', () => {
       expect(() =>
-        store.createLimitedUser({ username: 'has@symbol', costLimitUsd: 5, tokensLimit: null }),
+        store.createUser({ username: 'has@symbol', costLimitUsd: 5, tokensLimit: null }),
       ).toThrow(/invalid username/);
       expect(() =>
-        store.createLimitedUser({ username: '', costLimitUsd: 5, tokensLimit: null }),
+        store.createUser({ username: '', costLimitUsd: 5, tokensLimit: null }),
       ).toThrow(/invalid username/);
     });
 
     it('accepts ASCII / CJK / underscore / space within length', () => {
-      store.createLimitedUser({ username: 'alice_42', costLimitUsd: 5, tokensLimit: null });
-      store.createLimitedUser({ username: '李四', costLimitUsd: 5, tokensLimit: null });
-      store.createLimitedUser({ username: 'one two', costLimitUsd: 5, tokensLimit: null });
-      expect(store.list().filter((u) => u.kind === 'limited')).toHaveLength(3);
+      store.createUser({ username: 'alice_42', costLimitUsd: 5, tokensLimit: null });
+      store.createUser({ username: '李四', costLimitUsd: 5, tokensLimit: null });
+      store.createUser({ username: 'one two', costLimitUsd: 5, tokensLimit: null });
+      expect(store.list().filter((u) => u.kind === 'user')).toHaveLength(3);
     });
 
     it('NFC-normalizes username — NFD input stored as NFC', () => {
       const nfd = 'café'; // composed: e + combining acute
       const nfc = nfd.normalize('NFC');
       expect(nfd).not.toBe(nfc); // distinct code-point sequences
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: nfd,
         costLimitUsd: 5,
         tokensLimit: null,
@@ -139,21 +139,21 @@ describe('UserStore', () => {
     it('rolls back mkdir when persist fails', () => {
       chmodSync(statePath, 0o400);
       expect(() =>
-        store.createLimitedUser({ username: 'bob', costLimitUsd: 5, tokensLimit: null }),
+        store.createUser({ username: 'bob', costLimitUsd: 5, tokensLimit: null }),
       ).toThrow();
       expect(existsSync(join(guestRoot, 'bob'))).toBe(false);
       expect(store.findByUsername('bob')).toBeNull();
     });
 
     it('persists across reload', () => {
-      const a = store.createLimitedUser({
+      const a = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,
       });
       const fresh = new UserStore({
         statePath,
-        guestProjectsRoot: guestRoot,
+        workspace: guestRoot,
         now: () => now,
       });
       expect(fresh.findById(a.id)?.username).toBe('alice');
@@ -162,7 +162,7 @@ describe('UserStore', () => {
 
   describe('setQuotaLimit', () => {
     it('topup cost limit', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,
@@ -172,7 +172,7 @@ describe('UserStore', () => {
     });
 
     it('clearing one limit while keeping another is OK', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: 1000,
@@ -183,7 +183,7 @@ describe('UserStore', () => {
     });
 
     it('rejects when both end up null', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,
@@ -194,7 +194,7 @@ describe('UserStore', () => {
     });
 
     it('reset zeros usedUsd and used', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: 1000,
@@ -214,7 +214,7 @@ describe('UserStore', () => {
 
   describe('preferences (m-user-prefs)', () => {
     it('fresh user has empty preferences object', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,
@@ -234,7 +234,7 @@ describe('UserStore', () => {
     });
 
     it('setPreferences + getPreferences roundtrip', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,
@@ -257,7 +257,7 @@ describe('UserStore', () => {
     });
 
     it('setLastActiveSession + roundtrip', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,
@@ -268,6 +268,57 @@ describe('UserStore', () => {
       expect(store.findById(u.id)?.lastActiveSessionId).toBe(sid);
       const cleared = store.setLastActiveSession(u.id, null);
       expect(cleared.lastActiveSessionId).toBeNull();
+    });
+
+    it("legacy users.json with kind='limited' migrates to 'user' on load + persists (m-user-symmetric)", () => {
+      const legacyPath = join(configDir, 'legacy-kind.json');
+      const aliceId = '00000000-0000-4000-8000-000000000099';
+      writeFileSync(
+        legacyPath,
+        JSON.stringify({
+          users: [
+            {
+              id: '00000000-0000-4000-8000-000000000001',
+              username: 'owner',
+              kind: 'owner',
+              createdAt: 1,
+              lastLoginAt: null,
+              quota: {
+                cost: { limitUsd: null, usedUsd: 0 },
+                tokens: { limit: null, used: 0 },
+              },
+              preferences: {},
+              lastActiveSessionId: null,
+            },
+            {
+              id: aliceId,
+              username: 'alice',
+              kind: 'limited',
+              createdAt: 2,
+              lastLoginAt: null,
+              quota: {
+                cost: { limitUsd: 5, usedUsd: 0 },
+                tokens: { limit: null, used: 0 },
+              },
+              preferences: {},
+              lastActiveSessionId: null,
+            },
+          ],
+        }),
+      );
+      const legacyStore = new UserStore({
+        statePath: legacyPath,
+        workspace: guestRoot,
+        now: () => now,
+      });
+      const alice = legacyStore.findById(aliceId);
+      expect(alice?.kind).toBe('user');
+      // file persisted with new kind value
+      const raw = JSON.parse(readFileSync(legacyPath, 'utf8')) as {
+        users: Array<{ id: string; kind: string }>;
+      };
+      const aliceRaw = raw.users.find((u) => u.id === aliceId);
+      expect(aliceRaw?.kind).toBe('user');
     });
 
     it('legacy users.json (no preferences / lastActiveSessionId fields) migrates to defaults on load', () => {
@@ -295,7 +346,7 @@ describe('UserStore', () => {
       );
       const legacyStore = new UserStore({
         statePath: legacyPath,
-        guestProjectsRoot: guestRoot,
+        workspace: guestRoot,
         now: () => now,
       });
       const owner = legacyStore.findById(ownerId);
@@ -304,7 +355,7 @@ describe('UserStore', () => {
     });
 
     it('persisted users.json contains preferences + lastActiveSessionId after writes', () => {
-      const u = store.createLimitedUser({
+      const u = store.createUser({
         username: 'alice',
         costLimitUsd: 5,
         tokensLimit: null,

@@ -4,12 +4,12 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.js';
 import { logger } from '../../log.js';
-import type { ProjectStore } from '../../projects/store.js';
 import type { Session, SessionManager, SpawnOptions } from '../../session/manager.js';
 import type { UserStore } from '../../users/store.js';
 import { listHistory } from '../history.js';
 import type { IdempotencyStore} from '../idempotency.js';
 import { hashBody, isValidIdempotencyKey } from '../idempotency.js';
+import type { ResolveProjectStore } from './projects.js';
 
 export interface SessionRoutesOptions {
   readonly historyRoot?: string;
@@ -68,7 +68,7 @@ export async function registerSessionRoutes(
   app: FastifyInstance,
   config: Config,
   manager: SessionManager,
-  projectStore: ProjectStore,
+  resolveStore: ResolveProjectStore,
   options: SessionRoutesOptions = {},
 ): Promise<void> {
   app.get('/api/sessions', (req) => {
@@ -148,10 +148,11 @@ export async function registerSessionRoutes(
       return;
     }
     const body = parsed.data;
-    const project = projectStore.get(body.projectId);
-    // m-multi-user: cwd must live inside the user's effective projectsRoot.
+    // m-user-symmetric: per-user store resolution. cwd guard 仍保留作
+    // defense-in-depth — store 隔离已是 first line。
+    const project = resolveStore(req.user).get(body.projectId);
     if (project && options.userStore !== undefined && req.user !== undefined) {
-      const root = options.userStore.projectsRootFor(req.user, config.projectsRoot);
+      const root = options.userStore.projectsRootFor(req.user);
       if (!isWithinSubtree(project.cwd, root)) {
         await sendErr(403, 'forbidden', 'project cwd not in user projects root');
         return;

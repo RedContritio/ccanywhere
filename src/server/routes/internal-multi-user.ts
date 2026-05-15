@@ -66,7 +66,7 @@ export async function registerInternalMultiUserRoutes(
     }
     const { username, ttlMs, quota } = parsed.data;
     try {
-      const user = userStore.createLimitedUser({
+      const user = userStore.createUser({
         username,
         costLimitUsd: quota?.cost?.limitUsd ?? null,
         tokensLimit: quota?.tokens?.limit ?? null,

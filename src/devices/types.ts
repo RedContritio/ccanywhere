@@ -4,10 +4,11 @@ export interface Device {
   /** UUIDv4. */
   readonly id: string;
   /**
-   * m-multi-user: owner User.id this device belongs to. v12 invariant:
-   * every device record belongs to the single owner user; limited users
-   * never pair devices. Legacy records (pre-multi-user) load with the
-   * fallback `DeviceStoreOptions.ownerId`.
+   * m-multi-user: User.id this device belongs to. m-user-symmetric reframe:
+   * data layer is symmetric — any user kind may be referenced here, but
+   * pair policy currently restricts pair-time assignment to the owner
+   * (CLI approve uses owner.id). Legacy records (pre-multi-user) load with
+   * the fallback `DeviceStoreOptions.ownerId`.
    */
   readonly userId: string;
   /** User-provided label (not unique). */

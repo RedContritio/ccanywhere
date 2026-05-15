@@ -2,19 +2,31 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ProjectStore} from '../../projects/store.js';
 import { ProjectStoreError } from '../../projects/store.js';
+import type { User } from '../../users/types.js';
 import { listHistory } from '../history.js';
 
 const CreateBodySchema = z.object({
   name: z.string().min(1).max(255),
 });
 
+/**
+ * m-user-symmetric: caller injects a per-request store resolver instead
+ * of a singleton. Owner → server-injected base store (config.users.owner
+ * .workspace or default `<workspace>/owner/`); other users → lazy
+ * `<workspace>/<username>/` (or per-user override) store (cached in
+ * buildServer). req.user undefined falls back to the base store via the
+ * resolver, preserving legacy single-user behavior for fixtures and
+ * pre-multi-user setups.
+ */
+export type ResolveProjectStore = (user: User | undefined) => ProjectStore;
+
 export async function registerProjectRoutes(
   app: FastifyInstance,
-  store: ProjectStore,
+  resolveStore: ResolveProjectStore,
   historyRoot?: string,
 ): Promise<void> {
-  app.get('/api/projects', () => ({
-    projects: store.list().map((p) => ({
+  app.get('/api/projects', (req) => ({
+    projects: resolveStore(req.user).list().map((p) => ({
       id: p.id,
       name: p.name,
       cwd: p.cwd,
@@ -34,6 +46,7 @@ export async function registerProjectRoutes(
       });
       return;
     }
+    const store = resolveStore(req.user);
     let project;
     try {
       project = store.create(parsed.data.name);
@@ -62,6 +75,7 @@ export async function registerProjectRoutes(
 
   app.delete<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
     const id = req.params.id;
+    const store = resolveStore(req.user);
     if (store.get(id) === null) {
       await reply
         .code(404)
@@ -75,7 +89,7 @@ export async function registerProjectRoutes(
   });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id/history', async (req, reply) => {
-    const proj = store.get(req.params.id);
+    const proj = resolveStore(req.user).get(req.params.id);
     if (!proj) {
       await reply
         .code(404)

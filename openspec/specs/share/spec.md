@@ -75,7 +75,7 @@ ShareCreateDialog UI 在生成前明示"不可立即撤回"。
 - THEN  Cache-Control: public, max-age=31536000, immutable
 - AND   Content-Type: text/html; charset=utf-8
 
-### Requirement: 创建 share 仅限 owner / limited 用户分享自己的 session
+### Requirement: 创建 share 仅限 owner / user 用户分享自己的 session
 
 `POST /api/share { sessionId, ttlMs? }` MUST：
 

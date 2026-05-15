@@ -75,8 +75,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
     app = await buildServer({
       config: {
         ...baseConfig,
-        projectsRoot: env.projectsRoot,
-        guestProjectsRoot: env.guestProjectsRoot,
+        workspace: env.workspace,
       },
       manager: mgr,
       projectStore: env.projectStore,
@@ -133,7 +132,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('first-prompt edge: jsonl missing → no block, no persist (treat as 0)', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', { costLimitUsd: 5 });
+    const { user: alice } = env.createUserWithToken('alice', { costLimitUsd: 5 });
     const sid = '00000000-0000-4000-8000-000000000002';
     spawnFor(alice.id, sid, env.demoCwd);
     // No jsonl written — confirm 204 + state machine still runs
@@ -149,7 +148,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('under-limit limited user → 204, usage persisted, state→busy', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', { costLimitUsd: 100 });
+    const { user: alice } = env.createUserWithToken('alice', { costLimitUsd: 100 });
     const sid = '00000000-0000-4000-8000-000000000003';
     spawnFor(alice.id, sid, env.demoCwd);
     // Sonnet 1000 input + 500 output = (1000*3 + 500*15) / 1e6 = 0.0105 USD
@@ -171,7 +170,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('over cost limit → block JSON with cost message, state stays idle', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', { costLimitUsd: 5 });
+    const { user: alice } = env.createUserWithToken('alice', { costLimitUsd: 5 });
     const sid = '00000000-0000-4000-8000-000000000004';
     spawnFor(alice.id, sid, env.demoCwd);
     // Opus 1M input @ 15 USD / 1M = $15 (>> $5 limit)
@@ -201,7 +200,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('over tokens limit → block JSON with tokens message', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', {
+    const { user: alice } = env.createUserWithToken('alice', {
       costLimitUsd: null,
       tokensLimit: 1000,
     });
@@ -224,7 +223,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('double limit: cost trips first → cost reason returned', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', {
+    const { user: alice } = env.createUserWithToken('alice', {
       costLimitUsd: 1,
       tokensLimit: 10_000_000,
     });
@@ -246,7 +245,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('double limit: tokens trips first → tokens reason returned', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', {
+    const { user: alice } = env.createUserWithToken('alice', {
       costLimitUsd: 1_000_000,
       tokensLimit: 100,
     });
@@ -268,7 +267,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('jsonl lines older than user.createdAt are excluded from totals', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', { costLimitUsd: 5 });
+    const { user: alice } = env.createUserWithToken('alice', { costLimitUsd: 5 });
     const sid = '00000000-0000-4000-8000-000000000008';
     spawnFor(alice.id, sid, env.demoCwd);
     // Pre-alice line with $$$$ usage (must be excluded), post-alice tiny line
@@ -291,7 +290,7 @@ describe('REST API: UserPromptSubmit hook quota enforcement', () => {
   });
 
   it('non-UserPromptSubmit events bypass quota check entirely', async () => {
-    const { user: alice } = env.createLimitedUserWithToken('alice', { costLimitUsd: 0.01 });
+    const { user: alice } = env.createUserWithToken('alice', { costLimitUsd: 0.01 });
     const sid = '00000000-0000-4000-8000-000000000009';
     spawnFor(alice.id, sid, env.demoCwd);
     const ts = new Date(alice.createdAt + 1000).toISOString();
