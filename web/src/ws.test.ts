@@ -234,4 +234,36 @@ describe('TerminalSocket', () => {
     expect(onReconnecting).not.toHaveBeenCalled();
     expect(rig.history).toHaveLength(1);
   });
+
+  it('onFirstData fires on first snapshot, not on subsequent frames', () => {
+    const rig = makeRig();
+    const onFirstData = vi.fn();
+    new TerminalSocket('s', { onFirstData }, rig.factory);
+    rig.current!.open();
+    rig.current!.receive(JSON.stringify({ type: 'snapshot', upToSeq: 1, data: 'a' }));
+    rig.current!.receive(JSON.stringify({ type: 'output', seq: 2, data: 'b' }));
+    rig.current!.receive(JSON.stringify({ type: 'snapshot', upToSeq: 3, data: 'c' }));
+    expect(onFirstData).toHaveBeenCalledTimes(1);
+  });
+
+  it('onFirstData fires on first output when output arrives before any snapshot', () => {
+    const rig = makeRig();
+    const onFirstData = vi.fn();
+    new TerminalSocket('s', { onFirstData }, rig.factory);
+    rig.current!.open();
+    rig.current!.receive(JSON.stringify({ type: 'output', seq: 1, data: 'a' }));
+    expect(onFirstData).toHaveBeenCalledTimes(1);
+  });
+
+  it('status / error / pong / quota_exhausted frames do not trigger onFirstData', () => {
+    const rig = makeRig();
+    const onFirstData = vi.fn();
+    new TerminalSocket('s', { onFirstData }, rig.factory);
+    rig.current!.open();
+    rig.current!.receive(JSON.stringify({ type: 'status', state: 'busy' }));
+    rig.current!.receive(JSON.stringify({ type: 'error', message: 'x' }));
+    rig.current!.receive(JSON.stringify({ type: 'pong' }));
+    rig.current!.receive(JSON.stringify({ type: 'quota_exhausted', reason: 'budget' }));
+    expect(onFirstData).not.toHaveBeenCalled();
+  });
 });

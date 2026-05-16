@@ -11,12 +11,16 @@ export type WsConnection = 'connecting' | 'connected' | 'reconnecting' | 'dead';
 export function wsConnLabel(
   c: WsConnection,
   reason: DeadReason | null,
+  awaitingData?: boolean,
 ): string {
   switch (c) {
     case 'connecting':
       return '连接中…';
     case 'connected':
-      return '已连接';
+      // m-resume-awaiting-pty: WS upgrade succeeds before cc reloads jsonl
+      // and pushes first PTY data, especially on slow networks. Without
+      // this branch the chip says "已连接" while the terminal is blank.
+      return awaitingData === true ? '已连接，等待 cc 输出…' : '已连接';
     case 'reconnecting':
       return '重连中…';
     case 'dead':

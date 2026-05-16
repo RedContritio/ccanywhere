@@ -31,6 +31,8 @@ interface Props {
   readonly onDead?: (reason: DeadReason) => void;
   /** m-quota-inline: server gate rejected this turn's input. */
   readonly onQuotaExhausted?: (reason: string) => void;
+  /** m-resume-awaiting-pty: first snapshot/output frame delivered. */
+  readonly onFirstData?: () => void;
 }
 
 export interface TerminalHandle {

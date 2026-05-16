@@ -90,6 +90,7 @@ export function WorkspacePage(): JSX.Element {
   // session or wsConnection leaves 'dead'.
   const [deadReason, setDeadReason] = useState<DeadReason | null>(null);
   const [liveSessionState, setLiveSessionState] = useState<SessionState | null>(null);
+  const [awaitingFirstData, setAwaitingFirstData] = useState(true);
 
   useEffect(() => {
     void fetchProjects();
@@ -142,6 +143,7 @@ export function WorkspacePage(): JSX.Element {
     setWsConnection('connecting');
     setDeadReason(null);
     setLiveSessionState(null);
+    setAwaitingFirstData(true);
   }, [id]);
 
   const onLogout = async (): Promise<void> => {
@@ -206,6 +208,7 @@ export function WorkspacePage(): JSX.Element {
     setDeadReason(reason);
   }, []);
   const onWsStatus = useCallback((s: SessionState) => setLiveSessionState(s), []);
+  const onWsFirstData = useCallback(() => setAwaitingFirstData(false), []);
 
   const currentSession =
     id !== undefined ? sessions.find((s) => s.id === id) : undefined;
@@ -414,7 +417,7 @@ export function WorkspacePage(): JSX.Element {
                 >
                   {deadResumable
                     ? '已结束'
-                    : wsConnLabel(wsConnection, deadReason)}
+                    : wsConnLabel(wsConnection, deadReason, awaitingFirstData)}
                 </span>
               </header>
               <div
@@ -436,6 +439,7 @@ export function WorkspacePage(): JSX.Element {
                       onConnected={onWsConnected}
                       onReconnecting={onWsReconnecting}
                       onDead={onWsDead}
+                      onFirstData={onWsFirstData}
                       onQuotaExhausted={(reason) => setQuotaExhaustedReason(reason)}
                     />
                   )}

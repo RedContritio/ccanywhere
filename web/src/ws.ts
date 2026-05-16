@@ -41,6 +41,14 @@ export interface SocketHandlers {
   onDead?: (reason: DeadReason) => void;
   /** m-quota-inline: server-side input gate rejected user input. */
   onQuotaExhausted?: (reason: string) => void;
+  /**
+   * m-resume-awaiting-pty: fires exactly once per TerminalSocket instance,
+   * on the first snapshot OR output frame. status/error/pong/quota frames
+   * don't count — UI distinguishes "WS connected" vs "cc actually pushed
+   * terminal-visible data" so the chip can drop the "等待 cc 输出…" hint
+   * after first byte instead of saying "已连接" while screen is still blank.
+   */
+  onFirstData?: () => void;
 }
 
 export type WebSocketFactory = (url: string) => WebSocket;
@@ -75,6 +83,11 @@ export class TerminalSocket {
   private lastFrameTs = 0;
   private lastFrameType = '';
   private lastReconnectOpTs = 0;
+  // m-resume-awaiting-pty: latch flipped on first snapshot/output frame so
+  // onFirstData fires exactly once per socket lifecycle (reconnect doesn't
+  // rebuild the instance, so the latch survives — user has already seen
+  // terminal content, the chip doesn't need to degrade back to "等待…").
+  private firstDataDelivered = false;
 
   private readonly onOnline = (): void => {
     this.forceReconnect();
@@ -217,10 +230,18 @@ export class TerminalSocket {
     switch (frame.type) {
       case 'snapshot':
         this.lastSeq = frame.upToSeq;
+        if (!this.firstDataDelivered) {
+          this.firstDataDelivered = true;
+          this.handlers.onFirstData?.();
+        }
         this.handlers.onSnapshot?.(frame.data);
         return;
       case 'output':
         this.lastSeq = frame.seq;
+        if (!this.firstDataDelivered) {
+          this.firstDataDelivered = true;
+          this.handlers.onFirstData?.();
+        }
         this.handlers.onOutput?.(frame.data);
         return;
       case 'status':

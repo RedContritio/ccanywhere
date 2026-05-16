@@ -22,4 +22,19 @@ describe('wsConnLabel', () => {
     // chip should still say something useful, not blank.
     expect(wsConnLabel('dead', null)).toBe('会话已结束');
   });
+
+  it('connected + awaitingData=true shows "等待 cc 输出" hint', () => {
+    expect(wsConnLabel('connected', null, true)).toBe('已连接，等待 cc 输出…');
+  });
+
+  it('connected + awaitingData=false (or omitted) stays plain "已连接"', () => {
+    expect(wsConnLabel('connected', null, false)).toBe('已连接');
+    expect(wsConnLabel('connected', null)).toBe('已连接');
+  });
+
+  it('awaitingData only affects connected — other conn states ignore it', () => {
+    expect(wsConnLabel('connecting', null, true)).toBe('连接中…');
+    expect(wsConnLabel('reconnecting', null, true)).toBe('重连中…');
+    expect(wsConnLabel('dead', 'cc-exit', true)).toBe('会话已结束');
+  });
 });

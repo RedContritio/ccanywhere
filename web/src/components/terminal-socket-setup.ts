@@ -12,6 +12,8 @@ export interface TerminalSocketHandlers {
   onDead?: (reason: DeadReason) => void;
   /** m-quota-inline: server-side input gate rejected this turn's input. */
   onQuotaExhausted?: (reason: string) => void;
+  /** m-resume-awaiting-pty: first snapshot/output frame delivered. */
+  onFirstData?: () => void;
 }
 
 /**
@@ -49,5 +51,6 @@ export function setupTerminalSocket(
     onReconnecting: () => getHandlers().onReconnecting?.(),
     onDead: (reason: DeadReason) => getHandlers().onDead?.(reason),
     onQuotaExhausted: (reason: string) => getHandlers().onQuotaExhausted?.(reason),
+    onFirstData: () => getHandlers().onFirstData?.(),
   });
 }
