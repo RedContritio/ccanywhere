@@ -18,37 +18,7 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### B19. 活着的 xterm 不支持浏览器原生 selection（live ≠ dead 不一致）
-
-- **scope**：~80–150 LOC（评估 + 实施其一）
-- **背景**：dead session 用 xterm DOM renderer + capture 阶段
-  stopImmediatePropagation mouse 事件，让浏览器原生 selection 能选
-  `<span>` cell（m-dead-pane-touch-select P7）。live xterm 用 webgl
-  renderer——canvas pixels 不可被浏览器 selection；同时 cc 启用 mouse
-  tracking 后 xterm 拦截 touch→mouse，进一步阻止 native selection。
-  user 在 live 看不到 mobile 长按系统菜单（"复制/翻译/搜索"），与
-  dead 行为不一致。
-- **目标**：先支持，再一致——优先让 live 也能 native select；如果做不到
-  再让 dead 与 live 同样不可 native select（一致退化）
-- **方案 A：live 切 DOM renderer + 抄 dead pane 的 mouse stop pattern**
-  （首选）
-  - DOM renderer 性能可能不如 webgl；先实测 cc 重绘场景（plan/permission
-    模式 + 大量 ANSI 重绘）的 fps / cpu
-  - 若 mobile（Xiaomi 17 Pro 等中端）能维持 ≥ 30fps 可接受，采用
-  - 风险：renderer 切换涉及 fit/snapshot/scroll 等多处 helper 假设，
-    回归面广
-- **方案 B：保持 live 用 webgl，但加显式"native select"模式**
-  - mobile toolbar 加按钮 toggle 进入 native select 模式：暂停 PTY 输出
-    渲染（snapshot 当前 grid 到 DOM），mouse / touch 让浏览器接管，
-    user 选完按"返回 live" 重新 attach
-  - 不破坏 webgl 性能，但需新 UI + state 路径
-- **方案 C：dead 退化与 live 一致**
-  - 让 dead 也用 webgl + 不允许 native select，仅留 xterm 内部 selection
-    + copy 按钮
-  - 方案最小但**回退现有功能**，仅作 fallback 不优先
-- **决策点**：A 性能验证结果决定走 A 还是 B；C 留作 last resort
-- **出处**：m-quota-inline dogfood mobile fb (2026-05-15T22-19-48)，
-  纠正前条
+（无）
 
 ---
 
