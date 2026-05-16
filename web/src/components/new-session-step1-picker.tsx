@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Project } from '../state/projects.js';
 import { ListBase } from './list-base.js';
 import { SortButton } from './sort-button.js';
+import { EmptyState } from './ui-state/empty-state.js';
 
 export type ProjectSortField = 'modified' | 'name';
 export type ProjectSortDir = 'asc' | 'desc';
@@ -90,10 +91,10 @@ export function Step1ProjectPicker({
             ariaLabel="项目"
           />
         ) : (
-          <p className="text-xs text-fg-muted">
-            还没有项目。点击「+ 新建项目」，或在 mac 的 Projects/ 下
-            手动 mkdir。
-          </p>
+          <EmptyState
+            title="还没有项目"
+            description="点击「+ 新建项目」，或在 mac 的 Projects/ 下手动 mkdir。"
+          />
         )}
       </div>
 

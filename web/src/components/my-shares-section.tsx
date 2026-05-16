@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { EmptyState } from './ui-state/empty-state.js';
+import { ErrorState } from './ui-state/error-state.js';
+import { LoadingState } from './ui-state/loading-state.js';
 
 import { Button } from '@/components/ui/button';
 
@@ -60,18 +63,12 @@ export function MySharesSection(): JSX.Element {
         </span>
       </header>
 
-      {error !== null && (
-        <p className="font-mono text-xs text-danger" role="alert">
-          加载失败：{error}
-        </p>
-      )}
+      {error !== null && <ErrorState error={error} />}
 
       {loading && shares.length === 0 ? (
-        <p className="text-xs text-fg-muted">加载中…</p>
+        <LoadingState />
       ) : shares.length === 0 ? (
-        <p className="text-xs text-fg-muted">
-          还没有分享。在会话列表上点 ↗ 创建。
-        </p>
+        <EmptyState title="还没有分享。在会话列表上点 ↗ 创建。" />
       ) : (
         <ul className="space-y-2">
           {shares.map((share) => (

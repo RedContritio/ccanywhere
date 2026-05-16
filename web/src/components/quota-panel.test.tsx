@@ -61,7 +61,7 @@ describe('QuotaPanel', () => {
       <QuotaPanel open={true} onClose={() => {}} pollIntervalMs={60_000} />,
     );
 
-    expect(screen.getByText('载入中…')).toBeInTheDocument();
+    expect(screen.getByText('加载中…')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText(/\$2\.50/)).toBeInTheDocument();

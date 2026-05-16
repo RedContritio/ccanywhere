@@ -8,6 +8,8 @@ import { EmptyPane } from './empty-pane.js';
 import { MobileToolbar } from './mobile-toolbar.js';
 import { StatusBadge } from './status-badge.js';
 import { TerminalView, type TerminalHandle } from './terminal.js';
+import { ErrorState } from './ui-state/error-state.js';
+import { LoadingState } from './ui-state/loading-state.js';
 import {
   ActiveHeaderIcons,
   DeadHeaderActions,
@@ -132,7 +134,9 @@ export function WorkspaceMainPane({
 
   if (sessionsError !== null && id === undefined) {
     return (
-      <EmptyPane onOpenDrawer={onOpenDrawer}>加载失败: {sessionsError}</EmptyPane>
+      <EmptyPane onOpenDrawer={onOpenDrawer}>
+        <ErrorState error={sessionsError} />
+      </EmptyPane>
     );
   }
   if (id === undefined) {
@@ -161,7 +165,7 @@ export function WorkspaceMainPane({
     if (sessionsLoading) {
       return (
         <EmptyPane onOpenDrawer={onOpenDrawer}>
-          <p className="text-sm text-fg-muted">加载中…</p>
+          <LoadingState />
         </EmptyPane>
       );
     }

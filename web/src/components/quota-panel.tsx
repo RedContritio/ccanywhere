@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { api } from '../api.js';
 import { DialogBase } from './dialog-base.js';
+import { ErrorState } from './ui-state/error-state.js';
+import { LoadingState } from './ui-state/loading-state.js';
 
 export interface QuotaSnapshot {
   readonly kind: 'owner' | 'limited';
@@ -71,9 +73,9 @@ export function QuotaPanel({
       }
     >
       {error !== null ? (
-        <p className="text-sm text-danger">加载失败：{error}</p>
+        <ErrorState error={error} />
       ) : snapshot === null ? (
-        <p className="text-sm text-fg-muted">载入中…</p>
+        <LoadingState />
       ) : snapshot.kind === 'owner' ? (
         <p className="text-sm text-fg-muted">owner 账号无配额限制。</p>
       ) : (

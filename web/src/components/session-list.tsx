@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from './ui-state/empty-state.js';
 import type { Project } from '../state/projects.js';
 import type { Session } from '../state/sessions.js';
 import { StatusBadge } from './status-badge.js';
@@ -42,8 +43,8 @@ export function SessionList({
       </header>
       <ul className="flex-1 overflow-y-auto">
         {sorted.length === 0 ? (
-          <li className="px-3.5 py-6 text-center text-xs text-fg-muted">
-            还没有会话。点击「+ 新建」创建一个。
+          <li>
+            <EmptyState title="还没有会话。点击「+ 新建」创建一个。" />
           </li>
         ) : (
           sorted.map((s) => {

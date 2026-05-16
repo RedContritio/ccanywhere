@@ -18,14 +18,6 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### B32. UI state primitives 三件套（EmptyState / ErrorState / Skeleton）
-
-- **scope**：~120 LOC（**建议建 changes/m-ui-state-primitives 大项**）
-- **优先级**：中
-- **背景**：empty-pane.tsx 只 26 行且 drawer-trigger 写死耦合 workspace。list-base.tsx 自带 emptyLabel、各 dialog 内 `加载中…` `加载失败` 手写、my-shares-section 同。无 skeleton（首屏空白感知慢）。
-- **方案**：建 `components/ui-state/` 三件套——`<EmptyState icon title description action />`、`<ErrorState error retry />`、`<Skeleton variant="list-row" count={5} />`。替换 ~6 处散落点。
-- **出处**：2026-05-17 subagent 评审 2 §7
-
 ### B33. server state 切 TanStack Query（新功能起 query，旧渐进迁）
 
 - **scope**：~200 LOC（**建议建 changes/m-server-state-tanstack-query 大项**）
