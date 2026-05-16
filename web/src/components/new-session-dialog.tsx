@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useProjectsStore,
   type HistorySummary,
   type Project,
 } from '../state/projects.js';
 import { DialogBase } from './dialog-base.js';
-import { ListBase } from './list-base.js';
-import { SortButton } from './sort-button.js';
+import {
+  Step1ProjectPicker,
+  type ProjectAction,
+  type ProjectSortDir,
+  type ProjectSortField,
+} from './new-session-step1-picker.js';
+import { Step2HistoryPicker } from './new-session-step2-history.js';
 
 export interface CreateRequest {
   projectId: string;
@@ -25,9 +27,6 @@ interface Props {
   readonly onCreate: (req: CreateRequest) => Promise<void>;
 }
 
-type ProjectSortField = 'modified' | 'name';
-type ProjectSortDir = 'asc' | 'desc';
-type ProjectAction = 'idle' | 'new';
 type Step = 1 | 2;
 
 function fmtRelative(epochMs: number, now: number): string {
@@ -261,142 +260,37 @@ export function NewSessionDialog({
         className="space-y-4"
       >
         {step === 1 && (
-          <>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>项目</Label>
-                <div
-                  className="inline-flex gap-1 text-xs"
-                  role="group"
-                  aria-label="排序"
-                >
-                  <SortButton
-                    active={sortField === 'modified'}
-                    dir={sortField === 'modified' ? sortDir : null}
-                    onClick={() => toggleSort('modified')}
-                  >
-                    时间
-                  </SortButton>
-                  <SortButton
-                    active={sortField === 'name'}
-                    dir={sortField === 'name' ? sortDir : null}
-                    onClick={() => toggleSort('name')}
-                  >
-                    名称
-                  </SortButton>
-                </div>
-              </div>
-              {sortedProjects.length > 0 ? (
-                <ListBase
-                  items={sortedProjects}
-                  selectedKey={projectId}
-                  getKey={(p) => p.id}
-                  renderPrimary={(p) => p.name}
-                  renderSecondary={(p) =>
-                    fmtRelative(p.modifiedAt, nowRef.current)
-                  }
-                  onSelect={setProjectId}
-                  ariaLabel="项目"
-                />
-              ) : (
-                <p className="text-xs text-fg-muted">
-                  还没有项目。点击「+ 新建项目」，或在 mac 的 Projects/ 下
-                  手动 mkdir。
-                </p>
-              )}
-            </div>
-
-            {projectAction === 'new' ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="text"
-                  placeholder="目录名（直接落在 Projects/ 下）"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  disabled={newProjectBusy}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      void submitNewProject();
-                    }
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      setProjectAction('idle');
-                      setNewProjectName('');
-                    }
-                  }}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={() => void submitNewProject()}
-                  disabled={newProjectBusy || newProjectName.trim() === ''}
-                >
-                  {newProjectBusy ? '创建中…' : '创建'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setProjectAction('idle');
-                    setNewProjectName('');
-                  }}
-                  disabled={newProjectBusy}
-                >
-                  取消
-                </Button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setProjectAction('new')}
-              >
-                + 新建项目
-              </Button>
-            )}
-
-            <div className="space-y-2">
-              <Label>模式</Label>
-              <Tabs
-                value={mode}
-                onValueChange={(v) => setMode(v as 'create' | 'resume')}
-              >
-                <TabsList>
-                  <TabsTrigger value="create">全新会话</TabsTrigger>
-                  <TabsTrigger value="resume">从历史接续</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          </>
+          <Step1ProjectPicker
+            sortedProjects={sortedProjects}
+            projectId={projectId}
+            projectAction={projectAction}
+            sortField={sortField}
+            sortDir={sortDir}
+            mode={mode}
+            newProjectName={newProjectName}
+            newProjectBusy={newProjectBusy}
+            renderSecondary={(p) => fmtRelative(p.modifiedAt, nowRef.current)}
+            onSelectProject={setProjectId}
+            onToggleSort={toggleSort}
+            onProjectAction={setProjectAction}
+            onSetNewProjectName={setNewProjectName}
+            onSubmitNewProject={() => void submitNewProject()}
+            onCancelNewProject={() => {
+              setProjectAction('idle');
+              setNewProjectName('');
+            }}
+            onModeChange={setMode}
+          />
         )}
 
         {step === 2 && (
-          <div className="space-y-2">
-            <Label>选择要接续的会话</Label>
-            {historyLoading ? (
-              <p className="text-xs text-fg-muted">加载历史中...</p>
-            ) : (
-              <ListBase
-                items={history}
-                selectedKey={resumeId}
-                getKey={(h) => h.sessionId}
-                renderPrimary={(h) =>
-                  h.preview.length > 0 ? h.preview.slice(0, 80) : '(无预览)'
-                }
-                renderSecondary={(h) =>
-                  fmtRelative(h.modifiedAt, nowRef.current)
-                }
-                onSelect={setResumeId}
-                ariaLabel="历史会话"
-                emptyLabel="该项目还没有可接续的历史会话"
-              />
-            )}
-          </div>
+          <Step2HistoryPicker
+            history={history}
+            resumeId={resumeId}
+            historyLoading={historyLoading}
+            renderSecondary={(h) => fmtRelative(h.modifiedAt, nowRef.current)}
+            onSelectResumeId={setResumeId}
+          />
         )}
 
         {error !== null && (
@@ -408,4 +302,3 @@ export function NewSessionDialog({
     </DialogBase>
   );
 }
-
