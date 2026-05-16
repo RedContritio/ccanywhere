@@ -12,13 +12,40 @@ proposal，统一流程）。
 
 ## 真实 bug（fix 类）
 
-（无）
+### B20. share 页面顶部昼夜切换 chip 不 sticky 滑动时遮对话
+
+- **scope**：~30 LOC（share-view.tsx 顶部 chip / theme toggle 容器加 sticky + z-index）
+- **背景**：share 页面顶部的 theme 切换控件随页面上下滑动一起滚，
+  导致下面对话区域内容被遮 / 滚到无对照位置。期望 sticky top-0 固定
+  在视口顶部不动。
+- **方案**：share-view 页面顶部 control bar 加 `sticky top-0 z-N
+  bg-bg-elevated` 类，跟现有 workspace header sticky 同 pattern；如果
+  现有结构 chip 不在独立容器需先抽出
+- **出处**：2026-05-16 user dogfood
 
 ---
 
 ## 体验增强 / polish
 
-（无）
+### B21. share 页面快速导航：滑动条 + 目录 + 回到顶部
+
+- **状态**：待商榷（user 2026-05-16 标 "第二个有待商榷"）—— 启动前必须先 brainstorm 收敛
+- **scope**：~unknown，依方案而定（独立讨论）
+- **背景**：share 页对话很长（数百到数千行）时缺乏快速导航手段。当前
+  只能浏览器滚动条 + cmd-F 搜索。
+- **方案候选（待 user 决策）**：
+  - **a. 浮动 "回到顶部" 按钮**（最小）：右下角浮动 `↑`，scroll > N
+    时 fade-in；点击 scrollTo({top: 0, behavior: 'smooth'})。~30 LOC
+  - **b. 快速滑动条**（中）：右侧固定 mini-scrollbar 显示文档进度 +
+    drag 跳跃，类似 vscode minimap。~80-120 LOC
+  - **c. 目录导航**（大）：解析对话结构（user / assistant turn 分段）
+    生成 TOC sidebar，点击跳到对应 turn。~150-200 LOC，需要 share
+    导出时保留 turn 结构标记
+- **决策点**：a 是最小快赢，b 是体验中等增量，c 改 share export 格式
+  影响范围大。是 a / b / c 单做 还是组合
+- **出处**：2026-05-16 user dogfood
+
+（原小项已清空，B19 archive abandoned + B14/16/18 ship + 上批 #2 ship）
 
 ---
 
