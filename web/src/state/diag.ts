@@ -156,14 +156,13 @@ export interface DiagExtra {
   readonly effectiveTheme?: string;
 }
 
-export function collectDiag(extra: DiagExtra = {}): Diag {
-  const out: Diag = {};
+// ─── per-section collectors (m-diag-collectors-split) ────────────────
+// Each is module-private + pure (no side effect; reads only the args it
+// takes). Browser-API-missing branches fail-soft → return without writing
+// the affected field. Tests stub the relevant global via vi.stubGlobal
+// rather than importing collectors directly.
 
-  if (active !== null) {
-    out.activeSessionId = active.sessionId;
-  }
-
-  // env
+function collectEnv(): DiagEnv {
   const env: DiagEnv = {
     userAgent: navigator.userAgent,
     language: navigator.language,
@@ -193,16 +192,18 @@ export function collectDiag(extra: DiagExtra = {}): Diag {
       // ignore (cross-origin frame edge)
     }
   }
-  out.env = env;
+  return env;
+}
 
-  // page
-  out.page = {
+function collectPage(): DiagPage {
+  return {
     pathname: location.pathname,
     search: location.search,
     referrer: document.referrer,
   };
+}
 
-  // viewport
+function collectViewport(active: ActiveSlot | null): DiagViewport {
   const viewport: DiagViewport = {
     windowW: window.innerWidth,
     windowH: window.innerHeight,
@@ -226,9 +227,10 @@ export function collectDiag(extra: DiagExtra = {}): Diag {
   const orient = (window.screen as Screen & { orientation?: { type?: string } })
     .orientation?.type;
   if (typeof orient === 'string') viewport.orientation = orient;
-  out.viewport = viewport;
+  return viewport;
+}
 
-  // net
+function collectNet(): DiagNet {
   const net: DiagNet = { online: navigator.onLine };
   // navigator.connection is non-standard but widely available on Chromium.
   const conn = (navigator as Navigator & {
@@ -238,9 +240,10 @@ export function collectDiag(extra: DiagExtra = {}): Diag {
     if (typeof conn.effectiveType === 'string') net.effectiveType = conn.effectiveType;
     if (typeof conn.downlink === 'number') net.downlink = conn.downlink;
   }
-  out.net = net;
+  return net;
+}
 
-  // app
+function collectApp(active: ActiveSlot | null, extra: DiagExtra): DiagApp | null {
   const app: DiagApp = {};
   if (active !== null) app.activeSessionId = active.sessionId;
   if (extra.sessionIds !== undefined) app.sessionIds = extra.sessionIds;
@@ -251,66 +254,81 @@ export function collectDiag(extra: DiagExtra = {}): Diag {
   }
   const userKind = useAuthStore.getState().kind;
   if (userKind !== null) app.userKind = userKind;
-  if (Object.keys(app).length > 0) out.app = app;
+  return Object.keys(app).length > 0 ? app : null;
+}
 
-  // ws
-  if (active !== null) {
-    const wsd = active.ws.getDiag();
-    const ws: DiagWs = {
-      readyState: wsd.readyState,
-      lastSeq: wsd.lastSeq,
-      retryIdx: wsd.retryIdx,
+function collectWs(active: ActiveSlot): DiagWs {
+  const wsd = active.ws.getDiag();
+  const ws: DiagWs = {
+    readyState: wsd.readyState,
+    lastSeq: wsd.lastSeq,
+    retryIdx: wsd.retryIdx,
+  };
+  if (wsd.lastFrameTs > 0) {
+    ws.lastFrameTs = wsd.lastFrameTs;
+    ws.sinceLastFrameMs = Date.now() - wsd.lastFrameTs;
+  }
+  if (wsd.lastFrameType.length > 0) ws.lastFrameType = wsd.lastFrameType;
+  return ws;
+}
+
+function collectTerm(active: ActiveSlot): DiagTerm {
+  const term: DiagTerm = { rendererKind: active.rendererKind };
+  const opts = active.term.options;
+  if (typeof opts.fontSize === 'number') term.fontSize = opts.fontSize;
+  if (typeof opts.fontFamily === 'string') term.fontFamily = opts.fontFamily;
+  if (typeof opts.scrollback === 'number') term.scrollback = opts.scrollback;
+  if (typeof opts.cursorBlink === 'boolean') term.cursorBlink = opts.cursorBlink;
+  // xterm's _renderService exposes the actually-rendered cell dims.
+  // Reach through the private-named `_core` to read them; they're the
+  // only authoritative source (FitAddon uses the same field).
+  const core = (active.term as Terminal & {
+    _core?: {
+      _renderService?: { dimensions?: { css?: { cell?: { width?: number; height?: number } } } };
     };
-    if (wsd.lastFrameTs > 0) {
-      ws.lastFrameTs = wsd.lastFrameTs;
-      ws.sinceLastFrameMs = Date.now() - wsd.lastFrameTs;
-    }
-    if (wsd.lastFrameType.length > 0) ws.lastFrameType = wsd.lastFrameType;
-    out.ws = ws;
+  })._core;
+  const cell = core?._renderService?.dimensions?.css?.cell;
+  if (cell !== undefined) {
+    if (typeof cell.width === 'number') term.cellWidth = cell.width;
+    if (typeof cell.height === 'number') term.cellHeight = cell.height;
   }
-
-  // term
-  if (active !== null) {
-    const term: DiagTerm = { rendererKind: active.rendererKind };
-    const opts = active.term.options;
-    if (typeof opts.fontSize === 'number') term.fontSize = opts.fontSize;
-    if (typeof opts.fontFamily === 'string') term.fontFamily = opts.fontFamily;
-    if (typeof opts.scrollback === 'number') term.scrollback = opts.scrollback;
-    if (typeof opts.cursorBlink === 'boolean') term.cursorBlink = opts.cursorBlink;
-    // xterm's _renderService exposes the actually-rendered cell dims.
-    // Reach through the private-named `_core` to read them; they're the
-    // only authoritative source (FitAddon uses the same field).
-    const core = (active.term as Terminal & {
-      _core?: {
-        _renderService?: { dimensions?: { css?: { cell?: { width?: number; height?: number } } } };
-      };
-    })._core;
-    const cell = core?._renderService?.dimensions?.css?.cell;
-    if (cell !== undefined) {
-      if (typeof cell.width === 'number') term.cellWidth = cell.width;
-      if (typeof cell.height === 'number') term.cellHeight = cell.height;
-    }
-    if (active.lastWriteTs > 0) term.lastWriteTs = active.lastWriteTs;
-    try {
-      term.screen = captureScreen(active.term);
-    } catch {
-      // captureScreen can throw if buffer is disposed mid-collect; skip
-    }
-    out.term = term;
+  if (active.lastWriteTs > 0) term.lastWriteTs = active.lastWriteTs;
+  try {
+    term.screen = captureScreen(active.term);
+  } catch {
+    // captureScreen can throw if buffer is disposed mid-collect; skip
   }
+  return term;
+}
 
+function collectMemory(): DiagMemory | null {
   // memory (Chrome only)
   const mem = (performance as Performance & {
     memory?: { jsHeapSizeLimit?: number; totalJSHeapSize?: number; usedJSHeapSize?: number };
   }).memory;
-  if (mem) {
-    const memory: DiagMemory = {};
-    if (typeof mem.jsHeapSizeLimit === 'number') memory.jsHeapSizeLimit = mem.jsHeapSizeLimit;
-    if (typeof mem.totalJSHeapSize === 'number') memory.totalJSHeapSize = mem.totalJSHeapSize;
-    if (typeof mem.usedJSHeapSize === 'number') memory.usedJSHeapSize = mem.usedJSHeapSize;
-    if (Object.keys(memory).length > 0) out.memory = memory;
-  }
+  if (!mem) return null;
+  const memory: DiagMemory = {};
+  if (typeof mem.jsHeapSizeLimit === 'number') memory.jsHeapSizeLimit = mem.jsHeapSizeLimit;
+  if (typeof mem.totalJSHeapSize === 'number') memory.totalJSHeapSize = mem.totalJSHeapSize;
+  if (typeof mem.usedJSHeapSize === 'number') memory.usedJSHeapSize = mem.usedJSHeapSize;
+  return Object.keys(memory).length > 0 ? memory : null;
+}
 
+export function collectDiag(extra: DiagExtra = {}): Diag {
+  const out: Diag = {};
+  if (active !== null) out.activeSessionId = active.sessionId;
+  out.env = collectEnv();
+  out.page = collectPage();
+  out.viewport = collectViewport(active);
+  out.net = collectNet();
+  const app = collectApp(active, extra);
+  if (app !== null) out.app = app;
+  if (active !== null) {
+    out.ws = collectWs(active);
+    out.term = collectTerm(active);
+  }
+  const memory = collectMemory();
+  if (memory !== null) out.memory = memory;
   return out;
 }
 
