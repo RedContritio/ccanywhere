@@ -8,8 +8,19 @@ import {
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { z } from 'zod';
+import { loadJsonRecord } from '../lib/load-json-record.js';
 import { WriteQueue } from '../lib/write-queue.js';
 import { logger } from '../log.js';
+
+const ShareRecordSchema = z.object({
+  code: z.string(),
+  sessionId: z.string(),
+  createdBy: z.string(),
+  createdAt: z.number(),
+  expiresAt: z.number().nullable(),
+  projectName: z.string(),
+});
 
 /**
  * Share metadata persisted to disk per m-share-static-export D5.
@@ -30,15 +41,6 @@ export interface ShareRecord {
   readonly projectName: string;
 }
 
-interface ShareRecordJson {
-  readonly code: string;
-  readonly sessionId: string;
-  readonly createdBy: string;
-  readonly createdAt: number;
-  readonly expiresAt: number | null;
-  readonly projectName: string;
-}
-
 export class ShareStore {
   // Per-code chain (mirrors m-registry-write-queue B10): same-code save
   // / delete must serialize to avoid metadata vs html truncate races.
@@ -55,20 +57,12 @@ export class ShareStore {
    *  the code shape (UUID v4). */
   async save(record: ShareRecord, html: string): Promise<void> {
     return this.queue.enqueue(record.code, async () => {
-      const payload: ShareRecordJson = {
-        code: record.code,
-        sessionId: record.sessionId,
-        createdBy: record.createdBy,
-        createdAt: record.createdAt,
-        expiresAt: record.expiresAt,
-        projectName: record.projectName,
-      };
       try {
         await mkdir(this.dir, { recursive: true });
         await Promise.all([
           writeFile(
             this.metadataPath(record.code),
-            JSON.stringify(payload, null, 2),
+            JSON.stringify(record, null, 2),
             'utf8',
           ),
           writeFile(this.htmlPath(record.code), html, 'utf8'),
@@ -84,30 +78,8 @@ export class ShareStore {
    *  Returns undefined for missing / corrupt / expired records.
    *  Expired records are unlinked as a side effect (lazy GC per D6). */
   load(code: string): ShareRecord | undefined {
-    let raw: string;
-    try {
-      raw = readFileSync(this.metadataPath(code), 'utf8');
-    } catch {
-      return undefined;
-    }
-    let parsed: ShareRecordJson;
-    try {
-      parsed = JSON.parse(raw) as ShareRecordJson;
-    } catch (err) {
-      logger.warn({ err, code }, 'share store: corrupt metadata, skipping');
-      return undefined;
-    }
-    if (
-      typeof parsed.code !== 'string' ||
-      typeof parsed.sessionId !== 'string' ||
-      typeof parsed.createdBy !== 'string' ||
-      typeof parsed.createdAt !== 'number' ||
-      typeof parsed.projectName !== 'string' ||
-      (parsed.expiresAt !== null && typeof parsed.expiresAt !== 'number')
-    ) {
-      logger.warn({ code }, 'share store: malformed metadata, skipping');
-      return undefined;
-    }
+    const parsed = loadJsonRecord(this.metadataPath(code), ShareRecordSchema);
+    if (parsed === undefined) return undefined;
     if (parsed.expiresAt !== null && parsed.expiresAt < Date.now()) {
       // Lazy GC: drop the moment anyone tries to read it.
       void this.delete(parsed.code).catch(() => undefined);
@@ -155,24 +127,8 @@ export class ShareStore {
       if (name.startsWith('.')) continue;
       const code = name.slice(0, -5);
       const path = join(this.dir, name);
-      let parsed: ShareRecordJson;
-      try {
-        parsed = JSON.parse(readFileSync(path, 'utf8')) as ShareRecordJson;
-      } catch (err) {
-        logger.warn({ err, path }, 'share store: corrupt json, skipping');
-        continue;
-      }
-      if (
-        typeof parsed.code !== 'string' ||
-        typeof parsed.sessionId !== 'string' ||
-        typeof parsed.createdBy !== 'string' ||
-        typeof parsed.createdAt !== 'number' ||
-        typeof parsed.projectName !== 'string' ||
-        (parsed.expiresAt !== null && typeof parsed.expiresAt !== 'number')
-      ) {
-        logger.warn({ path }, 'share store: malformed fields, skipping');
-        continue;
-      }
+      const parsed = loadJsonRecord(path, ShareRecordSchema);
+      if (parsed === undefined) continue;
       if (parsed.expiresAt !== null && parsed.expiresAt < now) {
         try {
           unlinkSync(path);

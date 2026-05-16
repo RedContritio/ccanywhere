@@ -6,9 +6,22 @@ import {
 } from 'node:fs';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { z } from 'zod';
+import { loadJsonRecord } from '../lib/load-json-record.js';
 import { WriteQueue } from '../lib/write-queue.js';
 import { logger } from '../log.js';
 import type { SessionInfo } from './types.js';
+
+const PersistedRecordSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  cwd: z.string(),
+  mode: z.union([z.literal('create'), z.literal('resume')]),
+  resumeSessionId: z.string().optional(),
+  createdAt: z.number(),
+  userId: z.string(),
+  deletedAt: z.number().nullable(),
+});
 
 /**
  * What we persist per session. Lives next to ccanywhere's other config
@@ -21,17 +34,6 @@ export interface Persisted {
   readonly info: SessionInfo;
   readonly deletedAt: number | null;
   readonly lastScreen: string;
-}
-
-interface PersistedJson {
-  readonly id: string;
-  readonly projectId: string;
-  readonly cwd: string;
-  readonly mode: SessionInfo['mode'];
-  readonly resumeSessionId?: string;
-  readonly createdAt: number;
-  readonly userId: string;
-  readonly deletedAt: number | null;
 }
 
 export class SessionRegistry {
@@ -55,7 +57,7 @@ export class SessionRegistry {
    */
   async save(info: SessionInfo, deletedAt: number | null): Promise<void> {
     return this.queue.enqueue(info.id, async () => {
-      const payload: PersistedJson = {
+      const payload = {
         id: info.id,
         projectId: info.projectId,
         cwd: info.cwd,
@@ -137,24 +139,8 @@ export class SessionRegistry {
       if (!name.endsWith('.json')) continue;
       if (name.startsWith('.')) continue;
       const path = join(this.dir, name);
-      let parsed: PersistedJson;
-      try {
-        parsed = JSON.parse(readFileSync(path, 'utf8')) as PersistedJson;
-      } catch (err) {
-        logger.warn({ err, path }, 'session registry: corrupt json, skipping');
-        continue;
-      }
-      if (
-        typeof parsed.id !== 'string' ||
-        typeof parsed.projectId !== 'string' ||
-        typeof parsed.cwd !== 'string' ||
-        (parsed.mode !== 'create' && parsed.mode !== 'resume') ||
-        typeof parsed.createdAt !== 'number' ||
-        typeof parsed.userId !== 'string'
-      ) {
-        logger.warn({ path }, 'session registry: malformed fields, skipping');
-        continue;
-      }
+      const parsed = loadJsonRecord(path, PersistedRecordSchema);
+      if (parsed === undefined) continue;
       let lastScreen = '';
       try {
         lastScreen = readFileSync(this.screenPath(parsed.id), 'utf8');
