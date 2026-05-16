@@ -18,68 +18,6 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### B22. `--color-claude` 改为 Anthropic brand `#d97757`
-
-- **scope**：~3 LOC + 视觉回归 screenshot
-- **优先级**：中（brand alignment）
-- **背景**：当前 `--color-claude: #c15f3c` 比 Anthropic 官方
-  `#d97757` 暗 1 档（明度低、饱和略高），dark theme 上偏闷。
-- **方案**：`tokens.css` 改 `--color-claude`；dark theme 可单独提亮一档
-  到 `#e08968`。仅染首两个 `CC` 字母的克制用法保留（m-claude-title-cc）。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 6)
-
-### B23. quota 文案按 owner / limited 角色分支
-
-- **scope**：~10 LOC
-- **优先级**：中
-- **背景**：当前 quota exhausted dialog 副文 `请联系管理员`，owner 自己
-  是管理员看到很奇怪。
-- **方案**：role-aware 文案 — owner 时 `配额不足，请查看用量并调整`，
-  limited user 保持当前。在 dialog props 接 user.kind 分支。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 7)
-
-### B24. login `申请配对` 在 owner-first-pair 时改 `配对此设备`
-
-- **scope**：~10 LOC
-- **优先级**：中
-- **背景**：`申请配对` 暗示"对方审批"语义，owner 自己同人 approve 时
-  违和。limited user 需 owner approve 才适用 `申请`。
-- **方案**：login 页根据 deviceId 是否已存在 + user kind 判定文案：
-  owner-first-pair → `配对此设备`；limited user → `申请配对`。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 5)
-
-### B25. terminal placeholder 分 connecting / awaiting-pty 两态
-
-- **scope**：~10 LOC
-- **优先级**：中
-- **背景**：`加载中…` 单一文案太通用，与已有 m-resume-awaiting-pty 的
-  wsConnLabel 两态（"连接中…" / "已连接，等待 cc 输出…"）不一致。
-- **方案**：terminal.tsx 内 placeholder 文案改读 wsConnection state
-  → 复用 wsConnLabel 的中间态字串，统一两个位置的"在干啥"语言。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 1)
-
-### B26. new-session dialog 统一 `返回`、去 `· 2/2` step badge
-
-- **scope**：~15 LOC
-- **优先级**：低
-- **背景**：dialog 内 step 2 footer `上一步`，但 login 页用 `返回` —
-  两种叫法不统一。step 标题 `选择历史会话 · 2/2` 是 wizard 风格，
-  偏 enterprise。
-- **方案**：step 2 footer `上一步` → `返回`（与 login 一致）；step 标题
-  去 `· 2/2`，或改用顶部 progress dot 替代。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 3)
-
-### B27. StatusBadge mobile 切中文（desktop 保留 mono）
-
-- **scope**：~20 LOC
-- **优先级**：低
-- **背景**：`idle / busy / dead / starting` mono 对懂行 owner 自然，
-  但 limited user 可能不知道 "idle" 是好状态。
-- **方案**：StatusBadge 加 viewport 检测或 `forceLabel` prop；mobile
-  drawer 内显示中文 tooltip 或字面（"空闲 / 忙 / 已结束 / 启动中"），
-  desktop sidebar 保留 mono。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 2)
-
 ### B28. share view sticky header mobile 滚动 shrink padding
 
 - **scope**：~30 LOC
@@ -90,15 +28,6 @@ proposal，统一流程）。
   div，sentinel 离开 viewport 时给 header 加 `.shrunk` class →
   padding 缩成 `padding: 4px 56px 6px 0`。
 - **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 4)
-
-### B29. session-list 空态末句改 `创建一个。`
-
-- **scope**：~3 LOC
-- **优先级**：低
-- **背景**：`还没有会话。点击「+ 新建」创建。` 句末 `创建。` 是孤
-  动词，不地道；empty pane 文案是 `创建一个。` 风格统一。
-- **方案**：sidebar empty state 文案末句改 `创建一个。`。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 8)
 
 ### B30. workspace mobile drawer 切 `ui/sheet.tsx`（删手写 transform + backdrop）
 

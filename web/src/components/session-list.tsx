@@ -42,7 +42,7 @@ export function SessionList({
       <ul className="flex-1 overflow-y-auto">
         {sorted.length === 0 ? (
           <li className="px-3.5 py-6 text-center text-xs text-fg-muted">
-            还没有会话。点击「+ 新建」创建。
+            还没有会话。点击「+ 新建」创建一个。
           </li>
         ) : (
           sorted.map((s) => {

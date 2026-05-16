@@ -25,6 +25,16 @@ const stateLabel: Record<SessionState, string> = {
   dead: 'dead',
 };
 
+// m-status-badge-zh-mobile (B27): mobile users (often limited e2e users
+// not familiar with shell jargon) get the Chinese variant; desktop keeps
+// the mono `idle / busy / ...` for power users / tighter info density.
+const stateLabelZh: Record<SessionState, string> = {
+  starting: '启动中',
+  idle: '空闲',
+  busy: '忙',
+  dead: '已结束',
+};
+
 const stateTextColor: Record<SessionState, string> = {
   starting: 'text-brand',
   idle: 'text-fg-muted',
@@ -62,14 +72,11 @@ export function StatusBadge({
   }
   return (
     <span
-      className={cn(
-        'font-mono text-xs leading-none',
-        stateTextColor[state],
-        className,
-      )}
+      className={cn('text-xs leading-none', stateTextColor[state], className)}
       aria-label={`state: ${state}`}
     >
-      {stateLabel[state]}
+      <span className="hidden font-mono md:inline">{stateLabel[state]}</span>
+      <span className="md:hidden">{stateLabelZh[state]}</span>
     </span>
   );
 }

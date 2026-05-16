@@ -226,7 +226,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         className="absolute inset-0 z-10 flex items-center justify-center bg-bg font-mono"
       >
         <span className="inline-block h-4 w-2 animate-pulse bg-fg" />
-        <span className="ml-3 text-xs text-fg-muted opacity-60">加载中…</span>
+        <span className="ml-3 text-xs text-fg-muted opacity-60">连接中…</span>
       </div>
     </div>
   );

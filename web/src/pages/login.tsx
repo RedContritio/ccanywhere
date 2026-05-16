@@ -467,7 +467,7 @@ function IdleChoices(props: {
         />
       </Field>
       <Hint>
-        点击「申请配对」会调用浏览器的生物识别（Touch ID / Face ID /
+        点击「配对此设备」会调用浏览器的生物识别（Touch ID / Face ID /
         指纹），然后等待 mac 上 <Code>ccanywhere approve</Code> 命令通过。
       </Hint>
       <Button
@@ -475,7 +475,7 @@ function IdleChoices(props: {
         className="w-full"
         disabled={labelInput.trim().length === 0}
       >
-        申请配对
+        配对此设备
       </Button>
       <LinkButton onClick={onSwitchToTokenInput}>
         用 token 登录（受限用户）

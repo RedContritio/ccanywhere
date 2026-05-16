@@ -197,11 +197,7 @@ export function NewSessionDialog({
   };
 
   const stepTitle =
-    step === 2
-      ? '选择历史会话 · 2/2'
-      : mode === 'resume'
-        ? '新建会话 · 1/2'
-        : '新建会话';
+    step === 2 ? '选择历史会话' : '新建会话';
 
   return (
     <DialogBase
@@ -220,7 +216,7 @@ export function NewSessionDialog({
               onClick={() => setStep(1)}
               disabled={submitting}
             >
-              上一步
+              返回
             </Button>
           ) : (
             <Button

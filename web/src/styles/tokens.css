@@ -11,7 +11,7 @@
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-brand: var(--brand);
-  --color-claude: #c15f3c;
+  --color-claude: var(--claude);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -77,6 +77,7 @@
   --fg: #1a1a1a;
   --fg-muted: #666666;
   --brand: #4a5cde;
+  --claude: #d97757;
   --success: #2f9d4a;
   --warning: #c47a00;
   --danger: #d33a3a;
@@ -89,6 +90,7 @@
   --fg: #e6e8ef;
   --fg-muted: #8a8d97;
   --brand: #6b7cff;
+  --claude: #e08968;
   --success: #5cd674;
   --warning: #ffb547;
   --danger: #ff6b6b;
@@ -101,6 +103,7 @@
   --fg: #1a1a1a;
   --fg-muted: #666666;
   --brand: #4a5cde;
+  --claude: #d97757;
   --success: #2f9d4a;
   --warning: #c47a00;
   --danger: #d33a3a;

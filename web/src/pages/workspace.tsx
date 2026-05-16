@@ -44,6 +44,7 @@ export function WorkspacePage(): JSX.Element {
 
   const label = useAuthStore((s) => s.label);
   const deviceId = useAuthStore((s) => s.deviceId);
+  const userKind = useAuthStore((s) => s.kind);
   const clearSession = useAuthStore((s) => s.clearSession);
 
   // currentSessionId getter only — selectSession + remoteActive sync moved
@@ -198,6 +199,7 @@ export function WorkspacePage(): JSX.Element {
       <QuotaPanel open={quotaOpen} onClose={() => setQuotaOpen(false)} />
       <QuotaExhaustedDialog
         reason={quotaExhaustedReason}
+        userKind={userKind}
         onClose={() => setQuotaExhaustedReason(null)}
         onOpenQuotaPanel={() => setQuotaOpen(true)}
       />
