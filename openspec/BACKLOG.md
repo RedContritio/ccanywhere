@@ -18,23 +18,6 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### B36. `components/` 平铺切 feature 子目录（触发阈：50 文件）
-
-- **scope**：~40 LOC（纯 import path 移动）
-- **优先级**：低
-- **触发信号**：`components/` 突破 50 文件（当前 33）
-- **背景**：composition 平铺到 33 个文件，还撑得住；到 50+ 难找。
-- **方案**：建 `components/workspace/ / session/ / auth/ / feedback/` feature 子目录，原文件按 feature 归类。grep 全 import path 改一遍。
-- **出处**：2026-05-17 subagent 评审 2 §2
-
-### B37. React 18.3 → 19、Vite 5.4 → 6 dep bump
-
-- **scope**：~50 LOC（package.json bump + 跑全套 e2e 回归）
-- **优先级**：低（稳定优先于追新）
-- **背景**：React 19 已 stable 一年；Vite 6 也已 stable；Tailwind 4 已同步。useTransition / Suspense API 行为差异需要回归 xterm.js / radix。
-- **方案**：bump deps + 跑 root test + web test + e2e 全套。
-- **出处**：2026-05-17 subagent 评审 2 §8
-
 ### B21. share 页面快速导航：滑动条 + 目录 + 回到顶部
 
 - **状态**：待商榷（user 2026-05-16 标 "第二个有待商榷"）—— 启动前必须先 brainstorm 收敛
