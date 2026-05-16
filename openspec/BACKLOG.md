@@ -72,17 +72,6 @@ proposal，统一流程）。
 
 ## 维护类 / 不做但记录
 
-### B14. routes/auth.ts 拆三段（webauthn / multi-user / session-mgmt）
-
-- **状态**：deferred（ROI 边际，仅 ~0 LOC 净减，可读性边际提升）
-- **scope**：~0 LOC 净（290 行 → 三个 ~100 行文件 + 1 个共享 helper）
-- **背景**：`src/server/routes/auth.ts` 290 行含 5 个 webauthn 路由 +
-  multi-user mount + logout + me。每段 30-50 行带 zod schema，密度合理
-  但单文件长。
-- **触发信号**：下次大改 auth（例如加 passkey resident credential 或
-  webauthn level 3 conditional UI）时顺手做
-- **出处**：本评审 A4
-
 ### B16. archive commit hash 回填脚本
 
 - **状态**：低优先（cheap polish）

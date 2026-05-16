@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { DeviceStore} from '../../devices/store.js';
 import { DeviceStoreError } from '../../devices/store.js';
-import { pendingCredentials } from './auth.js';
+import { pendingCredentials } from './auth-webauthn.js';
 
 export interface InternalRoutesOptions {
   readonly store: DeviceStore;
