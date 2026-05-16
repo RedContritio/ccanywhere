@@ -81,7 +81,7 @@ export function MobileToolbar({ onKey }: Props): JSX.Element {
     <div
       role="toolbar"
       aria-label="virtual keys"
-      className="grid shrink-0 gap-1 border-t border-border bg-bg-elevated p-1.5 md:hidden"
+      className="grid shrink-0 gap-1 border-t border-border bg-bg-elevated p-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] md:hidden"
       style={{
         gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${layout.rows}, minmax(2.25rem, 1fr))`,

@@ -250,7 +250,9 @@ test.describe('m-design-system-unify visual', () => {
       clip: { x: 320, y: 0, width: 960, height: 400 },
     });
     await expect(page.getByText('paused-proj').first()).toBeVisible();
-    await expect(page.getByText('已结束').first()).toBeVisible();
+    // dead pane label "已结束" lives both as the StatusBadge zh inner
+    // span (md:hidden on desktop) and a plain main-pane span. The
+    // Resume button assertion (next line) is the unambiguous signal.
     await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
     await expect(page.getByText('prompt > ls').first()).toBeVisible();
   });
@@ -364,14 +366,12 @@ test.describe('m-design-system-unify visual', () => {
       expect(selectionText).toContain('prompt > ls');
 
       // Tap the drawer button → confirms touch routing reaches header
-      // (P4 overlay would have intercepted).
+      // (P4 overlay would have intercepted). Sheet portal content
+      // mounts to document.body with `data-slot="sheet-content"`
+      // (m-workspace-sheet-drawer).
       await hamburger.tap();
-      // Drawer panel becomes visible after tap. The sidebar uses
-      // role=navigation around the project list; assert it's reachable.
       await expect(
-        page.getByRole('button', { name: '关闭侧边栏' }).or(
-          page.locator('aside, [role="navigation"], [data-drawer-open="true"]'),
-        ).first(),
+        page.locator('[data-slot="sheet-content"]'),
       ).toBeVisible({ timeout: 2000 });
     });
 

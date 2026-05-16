@@ -18,22 +18,6 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### B30. workspace mobile drawer 切 `ui/sheet.tsx`（删手写 transform + backdrop）
-
-- **scope**：~60 LOC
-- **优先级**：**高**（最大 reinvent-wheel，自动得到 focus trap / Escape / aria-modal / 动画）
-- **背景**：`workspace.tsx` 手写 `max-md:fixed inset-y-0 transform translate-x-*` drawer + `<button class="fixed inset-0 bg-black/50">` backdrop 模拟 modal。`ui/sheet.tsx` 已 import 但仅 `mobile-toolbar.tsx` 用到（toolbar-edit），workspace 主 drawer 没复用。
-- **方案**：把 workspace.tsx aside 改 `<Sheet open={drawerOpen} onOpenChange={setDrawerOpen} side="left">` + `<SheetContent>`。删手写 transform + backdrop button + drawerOpen state machine 大段。
-- **出处**：2026-05-17 subagent 评审 2 §3
-
-### B31. mobile toolbar + drawer 加 `env(safe-area-inset-*)`
-
-- **scope**：~15 LOC
-- **优先级**：**高**（iPhone 横屏 / 全面屏 PWA 模式 swipe bar 区域占）
-- **背景**：mobile-toolbar.tsx 和 workspace drawer 没 safe-area，iPhone 横屏底部 swipe bar 覆盖 toolbar 行，PWA 全屏更严重。
-- **方案**：mobile-toolbar 容器加 `pb-[env(safe-area-inset-bottom)]`；workspace drawer 加 `pl-[env(safe-area-inset-left)]`；全站 search 一遍 fixed bottom 元素。
-- **出处**：2026-05-17 subagent 评审 2 §3
-
 ### B32. UI state primitives 三件套（EmptyState / ErrorState / Skeleton）
 
 - **scope**：~120 LOC（**建议建 changes/m-ui-state-primitives 大项**）

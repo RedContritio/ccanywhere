@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { cn } from '@/lib/utils';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import {
   NewSessionDialog,
   type CreateRequest,
 } from '../components/new-session-dialog.js';
-import { NotificationBanner } from '../components/notification-banner.js';
-import { SessionList } from '../components/session-list.js';
 import { FeedbackDialog } from '../components/feedback-dialog.js';
 import { QuotaExhaustedDialog } from '../components/quota-exhausted-dialog.js';
 import { QuotaPanel } from '../components/quota-panel.js';
 import { ShareCreateDialog } from '../components/share-create-dialog.js';
-import { SidebarGlobalActions } from '../components/workspace-header-actions.js';
 import { WorkspaceMainPane } from '../components/workspace-main-pane.js';
-import { WorkspaceSidebarHeader } from '../components/workspace-sidebar-header.js';
+import { WorkspaceSidebarContent } from '../components/workspace-sidebar-content.js';
 import { logoutServer } from '../auth-flow.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
 import { useBackgroundPoll } from '../state/use-background-poll.js';
@@ -132,39 +129,43 @@ export function WorkspacePage(): JSX.Element {
       data-workspace
       className="relative flex h-[100svh] w-full flex-row overflow-hidden bg-bg font-sans text-fg"
     >
-      <aside
-        className={cn(
-          'flex min-h-0 w-80 shrink-0 flex-col border-r border-border bg-bg-elevated',
-          // Mobile drawer: fixed overlay, slides in from left.
-          'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-10 max-md:h-[100svh] max-md:w-[min(85vw,360px)] max-md:transform max-md:transition-transform max-md:duration-200 max-md:ease-out',
-          drawerOpen
-            ? 'max-md:translate-x-0'
-            : 'max-md:-translate-x-full',
-        )}
-      >
-        <WorkspaceSidebarHeader label={label} onLogout={() => void onLogout()} />
-        <NotificationBanner />
-        <SessionList
+      {/* Desktop: persistent sidebar (md+). */}
+      <aside className="hidden min-h-0 w-80 shrink-0 flex-col border-r border-border bg-bg-elevated md:flex">
+        <WorkspaceSidebarContent
+          label={label}
           sessions={sessions}
           projects={projects}
           currentId={id}
+          onLogout={() => void onLogout()}
           onNew={onOpenNew}
           onDelete={(sid) => void onDelete(sid)}
-        />
-        <SidebarGlobalActions
           onSettings={() => navigate('/settings')}
           onQuota={() => setQuotaOpen(true)}
           onFeedback={() => setFeedbackOpen(true)}
         />
       </aside>
-      {drawerOpen && (
-        <button
-          type="button"
-          aria-label="关闭侧边栏"
-          onClick={closeDrawer}
-          className="fixed inset-0 z-[9] bg-black/50 md:hidden"
-        />
-      )}
+      {/* Mobile: Sheet drawer (radix Dialog under the hood — focus trap,
+       * Escape, aria-modal, animation free). safe-area-inset-left keeps
+       * the content clear of iPhone landscape swipe bar. */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent
+          side="left"
+          className="w-[min(85vw,360px)] border-r border-border bg-bg-elevated p-0 pl-[env(safe-area-inset-left)] md:hidden"
+        >
+          <WorkspaceSidebarContent
+            label={label}
+            sessions={sessions}
+            projects={projects}
+            currentId={id}
+            onLogout={() => void onLogout()}
+            onNew={onOpenNew}
+            onDelete={(sid) => void onDelete(sid)}
+            onSettings={() => navigate('/settings')}
+            onQuota={() => setQuotaOpen(true)}
+            onFeedback={() => setFeedbackOpen(true)}
+          />
+        </SheetContent>
+      </Sheet>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-bg">
         <section className="flex min-w-0 flex-1 flex-col">
           <WorkspaceMainPane
