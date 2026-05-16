@@ -8,6 +8,7 @@ import {
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { WriteQueue } from '../lib/write-queue.js';
 import { logger } from '../log.js';
 
 /**
@@ -42,7 +43,7 @@ export class ShareStore {
   // Per-code chain (mirrors m-registry-write-queue B10): same-code save
   // / delete must serialize to avoid metadata vs html truncate races.
   // Cross-code writes run in parallel.
-  private readonly writeChains = new Map<string, Promise<unknown>>();
+  private readonly queue = new WriteQueue<string>();
 
   constructor(private readonly dir: string) {
     if (!existsSync(dir)) {
@@ -50,25 +51,10 @@ export class ShareStore {
     }
   }
 
-  private serialize(
-    code: string,
-    op: () => Promise<void>,
-  ): Promise<void> {
-    const prev = this.writeChains.get(code) ?? Promise.resolve();
-    const next = prev.then(op, op);
-    this.writeChains.set(code, next);
-    void next.finally(() => {
-      if (this.writeChains.get(code) === next) {
-        this.writeChains.delete(code);
-      }
-    });
-    return next;
-  }
-
   /** Persist metadata + rendered HTML. Caller has already validated
    *  the code shape (UUID v4). */
   async save(record: ShareRecord, html: string): Promise<void> {
-    return this.serialize(record.code, async () => {
+    return this.queue.enqueue(record.code, async () => {
       const payload: ShareRecordJson = {
         code: record.code,
         sessionId: record.sessionId,
@@ -143,7 +129,7 @@ export class ShareStore {
 
   /** Remove both metadata and html. Idempotent on missing files. */
   async delete(code: string): Promise<void> {
-    return this.serialize(code, async () => {
+    return this.queue.enqueue(code, async () => {
       await Promise.all([
         this.unlinkIgnoreMissing(this.metadataPath(code)),
         this.unlinkIgnoreMissing(this.htmlPath(code)),

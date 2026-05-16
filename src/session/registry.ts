@@ -6,6 +6,7 @@ import {
 } from 'node:fs';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { WriteQueue } from '../lib/write-queue.js';
 import { logger } from '../log.js';
 import type { SessionInfo } from './types.js';
 
@@ -39,27 +40,12 @@ export class SessionRegistry {
   // racing writeFile calls (e.g. markDeleted's eager save + onExit's
   // post-SIGINT save) can interleave a truncate against a partial write
   // and corrupt the file. Cross-id writes still run in parallel.
-  private readonly writeChains = new Map<string, Promise<unknown>>();
+  private readonly queue = new WriteQueue<string>();
 
   constructor(private readonly dir: string) {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-  }
-
-  /** Chain `op` after any pending write for `id`. Rejection of a prior
-   *  op does not block subsequent ops (caller already log-and-swallows
-   *  errors inside op). */
-  private serialize(id: string, op: () => Promise<void>): Promise<void> {
-    const prev = this.writeChains.get(id) ?? Promise.resolve();
-    const next = prev.then(op, op);
-    this.writeChains.set(id, next);
-    void next.finally(() => {
-      if (this.writeChains.get(id) === next) {
-        this.writeChains.delete(id);
-      }
-    });
-    return next;
   }
 
   /**
@@ -68,7 +54,7 @@ export class SessionRegistry {
    * surfaces to log but does not propagate.
    */
   async save(info: SessionInfo, deletedAt: number | null): Promise<void> {
-    return this.serialize(info.id, async () => {
+    return this.queue.enqueue(info.id, async () => {
       const payload: PersistedJson = {
         id: info.id,
         projectId: info.projectId,
@@ -95,7 +81,7 @@ export class SessionRegistry {
   }
 
   async saveScreen(id: string, text: string): Promise<void> {
-    return this.serialize(id, async () => {
+    return this.queue.enqueue(id, async () => {
       try {
         await mkdir(this.dir, { recursive: true });
         await writeFile(this.screenPath(id), text, 'utf8');
@@ -110,7 +96,7 @@ export class SessionRegistry {
    * past ttl, and when the user explicitly purges from the dead-stub UI.
    */
   async delete(id: string): Promise<void> {
-    return this.serialize(id, async () => {
+    return this.queue.enqueue(id, async () => {
       await Promise.all([
         this.unlinkIgnoreMissing(this.metadataPath(id)),
         this.unlinkIgnoreMissing(this.screenPath(id)),
@@ -124,7 +110,7 @@ export class SessionRegistry {
    * replaces it.
    */
   async deleteScreen(id: string): Promise<void> {
-    return this.serialize(id, async () => {
+    return this.queue.enqueue(id, async () => {
       await this.unlinkIgnoreMissing(this.screenPath(id));
     });
   }
