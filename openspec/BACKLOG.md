@@ -18,14 +18,6 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### B33. server state 切 TanStack Query（新功能起 query，旧渐进迁）
-
-- **scope**：~200 LOC（**建议建 changes/m-server-state-tanstack-query 大项**）
-- **优先级**：中
-- **背景**：9 颗 zustand store 把 fetch + cache + error 揉一起，`use-background-poll.ts` 手写 polling，`sessions.ts` 手写乐观更新——TanStack Query 一行 hook 解决。当前 scale 撑得住但新功能（quota / shares / feedback list）继续加 store 会增维护负担。
-- **方案**：先 install + wrap `<QueryClientProvider>`；新功能（quota panel / shares list）直接用 `useQuery`；旧功能（sessions / projects）保留 zustand 不强迁；删 use-background-poll 改 `refetchInterval`。
-- **出处**：2026-05-17 subagent 评审 2 §4
-
 ### B36. `components/` 平铺切 feature 子目录（触发阈：50 文件）
 
 - **scope**：~40 LOC（纯 import path 移动）

@@ -1,10 +1,26 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app.js';
 import { ErrorBoundary } from './components/error-boundary.js';
 import { recordOp } from './state/ops-log.js';
 import './styles/tokens.css';
 import './styles/xterm-overrides.css';
+
+// m-server-state-tanstack-query: server-state cache for new features
+// (quota panel / shares list / feedback list). zustand stores stay for
+// UI state (modal open / theme / selection). Don't enable refetch-on-
+// window-focus globally — ccanywhere is single-user single-tab so the
+// dedupe / refresh thrashing buys nothing.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
 
 // Capture any uncaught error / unhandled promise rejection into ops-log so
 // the next feedback submission carries the trace. Mobile users can't open
@@ -35,7 +51,9 @@ if (!rootEl) {
 createRoot(rootEl).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
     </ErrorBoundary>
   </StrictMode>,
 );
