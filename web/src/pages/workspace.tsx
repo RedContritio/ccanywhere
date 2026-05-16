@@ -1,15 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { DeadSessionSnapshot } from '../components/dead-session-pane.js';
-import { EmptyPane } from '../components/empty-pane.js';
-import { MobileToolbar } from '../components/mobile-toolbar.js';
-import {
-  ActiveHeaderIcons,
-  DeadHeaderActions,
-  SidebarGlobalActions,
-} from '../components/workspace-header-actions.js';
 import {
   NewSessionDialog,
   type CreateRequest,
@@ -20,30 +11,20 @@ import { FeedbackDialog } from '../components/feedback-dialog.js';
 import { QuotaExhaustedDialog } from '../components/quota-exhausted-dialog.js';
 import { QuotaPanel } from '../components/quota-panel.js';
 import { ShareCreateDialog } from '../components/share-create-dialog.js';
-import { StatusBadge } from '../components/status-badge.js';
-import { TerminalView, type TerminalHandle } from '../components/terminal.js';
-import type { DeadReason } from '../ws.js';
-import { wsConnLabel, type WsConnection } from '../ws-conn-label.js';
-import { ThemeCycleButton } from '../components/theme-toggle.js';
+import { SidebarGlobalActions } from '../components/workspace-header-actions.js';
+import { WorkspaceMainPane } from '../components/workspace-main-pane.js';
+import { WorkspaceSidebarHeader } from '../components/workspace-sidebar-header.js';
 import { logoutServer } from '../auth-flow.js';
 import { useEffectiveTheme } from '../state/use-theme.js';
 import { useBackgroundPoll } from '../state/use-background-poll.js';
 import { useCompletionNotify } from '../state/use-completion-notify.js';
+import { useWorkspaceRouting } from '../state/use-workspace-routing.js';
 import { newIdempotencyKey } from '../api.js';
 import { useAuthStore } from '../state/auth.js';
 import { useActiveSessionStore } from '../state/prefs.js';
 import { useProjectsStore } from '../state/projects.js';
-import { useSessionsStore, type SessionState } from '../state/sessions.js';
+import { useSessionsStore } from '../state/sessions.js';
 import { useUiStore } from '../state/ui.js';
-
-const WS_CONN_TONE: Record<WsConnection, string> = {
-  connecting: 'text-fg-muted',
-  connected: 'text-success',
-  reconnecting: 'text-warning',
-  dead: 'text-danger',
-};
-
-const STALE_REDIRECT_MS = 5000;
 
 export function WorkspacePage(): JSX.Element {
   const { id } = useParams<{ id?: string }>();
@@ -59,16 +40,15 @@ export function WorkspacePage(): JSX.Element {
   const sessionsError = useSessionsStore((s) => s.error);
   const sessionsLoading = useSessionsStore((s) => s.loading);
 
-  const currentSessionId = useUiStore((s) => s.currentSessionId);
-  const selectSession = useUiStore((s) => s.selectSession);
-  const remoteActiveSessionId = useActiveSessionStore((s) => s.sessionId);
-  const remoteActiveLoaded = useActiveSessionStore((s) => s.loaded);
   const loadActiveSession = useActiveSessionStore((s) => s.load);
-  const setRemoteActiveSession = useActiveSessionStore((s) => s.setRemote);
 
   const label = useAuthStore((s) => s.label);
   const deviceId = useAuthStore((s) => s.deviceId);
   const clearSession = useAuthStore((s) => s.clearSession);
+
+  // currentSessionId getter only — selectSession + remoteActive sync moved
+  // into useWorkspaceRouting hook below.
+  useUiStore((s) => s.currentSessionId);
 
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -77,74 +57,17 @@ export function WorkspacePage(): JSX.Element {
   const [quotaExhaustedReason, setQuotaExhaustedReason] = useState<string | null>(null);
   const [shareSessionId, setShareSessionId] = useState<string | null>(null);
   const idemKeyRef = useRef<string>('');
-  const terminalRef = useRef<TerminalHandle | null>(null);
 
   useBackgroundPoll();
   useCompletionNotify(navigate);
-
-  // Live status from the WS layer; a per-:id key resets it on session switch.
-  const [wsConnection, setWsConnection] = useState<WsConnection>('connecting');
-  // Captured when wsConnection transitions to 'dead' so the chip label can
-  // distinguish cc-exit / session-gone / session-deleted (see ws-protocol
-  // "Close code 表"). Reset whenever the user switches to a different
-  // session or wsConnection leaves 'dead'.
-  const [deadReason, setDeadReason] = useState<DeadReason | null>(null);
-  const [liveSessionState, setLiveSessionState] = useState<SessionState | null>(null);
-  const [awaitingFirstData, setAwaitingFirstData] = useState(true);
+  // URL ↔ store ↔ remote sync + stale URL recovery — see hook docstring.
+  useWorkspaceRouting();
 
   useEffect(() => {
     void fetchProjects();
     void fetchSessions();
     void loadActiveSession();
   }, [fetchProjects, fetchSessions, loadActiveSession]);
-
-  // URL → store, plus cross-device sync.
-  //
-  // When URL has :id, pick that — it's the most explicit signal (paste a
-  // link, deep-link from another device). Mirror to local ui store AND
-  // PUT to /api/me/active-session so the next device sees the same pick.
-  //
-  // When URL has no :id, prefer in order:
-  //   1. local ui store's last-selected (per-tab continuity inside same browser)
-  //   2. server's lastActiveSessionId (cross-device hydration; gated on
-  //      remoteActiveLoaded so first paint doesn't bounce away)
-  // The picked id is only honored if a live (non-deleted) session matches —
-  // otherwise we land on /workspace without a session pane.
-  useEffect(() => {
-    if (id !== undefined) {
-      if (currentSessionId !== id) selectSession(id);
-      if (remoteActiveSessionId !== id) {
-        void setRemoteActiveSession(id);
-      }
-      return;
-    }
-    const candidate =
-      (currentSessionId !== null && currentSessionId) ||
-      (remoteActiveLoaded ? remoteActiveSessionId : null);
-    if (
-      candidate !== null &&
-      sessions.some((s) => s.id === candidate && s.deletedAt === null)
-    ) {
-      navigate(`/workspace/${candidate}`, { replace: true });
-    }
-  }, [
-    id,
-    currentSessionId,
-    remoteActiveSessionId,
-    remoteActiveLoaded,
-    sessions,
-    selectSession,
-    setRemoteActiveSession,
-    navigate,
-  ]);
-
-  // Reset terminal status indicators when switching sessions.
-  useEffect(() => {
-    setWsConnection('connecting');
-    setDeadReason(null);
-    setLiveSessionState(null);
-    setAwaitingFirstData(true);
-  }, [id]);
 
   const onLogout = async (): Promise<void> => {
     // Clear the server-side cookie first; otherwise probeSession() on the
@@ -182,33 +105,9 @@ export function WorkspacePage(): JSX.Element {
     }
   };
 
-  const [resumeError, setResumeError] = useState<string | null>(null);
-  const [resumeBusy, setResumeBusy] = useState(false);
-  const onResume = async (sid: string): Promise<void> => {
-    setResumeBusy(true);
-    setResumeError(null);
-    try {
-      await resumeSession(sid, { webTheme: effectiveTheme });
-      // Store now has the row as active; this component re-renders into
-      // the TerminalView branch.
-    } catch (err) {
-      setResumeError(err instanceof Error ? err.message : 'resume failed');
-    } finally {
-      setResumeBusy(false);
-    }
+  const onResumeRaw = async (sid: string): Promise<void> => {
+    await resumeSession(sid, { webTheme: effectiveTheme });
   };
-
-  const onWsConnected = useCallback(() => {
-    setWsConnection('connected');
-    setDeadReason(null);
-  }, []);
-  const onWsReconnecting = useCallback(() => setWsConnection('reconnecting'), []);
-  const onWsDead = useCallback((reason: DeadReason) => {
-    setWsConnection('dead');
-    setDeadReason(reason);
-  }, []);
-  const onWsStatus = useCallback((s: SessionState) => setLiveSessionState(s), []);
-  const onWsFirstData = useCallback(() => setAwaitingFirstData(false), []);
 
   const currentSession =
     id !== undefined ? sessions.find((s) => s.id === id) : undefined;
@@ -216,28 +115,6 @@ export function WorkspacePage(): JSX.Element {
     currentSession !== undefined
       ? projects.find((p) => p.id === currentSession.projectId)
       : undefined;
-  const headerStatus =
-    liveSessionState ?? currentSession?.state ?? null;
-  const deadResumable =
-    currentSession?.state === 'dead' && currentSession.deletedAt === null;
-
-  // Stale URL recovery: when /workspace/<id> resolves to no live session
-  // (recycled by GC, deleted in another tab, never existed), auto-bounce
-  // back to /workspace after 5s so the URL doesn't sit on a permanent
-  // "this session is gone" pane. Gate on !loading + no error so we don't
-  // race a still-resolving fetch — the cleanup runs whenever the gate
-  // flips back, cancelling the redirect if the session actually appears.
-  useEffect(() => {
-    if (id === undefined) return;
-    if (currentSession !== undefined) return;
-    if (sessionsLoading) return;
-    if (sessionsError !== null) return;
-    const t = setTimeout(
-      () => navigate('/workspace', { replace: true }),
-      STALE_REDIRECT_MS,
-    );
-    return () => clearTimeout(t);
-  }, [id, currentSession, sessionsLoading, sessionsError, navigate]);
 
   // The drawer wraps the workspace header + session list on mobile. On
   // desktop it stays open inline (CSS turns the transform into a no-op).
@@ -247,7 +124,7 @@ export function WorkspacePage(): JSX.Element {
 
   useEffect(() => {
     closeDrawer();
-  }, [id]);
+  }, [id, closeDrawer]);
 
   return (
     <div
@@ -264,35 +141,7 @@ export function WorkspacePage(): JSX.Element {
             : 'max-md:-translate-x-full',
         )}
       >
-        <header
-          data-workspace-header
-          className="relative z-[5] flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 max-md:flex-col max-md:items-stretch max-md:gap-2"
-        >
-          <button
-            type="button"
-            onClick={() => navigate('/workspace')}
-            aria-label="返回主页"
-            title="返回主页"
-            className="text-sm font-semibold tracking-tight hover:text-brand"
-          >
-            <span className="text-claude">CC</span> anywhere
-          </button>
-          <div className="flex-1 max-md:hidden" />
-          <div className="flex items-center gap-2 max-md:justify-between">
-            <span className="truncate font-mono text-xs text-fg-muted max-md:flex-1 max-md:text-center">
-              {label ?? 'unnamed'}
-            </span>
-            <ThemeCycleButton />
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={() => void onLogout()}
-            >
-              登出
-            </Button>
-          </div>
-        </header>
+        <WorkspaceSidebarHeader label={label} onLogout={() => void onLogout()} />
         <NotificationBanner />
         <SessionList
           sessions={sessions}
@@ -317,149 +166,23 @@ export function WorkspacePage(): JSX.Element {
       )}
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-bg">
         <section className="flex min-w-0 flex-1 flex-col">
-          {sessionsError !== null && id === undefined ? (
-            <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
-              加载失败: {sessionsError}
-            </EmptyPane>
-          ) : id === undefined ? (
-            <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
-              <div className="flex max-w-md flex-col items-center gap-4 text-center">
-                <h2 className="text-xl font-semibold tracking-tight">
-                  <span className="text-claude">CC</span> anywhere
-                </h2>
-                <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-xs">
-                  <dt className="text-right text-fg-muted">设备</dt>
-                  <dd className="font-mono text-fg">{label ?? 'unnamed'}</dd>
-                  <dt className="text-right text-fg-muted">项目</dt>
-                  <dd className="font-mono text-fg">{projects.length}</dd>
-                  <dt className="text-right text-fg-muted">活跃会话</dt>
-                  <dd className="font-mono text-fg">
-                    {sessions.filter((s) => s.deletedAt === null).length}
-                  </dd>
-                </dl>
-                <p className="text-xs text-fg-muted">
-                  从左侧选中一个会话，或点击「+ 新建」创建一个
-                </p>
-              </div>
-            </EmptyPane>
-          ) : currentSession === undefined ? (
-            sessionsLoading ? (
-              <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
-                <p className="text-sm text-fg-muted">加载中…</p>
-              </EmptyPane>
-            ) : (
-              <EmptyPane onOpenDrawer={() => setDrawerOpen(true)}>
-                <div className="flex max-w-md flex-col items-center gap-4 text-center">
-                  <h2 className="text-xl font-semibold tracking-tight">
-                    会话已结束
-                  </h2>
-                  <p className="text-xs leading-relaxed text-fg-muted">
-                    可以新建一个，或回到首页查看其它会话。
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      onClick={() => navigate('/workspace', { replace: true })}
-                    >
-                      回到首页
-                    </Button>
-                    <Button type="button" variant="outline" onClick={onOpenNew}>
-                      新建会话
-                    </Button>
-                  </div>
-                </div>
-              </EmptyPane>
-            )
-          ) : deviceId === null ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-fg-muted">
-              未登录
-            </div>
-          ) : (
-            <>
-              <header className="relative z-[5] flex shrink-0 items-center gap-2 border-b border-border bg-bg-elevated px-3 py-2 text-sm">
-                <button
-                  type="button"
-                  aria-label="打开侧边栏"
-                  onClick={() => setDrawerOpen(true)}
-                  className="rounded-md border border-border px-2 py-1 leading-none md:hidden"
-                >
-                  ☰
-                </button>
-                <span className="truncate font-medium">
-                  {currentProject?.name ?? currentSession.projectId}
-                </span>
-                {headerStatus !== null && (
-                  <StatusBadge state={headerStatus} variant="dot" />
-                )}
-                {currentSession.deletedAt !== null && (
-                  <span className="font-mono text-xs text-danger">已删除</span>
-                )}
-                <div className="flex-1" />
-                {deadResumable ? (
-                  <DeadHeaderActions
-                    busy={resumeBusy}
-                    onResume={() => void onResume(currentSession.id)}
-                    onDelete={() => void onDelete(currentSession.id)}
-                  />
-                ) : (
-                  <ActiveHeaderIcons
-                    onShare={() => setShareSessionId(currentSession.id)}
-                    onReload={() => location.reload()}
-                  />
-                )}
-                <span
-                  className={cn(
-                    'font-mono text-xs leading-none',
-                    deadResumable
-                      ? 'text-fg-muted'
-                      : WS_CONN_TONE[wsConnection],
-                  )}
-                >
-                  {deadResumable
-                    ? '已结束'
-                    : wsConnLabel(wsConnection, deadReason, awaitingFirstData)}
-                </span>
-              </header>
-              <div
-                data-pane-content
-                className="flex min-h-0 flex-1 flex-col"
-              >
-                <div className="relative min-h-0 flex-1 overflow-hidden">
-                  {deadResumable ? (
-                    <DeadSessionSnapshot
-                      key={currentSession.id}
-                      sessionId={currentSession.id}
-                    />
-                  ) : (
-                    <TerminalView
-                      key={currentSession.id}
-                      ref={terminalRef}
-                      sessionId={currentSession.id}
-                      onStatus={onWsStatus}
-                      onConnected={onWsConnected}
-                      onReconnecting={onWsReconnecting}
-                      onDead={onWsDead}
-                      onFirstData={onWsFirstData}
-                      onQuotaExhausted={(reason) => setQuotaExhaustedReason(reason)}
-                    />
-                  )}
-                </div>
-                {!deadResumable && (
-                  <MobileToolbar
-                    onKey={(data) => terminalRef.current?.input(data)}
-                  />
-                )}
-              </div>
-              {resumeError !== null && (
-                <p
-                  role="alert"
-                  className="shrink-0 border-t border-border bg-bg-elevated px-3 py-2 text-xs text-danger"
-                >
-                  重连失败：{resumeError}
-                </p>
-              )}
-            </>
-          )}
+          <WorkspaceMainPane
+            id={id}
+            currentSession={currentSession}
+            currentProject={currentProject}
+            sessionsLoading={sessionsLoading}
+            sessionsError={sessionsError}
+            deviceId={deviceId}
+            label={label}
+            projectCount={projects.length}
+            activeSessionCount={sessions.filter((s) => s.deletedAt === null).length}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onOpenNew={onOpenNew}
+            onDelete={onDelete}
+            onResume={onResumeRaw}
+            onOpenShare={(sid) => setShareSessionId(sid)}
+            onQuotaExhausted={(reason) => setQuotaExhaustedReason(reason)}
+          />
         </section>
       </main>
       <NewSessionDialog
@@ -497,4 +220,3 @@ export function WorkspacePage(): JSX.Element {
     </div>
   );
 }
-

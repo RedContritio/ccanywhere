@@ -136,13 +136,13 @@ test.describe('m-design-system-unify visual', () => {
     await page.waitForLoadState('networkidle');
     // Wait until fetchSessions resolves and the stale state lands —
     // until then a "加载中…" spinner may render instead.
-    await page.getByRole('heading', { name: '会话已结束' }).waitFor();
+    await page.getByRole('heading', { name: '会话不存在'}).waitFor();
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, 'visual-stale-session-dark.png'),
       fullPage: true,
     });
     await expect(
-      page.getByRole('heading', { name: '会话已结束' }),
+      page.getByRole('heading', { name: '会话不存在'}),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: '回到首页' }),
