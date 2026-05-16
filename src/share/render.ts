@@ -119,11 +119,11 @@ export function renderShareHtml(input: RenderInput): string {
 <script>${THEME_SCRIPT}</script>
 </head>
 <body>
-<button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button>
 <div class="container">
 <header class="page">
 <h1>${escapeHtml(input.projectName)}</h1>
 <div class="meta">${meta}</div>
+<button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button>
 </header>
 <main>
 ${body}${empty}

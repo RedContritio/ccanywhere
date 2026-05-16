@@ -12,20 +12,158 @@ proposal，统一流程）。
 
 ## 真实 bug（fix 类）
 
-### B20. share 页面顶部昼夜切换 chip 不 sticky 滑动时遮对话
-
-- **scope**：~30 LOC（share-view.tsx 顶部 chip / theme toggle 容器加 sticky + z-index）
-- **背景**：share 页面顶部的 theme 切换控件随页面上下滑动一起滚，
-  导致下面对话区域内容被遮 / 滚到无对照位置。期望 sticky top-0 固定
-  在视口顶部不动。
-- **方案**：share-view 页面顶部 control bar 加 `sticky top-0 z-N
-  bg-bg-elevated` 类，跟现有 workspace header sticky 同 pattern；如果
-  现有结构 chip 不在独立容器需先抽出
-- **出处**：2026-05-16 user dogfood
+（无）
 
 ---
 
 ## 体验增强 / polish
+
+### B22. `--color-claude` 改为 Anthropic brand `#d97757`
+
+- **scope**：~3 LOC + 视觉回归 screenshot
+- **优先级**：中（brand alignment）
+- **背景**：当前 `--color-claude: #c15f3c` 比 Anthropic 官方
+  `#d97757` 暗 1 档（明度低、饱和略高），dark theme 上偏闷。
+- **方案**：`tokens.css` 改 `--color-claude`；dark theme 可单独提亮一档
+  到 `#e08968`。仅染首两个 `CC` 字母的克制用法保留（m-claude-title-cc）。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 6)
+
+### B23. quota 文案按 owner / limited 角色分支
+
+- **scope**：~10 LOC
+- **优先级**：中
+- **背景**：当前 quota exhausted dialog 副文 `请联系管理员`，owner 自己
+  是管理员看到很奇怪。
+- **方案**：role-aware 文案 — owner 时 `配额不足，请查看用量并调整`，
+  limited user 保持当前。在 dialog props 接 user.kind 分支。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 7)
+
+### B24. login `申请配对` 在 owner-first-pair 时改 `配对此设备`
+
+- **scope**：~10 LOC
+- **优先级**：中
+- **背景**：`申请配对` 暗示"对方审批"语义，owner 自己同人 approve 时
+  违和。limited user 需 owner approve 才适用 `申请`。
+- **方案**：login 页根据 deviceId 是否已存在 + user kind 判定文案：
+  owner-first-pair → `配对此设备`；limited user → `申请配对`。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 5)
+
+### B25. terminal placeholder 分 connecting / awaiting-pty 两态
+
+- **scope**：~10 LOC
+- **优先级**：中
+- **背景**：`加载中…` 单一文案太通用，与已有 m-resume-awaiting-pty 的
+  wsConnLabel 两态（"连接中…" / "已连接，等待 cc 输出…"）不一致。
+- **方案**：terminal.tsx 内 placeholder 文案改读 wsConnection state
+  → 复用 wsConnLabel 的中间态字串，统一两个位置的"在干啥"语言。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 1)
+
+### B26. new-session dialog 统一 `返回`、去 `· 2/2` step badge
+
+- **scope**：~15 LOC
+- **优先级**：低
+- **背景**：dialog 内 step 2 footer `上一步`，但 login 页用 `返回` —
+  两种叫法不统一。step 标题 `选择历史会话 · 2/2` 是 wizard 风格，
+  偏 enterprise。
+- **方案**：step 2 footer `上一步` → `返回`（与 login 一致）；step 标题
+  去 `· 2/2`，或改用顶部 progress dot 替代。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 3)
+
+### B27. StatusBadge mobile 切中文（desktop 保留 mono）
+
+- **scope**：~20 LOC
+- **优先级**：低
+- **背景**：`idle / busy / dead / starting` mono 对懂行 owner 自然，
+  但 limited user 可能不知道 "idle" 是好状态。
+- **方案**：StatusBadge 加 viewport 检测或 `forceLabel` prop；mobile
+  drawer 内显示中文 tooltip 或字面（"空闲 / 忙 / 已结束 / 启动中"），
+  desktop sidebar 保留 mono。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 2)
+
+### B28. share view sticky header mobile 滚动 shrink padding
+
+- **scope**：~30 LOC
+- **优先级**：低
+- **背景**：m-share-header-sticky ship 后 sticky bar `padding: 12px
+  56px 16px 0` mobile 占首屏 ~12vh。
+- **方案**：IntersectionObserver sentinel 在 sticky bar 后插一个 1px
+  div，sentinel 离开 viewport 时给 header 加 `.shrunk` class →
+  padding 缩成 `padding: 4px 56px 6px 0`。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 4)
+
+### B29. session-list 空态末句改 `创建一个。`
+
+- **scope**：~3 LOC
+- **优先级**：低
+- **背景**：`还没有会话。点击「+ 新建」创建。` 句末 `创建。` 是孤
+  动词，不地道；empty pane 文案是 `创建一个。` 风格统一。
+- **方案**：sidebar empty state 文案末句改 `创建一个。`。
+- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 8)
+
+### B30. workspace mobile drawer 切 `ui/sheet.tsx`（删手写 transform + backdrop）
+
+- **scope**：~60 LOC
+- **优先级**：**高**（最大 reinvent-wheel，自动得到 focus trap / Escape / aria-modal / 动画）
+- **背景**：`workspace.tsx` 手写 `max-md:fixed inset-y-0 transform translate-x-*` drawer + `<button class="fixed inset-0 bg-black/50">` backdrop 模拟 modal。`ui/sheet.tsx` 已 import 但仅 `mobile-toolbar.tsx` 用到（toolbar-edit），workspace 主 drawer 没复用。
+- **方案**：把 workspace.tsx aside 改 `<Sheet open={drawerOpen} onOpenChange={setDrawerOpen} side="left">` + `<SheetContent>`。删手写 transform + backdrop button + drawerOpen state machine 大段。
+- **出处**：2026-05-17 subagent 评审 2 §3
+
+### B31. mobile toolbar + drawer 加 `env(safe-area-inset-*)`
+
+- **scope**：~15 LOC
+- **优先级**：**高**（iPhone 横屏 / 全面屏 PWA 模式 swipe bar 区域占）
+- **背景**：mobile-toolbar.tsx 和 workspace drawer 没 safe-area，iPhone 横屏底部 swipe bar 覆盖 toolbar 行，PWA 全屏更严重。
+- **方案**：mobile-toolbar 容器加 `pb-[env(safe-area-inset-bottom)]`；workspace drawer 加 `pl-[env(safe-area-inset-left)]`；全站 search 一遍 fixed bottom 元素。
+- **出处**：2026-05-17 subagent 评审 2 §3
+
+### B32. UI state primitives 三件套（EmptyState / ErrorState / Skeleton）
+
+- **scope**：~120 LOC（**建议建 changes/m-ui-state-primitives 大项**）
+- **优先级**：中
+- **背景**：empty-pane.tsx 只 26 行且 drawer-trigger 写死耦合 workspace。list-base.tsx 自带 emptyLabel、各 dialog 内 `加载中…` `加载失败` 手写、my-shares-section 同。无 skeleton（首屏空白感知慢）。
+- **方案**：建 `components/ui-state/` 三件套——`<EmptyState icon title description action />`、`<ErrorState error retry />`、`<Skeleton variant="list-row" count={5} />`。替换 ~6 处散落点。
+- **出处**：2026-05-17 subagent 评审 2 §7
+
+### B33. server state 切 TanStack Query（新功能起 query，旧渐进迁）
+
+- **scope**：~200 LOC（**建议建 changes/m-server-state-tanstack-query 大项**）
+- **优先级**：中
+- **背景**：9 颗 zustand store 把 fetch + cache + error 揉一起，`use-background-poll.ts` 手写 polling，`sessions.ts` 手写乐观更新——TanStack Query 一行 hook 解决。当前 scale 撑得住但新功能（quota / shares / feedback list）继续加 store 会增维护负担。
+- **方案**：先 install + wrap `<QueryClientProvider>`；新功能（quota panel / shares list）直接用 `useQuery`；旧功能（sessions / projects）保留 zustand 不强迁；删 use-background-poll 改 `refetchInterval`。
+- **出处**：2026-05-17 subagent 评审 2 §4
+
+### B34. Unicode glyph → lucide icon（5 处 ☰ / × / ↑↓）
+
+- **scope**：~25 LOC
+- **优先级**：低
+- **背景**：empty-pane.tsx 和 workspace-main-pane.tsx 的 `☰`、session-list.tsx 和 notification-banner.tsx 的 `×`、sort-button.tsx 的 `↑↓` 用 Unicode 字符——渲染权重不可控、对齐 baseline 不一致、aria 友好度差。
+- **方案**：替换为 lucide-react 对应 icon（`Menu / X / ArrowUp / ArrowDown`）。机械替换。
+- **出处**：2026-05-17 subagent 评审 2 §5
+
+### B35. xterm theme hex 抽到 tokens.css `@theme` 暴露给 xterm 初始化
+
+- **scope**：~25 LOC
+- **优先级**：低
+- **背景**：`terminal-config.ts:34-43` 散落 8 个 xterm hex（webgl canvas 不读 CSS var 有合理理由）。
+- **方案**：tokens.css `@theme` 块加 `--color-xterm-*` raw value（不 alias），terminal-config.ts 改读 `getComputedStyle(document.documentElement).getPropertyValue('--color-xterm-*')`。
+- **出处**：2026-05-17 subagent 评审 2 §1
+
+### B36. `components/` 平铺切 feature 子目录（触发阈：50 文件）
+
+- **scope**：~40 LOC（纯 import path 移动）
+- **优先级**：低
+- **触发信号**：`components/` 突破 50 文件（当前 33）
+- **背景**：composition 平铺到 33 个文件，还撑得住；到 50+ 难找。
+- **方案**：建 `components/workspace/ / session/ / auth/ / feedback/` feature 子目录，原文件按 feature 归类。grep 全 import path 改一遍。
+- **出处**：2026-05-17 subagent 评审 2 §2
+
+### B37. React 18.3 → 19、Vite 5.4 → 6 dep bump
+
+- **scope**：~50 LOC（package.json bump + 跑全套 e2e 回归）
+- **优先级**：低（稳定优先于追新）
+- **背景**：React 19 已 stable 一年；Vite 6 也已 stable；Tailwind 4 已同步。useTransition / Suspense API 行为差异需要回归 xterm.js / radix。
+- **方案**：bump deps + 跑 root test + web test + e2e 全套。
+- **出处**：2026-05-17 subagent 评审 2 §8
 
 ### B21. share 页面快速导航：滑动条 + 目录 + 回到顶部
 
@@ -109,24 +247,8 @@ proposal，统一流程）。
 ## 大项（在 `openspec/changes/<slug>/`，本表只列出处指针）
 
 - **m-toolbar-presets**（~80 LOC）— 内置 toolbar 模板 + swap。
-  `changes/m-toolbar-presets/`
+  决策点未定（preset 数量 / 自定义保存）。`changes/m-toolbar-presets/`
 - **m-touch-scroll-one-line**（~50 LOC，blocked-on-data）— 偶发滑动一行
   bug。`changes/m-touch-scroll-one-line/`
 - **m-fit-cols-off-by-one**（in-flight，blocked-on-data）— Phase 1 trace
   已 ship；等用户反馈触发 Phase 2/3。`changes/m-fit-cols-off-by-one/`
-- **m-write-queue-extract**（~80 LOC）— 抽 share/store + session/registry
-  公共 WriteQueue helper，删 50 LOC 重复。`changes/m-write-queue-extract/`
-- **m-store-zod-load**（~70 LOC）— share/store + session/registry 加载
-  JSON 改用 zod schema + 公共 loadJsonRecord helper。`changes/m-store-zod-load/`
-- **m-webauthn-routes-test**（~150 LOC 测试新增）— 覆盖 webauthn 5 路由
-  的信封 + 状态机 + mock verify 后行为（happy 真签名留 e2e）。
-  `changes/m-webauthn-routes-test/`
-- **m-workspace-page-split**（~150 LOC 主文件减）— workspace.tsx 488
-  行拆 useWorkspaceRouting hook + WorkspaceMainPane + WorkspaceSidebar
-  Header 子组件。`changes/m-workspace-page-split/`
-- **m-new-session-dialog-steps**（~120 LOC 主文件减）— NewSessionDialog
-  411 行拆 Step1ProjectPicker + Step2HistoryPicker 受控子组件。
-  `changes/m-new-session-dialog-steps/`
-- **m-diag-collectors-split**（~100 LOC 重排）— diag.ts collectDiag 156
-  行单函数拆 8 个内部 collector，主函数变 ~25 行 composition。
-  `changes/m-diag-collectors-split/`

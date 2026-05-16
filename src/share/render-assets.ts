@@ -33,15 +33,26 @@ export const STYLES = `
   }
   .container { max-width: 900px; margin: 0 auto; padding: 24px 16px 80px; }
   header.page {
+    /* m-share-header-sticky: one unified sticky bar carries project
+     * name + meta + theme chip. sticky preserves layout space so
+     * message bubbles flow below it (not under). position:relative
+     * is the positioning context for the absolute-positioned chip
+     * inside; padding-right reserves space for the chip so long
+     * project names don't run under it. */
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg);
     display: flex; flex-direction: column; gap: 4px;
-    padding-bottom: 16px; margin-bottom: 24px;
+    padding: 12px 56px 16px 0; margin-bottom: 24px;
     border-bottom: 1px solid var(--border);
   }
   header.page h1 { margin: 0; font-size: 18px; font-weight: 600; }
   header.page .meta { font-size: 12px; color: var(--fg-muted); }
   header.page .meta .by { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  .theme-toggle {
-    position: fixed; top: 12px; right: 12px;
+  header.page .theme-toggle {
+    /* Pinned to the header bar (not viewport), so it scrolls with the
+     * unified sticky bar instead of floating independently. Visual
+     * position: header bar's top-right within the centered container. */
+    position: absolute; top: 8px; right: 0;
     border: 1px solid var(--border); background: var(--bg-elevated);
     color: var(--fg); border-radius: 4px; padding: 4px 8px;
     font-size: 12px; cursor: pointer;
