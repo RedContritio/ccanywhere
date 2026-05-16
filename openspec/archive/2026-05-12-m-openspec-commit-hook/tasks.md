@@ -13,3 +13,7 @@
   meta 等），考虑路径白名单
 - [ ] 如果用户反馈 OpenSpec 改动颗粒太碎（每次为了过 hook 都加一行 BACKLOG），
   评估是否引入 `[skip-openspec]` 限定 marker（但需要严格使用规则）
+
+## Commits
+
+- (no matching commits found in git log)

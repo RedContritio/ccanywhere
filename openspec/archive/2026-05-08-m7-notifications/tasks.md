@@ -19,3 +19,7 @@
 - [ ] 3.3 merge 到 openspec/specs/web-frontend/spec.md
 - [ ] 3.4 移到 archive/YYYY-MM-DD-m7-notifications/
 - [ ] 3.5 commit "M7: browser desktop notifications on busy→idle"
+
+## Commits
+
+- (no matching commits found in git log)

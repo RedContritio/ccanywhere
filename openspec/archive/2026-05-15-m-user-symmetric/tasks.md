@@ -96,3 +96,7 @@
 
 - [ ] T11.1 commit（含 archive 路径 + spec delta 摘要）
 - [ ] T11.2 mv openspec/changes/m-user-symmetric → openspec/archive/<date>-m-user-symmetric
+
+## Commits
+
+- 49e4f9d m-user-symmetric: User 模型 / Auth Policy / Workspace Config 全面对称化

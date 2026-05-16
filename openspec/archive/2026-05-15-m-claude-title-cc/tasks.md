@@ -34,3 +34,7 @@
 - [x] build:all + launchctl kickstart + healthz 200
 - [x] e2e 视觉确认
 - [x] commit + archive
+
+## Commits
+
+- f1b0a0f feat(web): m-claude-title-cc — Claude orange 染两个 C

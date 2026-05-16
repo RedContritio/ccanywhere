@@ -10,3 +10,7 @@
 - [x] T8. e2e smoke 加 UI flow "storageState lands limited user on /workspace"
 - [x] T9. spec delta: auth/spec.md "用户级偏好与活跃 session" 段加 me 形状契约
 - [x] T10. archive `2026-05-12-m-limited-user-web-login/`
+
+## Commits
+
+- (no matching commits found in git log)

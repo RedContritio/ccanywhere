@@ -42,3 +42,9 @@ chunk A 一笔（按用户洞察"也是用户级跨设备"）。
 - [x] launchctl kickstart → healthz 200
 - [x] e2e 6/6 pass
 - [x] bundle 含新 symbol (toolbar-edit / terminal-header-prefs / 快捷栏布局)
+
+## Commits
+
+- 24d0aba feat(prefs): m-user-prefs chunk C — toolbar 编辑 dialog + key catalog + 归档
+- b458ce9 feat(prefs): m-user-prefs chunk B — 前端 toolbar 从 preferences 渲染 + active-session 同步
+- 2059146 feat(prefs): m-user-prefs chunk A — user.preferences + lastActiveSessionId schema + API

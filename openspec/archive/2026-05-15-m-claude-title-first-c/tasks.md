@@ -40,3 +40,7 @@
 - [x] build:all + launchctl kickstart + healthz 200
 - [x] e2e 视觉确认（login light/dark；workspace 留 user reload）
 - [x] commit + archive
+
+## Commits
+
+- a46c0bd feat(web): m-claude-title-first-c — Claude orange 只染第一个 C

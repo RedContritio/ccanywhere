@@ -235,3 +235,7 @@
   长按 selection 段后加 "Dead session pane readonly mode" 子段 + 2
   Scenario（dead pane 长按复制 / 不响应 pinch-zoom）
 - [x] T2.4. user mobile 手验长按选择 + 复制
+
+## Commits
+
+- (no matching commits found in git log)

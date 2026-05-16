@@ -9,3 +9,7 @@
 - [x] T5. pnpm build:all + launchctl kickstart + healthz 200 ✓
 - [x] T6. e2e visual 7 cases 仍全过 ✓
 - [x] T7. subagent 评审 + commit
+
+## Commits
+
+- (no matching commits found in git log)

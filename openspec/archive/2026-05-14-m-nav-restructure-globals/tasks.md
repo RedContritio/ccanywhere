@@ -76,3 +76,8 @@
       139) + build:all + launchctl kickstart + curl /healthz 200
 - [x] commit message 含 archive 路径 + spec delta 摘要
 - [x] 归档：`openspec/archive/2026-05-14-m-nav-restructure-globals/`
+
+## Commits
+
+- 47358a2 feat(web): m-nav-restructure-globals — 全局配置入 sidebar，分享入 session topbar
+- f4c6f21 plan: m-logout-preserve-pairing + m-nav-restructure-globals proposals

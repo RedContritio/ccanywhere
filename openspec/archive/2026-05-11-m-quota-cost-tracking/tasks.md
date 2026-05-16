@@ -174,3 +174,10 @@
 - [ ] 三 chunk + spec delta 全 ship 后归档
   `openspec/changes/m-quota-cost-tracking/` →
   `openspec/archive/2026-05-11-m-quota-cost-tracking/`
+
+## Commits
+
+- 72787dc docs(openspec): m-quota-cost-tracking spec delta + archive
+- 2cd2c19 feat(quota): m-quota-cost-tracking chunk C — web quota panel
+- bd5de4b feat(quota): m-quota-cost-tracking chunk B — UserPromptSubmit hook enforcement
+- 9cac3f0 feat(quota): m-quota-cost-tracking chunk A — pricing + path + ccusage utility

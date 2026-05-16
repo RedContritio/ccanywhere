@@ -230,3 +230,7 @@ Verification (mint d308ce34 + e2e desktop/mobile fullPage):
 - v2: share size cap + 磁盘 quota
 - v2: regenerate / rotate share code
 - v2: share view 加 OG meta tags（社交分享 preview）
+
+## Commits
+
+- c817f7c ship: m-share-static-export v1 + P1-P4 polish

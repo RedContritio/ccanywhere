@@ -27,3 +27,7 @@
 - [ ] 4.3 把 changes/m-hook-opt-in/specs/ 合并到 openspec/specs/
 - [ ] 4.4 移到 archive/YYYY-MM-DD-m-hook-opt-in/
 - [ ] 4.5 commit "fix(hook): drop CLAUDE_CONFIG_DIR injection so cc inherits user auth"
+
+## Commits
+
+- (no matching commits found in git log)

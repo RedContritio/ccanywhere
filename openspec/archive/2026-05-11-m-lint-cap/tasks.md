@@ -95,3 +95,14 @@
 4. Phase 6 enable + verify（一笔 commit）
 5. 归档 m-lint-cap 到 `openspec/archive/<date>-m-lint-cap/`
 6. 回到 #44 chunk 2
+
+## Commits
+
+- 15801ff chore(lint): m-lint-cap phase 6 — enable + verify + archive
+- 48c8a98 chore(lint): m-lint-cap phase 5 — split deployment.md + web-frontend.spec.md
+- 97761cb chore(lint): m-lint-cap phase 4 — componentize terminal.tsx (936 → 222)
+- e30d7a4 chore(lint): m-lint-cap phase 4 sub-step 1 — extract terminal helpers/consts
+- 9c7733c chore(lint): m-lint-cap phase 3 — split server.test.ts under 500 lines
+- afa7311 chore(lint): m-lint-cap phase 2 — split src/ files under 300 lines
+- b103259 chore(lint): m-lint-cap phase 1 — max-lines guardrail + precommit hook
+- 22c5cb4 docs(openspec): m-lint-cap proposal + tasks

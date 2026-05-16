@@ -17,3 +17,7 @@
 - [ ] 3.2 把 `changes/m-frp-port-mapping/specs/config/spec.md` 的 delta 合并进 `openspec/specs/config/spec.md`（仅默认值描述变化）
 - [ ] 3.3 移到 `archive/YYYY-MM-DD-m-frp-port-mapping/`
 - [ ] 3.4 commit "M-frp: pin default port to 62275 + frpc.toml example"
+
+## Commits
+
+- (no matching commits found in git log)

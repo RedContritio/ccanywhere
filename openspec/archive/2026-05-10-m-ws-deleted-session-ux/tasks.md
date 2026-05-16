@@ -65,3 +65,7 @@
 
 - [ ] T15. `mv openspec/changes/m-ws-deleted-session-ux openspec/archive/<date>-m-ws-deleted-session-ux`
 - [ ] T16. 用户确认 dogfood OK 后 commit。
+
+## Commits
+
+- (no matching commits found in git log)

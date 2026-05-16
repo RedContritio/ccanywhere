@@ -77,3 +77,8 @@ scope 在 ship 期间被 user 反馈连续扩张，从原 proposal 的"保留 de
       + build:all + launchctl kickstart + curl /healthz 200
 - [x] bundle 验证 `limitedUsers / forgetToken / transient` 等关键字
 - [x] commit + archive
+
+## Commits
+
+- 6910669 feat(web): m-logout-preserve-pairing — 双轨身份缓存 + 多 token + 指数退让
+- f4c6f21 plan: m-logout-preserve-pairing + m-nav-restructure-globals proposals

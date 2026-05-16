@@ -40,3 +40,7 @@
 - [ ] T10. `git mv openspec/changes/m-mobile-spec-realign
   openspec/archive/<YYYY-MM-DD>-m-mobile-spec-realign`。
 - [ ] T11. 用户确认后 commit。
+
+## Commits
+
+- 36af789 docs(openspec): m-mobile-spec-realign — 校准 specs 反映已 ship 的 mobile 改造

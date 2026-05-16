@@ -161,3 +161,9 @@
 - [x] T7.6. tasks.md 回填各 phase commit hash（C1 f4cf0a6 / C2
   b7ad59f / C3 505c1a2 / C4 3bb416d + B4 e8ac553 / C5 d226c33 + B1
   d4b9055 / C6 6ff7a52 / P1 e1cfb82）
+
+## Commits
+
+- 505c1a2 feat(web): m-design-system-unify C3 — 4 dialog 重写 + wrap pattern 提取
+- b7ad59f feat(web): m-design-system-unify C2 — 3 抽象组件 + projects store 拆分
+- f4cf0a6 feat(web): m-design-system-unify C1 — tailwind v4 + shadcn base 12 + design tokens

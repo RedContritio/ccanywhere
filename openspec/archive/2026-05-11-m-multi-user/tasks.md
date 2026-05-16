@@ -296,3 +296,9 @@
 - [ ] 归档 #19 M-device-readonly-watch（被 v12.1 user.quota.cost.limitUsd=0 路径吃掉）
 - [ ] 归档 #40 M-auth-expiry（被 v12.1 token.expiresAt 强制 ≤ 7d 吃掉）
 - [ ] #45 task 拆分推到 v1+ 启动时再补完
+
+## Commits
+
+- f296d99 test(#44): m-multi-user integration tests — token auth + cross-user isolation
+- 8349fa7 feat(#44): m-multi-user user-token-base — user/token stores + dual-path auth + cwd guard
+- dbc3dbc docs(openspec): m-multi-user (v12.1) reframe + 风险评审 10 条决策

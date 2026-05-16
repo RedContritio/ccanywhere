@@ -17,3 +17,7 @@
 - [x] T2.3. archive `mv changes/m-pricing-staleness-sentinel
   archive/<date>-m-pricing-staleness-sentinel` + 回填 hash
 - [x] T2.4. BACKLOG.md 删 B7
+
+## Commits
+
+- (no matching commits found in git log)

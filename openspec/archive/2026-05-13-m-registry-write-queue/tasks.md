@@ -20,3 +20,7 @@
 - [x] T2.4. spec delta：`openspec/specs/sessions/persistence.spec.md`
   "持久化存储" 段加同 id 写入串行约束 + F1-F3 Scenario
 - [x] T2.5. BACKLOG.md 删 B10
+
+## Commits
+
+- (no matching commits found in git log)

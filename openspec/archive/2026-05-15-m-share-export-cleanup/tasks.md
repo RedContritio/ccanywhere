@@ -59,3 +59,8 @@ collapsed" 演化为 "tool body 完全不进 HTML，仅 footer count"。
       `c412a1a6-2ff6-4568-99f7-639e7e4184ec`，确认 0 个 `<details>` +
       footer 显示 "1 tool used" / "2 tools used"
 - [x] commit + archive
+
+## Commits
+
+- ef656a7 feat(share): m-share-export-cleanup — rewind 过滤 + tool 调用 footer 化
+- be2777d plan: m-share-export-cleanup — rewind 过滤 + tool 折叠 footer

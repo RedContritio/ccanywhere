@@ -67,3 +67,7 @@
 - [ ] T18. `mv openspec/changes/m-resume-singleton openspec/archive/<date>-m-resume-singleton`。
 - [ ] T19. dogfood 复测（构造同 cc-X 两次 resume，验证两窗口同步）后用户
   确认 commit。
+
+## Commits
+
+- (no matching commits found in git log)

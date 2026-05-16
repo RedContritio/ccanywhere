@@ -10,3 +10,7 @@
       passed）+ build:all + launchctl kickstart + curl healthz 200 +
       bundle 含 `max-md:opacity-100`
 - [x] commit + archive 记录
+
+## Commits
+
+- cea0a9a fix(web): m-share-button-mobile-visibility — 行操作按钮 mobile 常驻显示

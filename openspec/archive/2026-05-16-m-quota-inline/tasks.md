@@ -63,3 +63,7 @@
 
 - [ ] T10.1 commit（含 archive 路径 + spec delta 摘要）
 - [ ] T10.2 mv openspec/changes/m-quota-inline → openspec/archive/<date>-m-quota-inline
+
+## Commits
+
+- 99ec7a7 m-quota-inline: Quota enforcement 从 hook 回环搬入 ws input gate 内嵌

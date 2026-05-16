@@ -9,3 +9,7 @@
   靠 GitHub Actions 解析时验，无 local lint）
 - [x] T4. archive proposal 含 user runbook（如何启用 e2e job）
 - [x] T5. 删 BACKLOG.md B5 段
+
+## Commits
+
+- (no matching commits found in git log)

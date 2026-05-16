@@ -40,3 +40,7 @@
 - [ ] 6.2 把 `changes/m5b-weak-network/specs/` 下每个 delta 合并到 `openspec/specs/`
 - [ ] 6.3 把 `changes/m5b-weak-network/` 移到 `archive/YYYY-MM-DD-m5b-weak-network/`
 - [ ] 6.4 commit "M5b: idempotency keys, WS heartbeat, deleted session GC"
+
+## Commits
+
+- 8a4fad7 docs(openspec): merge & archive m5b-weak-network

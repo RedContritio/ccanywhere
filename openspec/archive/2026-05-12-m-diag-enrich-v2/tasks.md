@@ -12,3 +12,7 @@
 
 - build sha / version inject (vite define + diag.app.version)
 - user kind in diag (async fetch /api/me/quota)
+
+## Commits
+
+- (no matching commits found in git log)

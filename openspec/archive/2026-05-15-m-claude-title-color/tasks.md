@@ -61,3 +61,7 @@
 - [x] build:all + launchctl kickstart + healthz 200
 - [x] e2e 视觉确认（login light/dark；workspace 两处留 user reload）
 - [x] commit + archive
+
+## Commits
+
+- 7202e7d feat(web): m-claude-title-color — "CC anywhere" 标题用 Claude Crail orange

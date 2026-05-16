@@ -63,3 +63,7 @@
 - [ ] 8.2 把 `changes/m6-web-frontend/specs/` 合并进 `openspec/specs/`，新增 `web-frontend/spec.md`
 - [ ] 8.3 移到 `archive/YYYY-MM-DD-m6-web-frontend/`
 - [ ] 8.4 commit "M6: web frontend (React + xterm.js + mobile toolbar)"
+
+## Commits
+
+- (no matching commits found in git log)

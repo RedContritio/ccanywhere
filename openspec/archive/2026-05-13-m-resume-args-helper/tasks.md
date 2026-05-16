@@ -28,3 +28,7 @@
 - [x] T3.5. spec delta：在 `openspec/specs/sessions/persistence.spec.md`
   Resume 路径段加 "buildResumeArgs helper" 段 + regression Scenario
 - [x] T3.6. BACKLOG.md 删 B11
+
+## Commits
+
+- (no matching commits found in git log)

@@ -50,3 +50,7 @@
 
 - [ ] commit 后归档 `openspec/changes/m-multi-user-integration-tests/` →
   `openspec/archive/2026-05-11-m-multi-user-integration-tests/`
+
+## Commits
+
+- (no matching commits found in git log)

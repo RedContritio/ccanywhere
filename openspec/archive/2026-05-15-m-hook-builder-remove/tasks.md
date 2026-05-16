@@ -63,3 +63,7 @@ hook stdout 直通` 矛盾，本次改成 `2>/dev/null`。
     flaky，与本改动无关（grep 确认 manager.ts / registry.ts 未改）
 - [x] build:all + launchctl kickstart + healthz 200
 - [x] commit + archive
+
+## Commits
+
+- d5fb37e cleanup: m-hook-builder-remove + 6 review proposals + examples drift

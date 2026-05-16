@@ -72,20 +72,6 @@ proposal，统一流程）。
 
 ## 维护类 / 不做但记录
 
-### B16. archive commit hash 回填脚本
-
-- **状态**：低优先（cheap polish）
-- **scope**：~30 LOC scripts/backfill-archive-commits.mjs + 一次性扫
-- **背景**：CLAUDE.md 写 "tasks.md 关联 commit hash（ship 时回填）"
-  但抽 m-share-export-cleanup / m-logout-preserve-pairing / m-nav-
-  restructure-globals 等最新 archive 的 tasks.md，commit hash 字段空。
-  commit subject 含 slug，git log grep slug 能定位，所以信息没丢只是
-  查询便利。
-- **方案**：scripts/backfill-archive-commits.mjs 扫
-  `openspec/archive/<date>-<slug>/`，grep slug 在 `git log` 出现的
-  commits，在 tasks.md 末追加 `## Ship\n- <hash>: <msg>`。
-- **出处**：本评审 C3
-
 ---
 
 ## Deferred（触发条件未到 — 等真实信号再启动）

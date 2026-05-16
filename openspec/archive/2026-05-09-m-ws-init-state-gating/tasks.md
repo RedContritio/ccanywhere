@@ -47,3 +47,7 @@
 
 - [ ] T15. `mv openspec/changes/m-ws-init-state-gating openspec/archive/<date>-m-ws-init-state-gating`。
 - [ ] T16. 用户确认后 commit。
+
+## Commits
+
+- (no matching commits found in git log)

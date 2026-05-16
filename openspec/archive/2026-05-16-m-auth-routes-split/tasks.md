@@ -36,3 +36,7 @@
 - [ ] T6.1 `openspec/BACKLOG.md` 删 B14 条目
 - [ ] T6.2 commit（含 archive 路径，无 spec delta——结构重构）
 - [ ] T6.3 `mv openspec/changes/m-auth-routes-split openspec/archive/<date>-m-auth-routes-split`
+
+## Commits
+
+- 0c9c82e m-auth-routes-split: routes/auth.ts 290 → 90 行拆三段

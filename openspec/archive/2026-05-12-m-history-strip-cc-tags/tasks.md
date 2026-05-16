@@ -12,3 +12,7 @@
 - [x] T5. typecheck:all / test 顶层 309 pass / build:all / kickstart
   + healthz 200 全过
 - [x] T6. commit + archive（本目录）
+
+## Commits
+
+- 55f46ad fix(server): m-history-strip-cc-tags — history preview unwrap command-name / strip 12 noise tag

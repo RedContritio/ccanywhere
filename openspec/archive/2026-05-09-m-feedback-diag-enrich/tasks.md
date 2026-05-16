@@ -50,3 +50,7 @@
 - [ ] T15. 移动 `changes/m-feedback-diag-enrich/` 到
   `archive/2026-05-09-m-feedback-diag-enrich/`。
 - [ ] T16. commit。
+
+## Commits
+
+- (no matching commits found in git log)
