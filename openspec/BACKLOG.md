@@ -97,6 +97,24 @@ proposal，统一流程）。
 - **触发信号**：第三种登录方式被引入（当前仅 webauthn + token）
 - **出处**：本评审 B2
 
+### B36. `components/` 平铺切 feature 子目录
+
+- **状态**：deferred（触发阈未到）
+- **触发信号**：`components/` 突破 50 production files（当前 33 production + 13 test = 46，刚好低于阈值）
+- **scope**：~40 LOC 估算（实际改 imports 工作量 ~200 LOC scale）
+- **方案**：建 `components/workspace/ / session/ / terminal/ / share/ / quota/ / toolbar/ / common/` 子目录，原文件按 feature 归类，grep 全 import path 改一遍
+- **不做理由（2026-05-17 评估后 defer）**：触发阈未到，提前重构无 ROI；实际 import path 改动 scope 远超 ~40 LOC 估算；到 50 真痛点再启动
+- **出处**：2026-05-17 subagent 评审 2 §2
+
+### B37. React 18.3 → 19、Vite 5.4 → 6 dep bump
+
+- **状态**：deferred（稳定优先于追新）
+- **触发信号**：明确新功能需要 React 19 API（Server Components 不适用 ccanywhere；useFormStatus / useOptimistic 可能用例）
+- **scope**：~50 LOC dep bump + 跑全套 e2e 回归
+- **方案**：bump package.json + 跑 typecheck/test/e2e + 验证 xterm/radix lifecycle
+- **不做理由（2026-05-17 评估后 defer）**：React 19 useTransition/Suspense API 行为差异 + concurrent rendering 默认变化，需要回归 xterm.js (dispose timing) + radix (focus trap) 完整 e2e；当前 React 18.3 + Vite 5.4 stable 跑得好，无触发信号
+- **出处**：2026-05-17 subagent 评审 2 §8
+
 ### B13. dead session retention policy
 
 - **状态**：deferred（单 owner + ~10 limited e2e user，dead 数量远未到累积痛阈值）
