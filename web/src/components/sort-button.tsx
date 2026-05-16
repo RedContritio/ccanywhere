@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type SortDir = 'asc' | 'desc';
@@ -32,11 +33,12 @@ export function SortButton({
       )}
     >
       {children}
-      {dir !== null && (
-        <span aria-hidden="true" className="ml-0.5 font-mono">
-          {dir === 'asc' ? '↓' : '↑'}
-        </span>
-      )}
+      {dir !== null &&
+        (dir === 'asc' ? (
+          <ArrowDown aria-hidden="true" className="ml-0.5 inline-block h-3 w-3" />
+        ) : (
+          <ArrowUp aria-hidden="true" className="ml-0.5 inline-block h-3 w-3" />
+        ))}
     </button>
   );
 }

@@ -18,17 +18,6 @@ proposal，统一流程）。
 
 ## 体验增强 / polish
 
-### B28. share view sticky header mobile 滚动 shrink padding
-
-- **scope**：~30 LOC
-- **优先级**：低
-- **背景**：m-share-header-sticky ship 后 sticky bar `padding: 12px
-  56px 16px 0` mobile 占首屏 ~12vh。
-- **方案**：IntersectionObserver sentinel 在 sticky bar 后插一个 1px
-  div，sentinel 离开 viewport 时给 header 加 `.shrunk` class →
-  padding 缩成 `padding: 4px 56px 6px 0`。
-- **出处**：2026-05-17 subagent 评审 1 (BACKLOG 候选 4)
-
 ### B30. workspace mobile drawer 切 `ui/sheet.tsx`（删手写 transform + backdrop）
 
 - **scope**：~60 LOC
@@ -60,22 +49,6 @@ proposal，统一流程）。
 - **背景**：9 颗 zustand store 把 fetch + cache + error 揉一起，`use-background-poll.ts` 手写 polling，`sessions.ts` 手写乐观更新——TanStack Query 一行 hook 解决。当前 scale 撑得住但新功能（quota / shares / feedback list）继续加 store 会增维护负担。
 - **方案**：先 install + wrap `<QueryClientProvider>`；新功能（quota panel / shares list）直接用 `useQuery`；旧功能（sessions / projects）保留 zustand 不强迁；删 use-background-poll 改 `refetchInterval`。
 - **出处**：2026-05-17 subagent 评审 2 §4
-
-### B34. Unicode glyph → lucide icon（5 处 ☰ / × / ↑↓）
-
-- **scope**：~25 LOC
-- **优先级**：低
-- **背景**：empty-pane.tsx 和 workspace-main-pane.tsx 的 `☰`、session-list.tsx 和 notification-banner.tsx 的 `×`、sort-button.tsx 的 `↑↓` 用 Unicode 字符——渲染权重不可控、对齐 baseline 不一致、aria 友好度差。
-- **方案**：替换为 lucide-react 对应 icon（`Menu / X / ArrowUp / ArrowDown`）。机械替换。
-- **出处**：2026-05-17 subagent 评审 2 §5
-
-### B35. xterm theme hex 抽到 tokens.css `@theme` 暴露给 xterm 初始化
-
-- **scope**：~25 LOC
-- **优先级**：低
-- **背景**：`terminal-config.ts:34-43` 散落 8 个 xterm hex（webgl canvas 不读 CSS var 有合理理由）。
-- **方案**：tokens.css `@theme` 块加 `--color-xterm-*` raw value（不 alias），terminal-config.ts 改读 `getComputedStyle(document.documentElement).getPropertyValue('--color-xterm-*')`。
-- **出处**：2026-05-17 subagent 评审 2 §1
 
 ### B36. `components/` 平铺切 feature 子目录（触发阈：50 文件）
 

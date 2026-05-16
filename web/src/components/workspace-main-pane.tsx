@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -202,7 +203,7 @@ export function WorkspaceMainPane({
           onClick={onOpenDrawer}
           className="rounded-md border border-border px-2 py-1 leading-none md:hidden"
         >
-          ☰
+          <Menu className="h-4 w-4" />
         </button>
         <span className="truncate font-medium">
           {currentProject?.name ?? currentSession.projectId}

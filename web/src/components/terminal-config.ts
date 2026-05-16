@@ -29,6 +29,12 @@ export function pickRenderer(): RendererKind {
   return 'webgl';
 }
 
+// B35: hex values mirror tokens.css `--xterm-*` raw values (light/dark
+// :root blocks). Kept inline as fallback for jsdom / SSR / first-paint
+// before CSS is parsed — xterm.js webgl canvas reads ITheme at mount
+// and doesn't observe CSS var changes, so we keep the constant table
+// here as source of truth at runtime. tokens.css mirrors them so the
+// design token file lists all colors. MUST keep both in sync.
 export const THEMES: Record<'light' | 'dark', ITheme> = {
   dark: {
     background: '#0a0a0a',

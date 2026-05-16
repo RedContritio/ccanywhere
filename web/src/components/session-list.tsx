@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -86,9 +87,9 @@ export function SessionList({
                     }}
                     title="删除"
                     aria-label={`删除 ${proj?.name ?? s.projectId}`}
-                    className="absolute top-1/2 right-1 -translate-y-1/2 rounded-sm px-1.5 py-0.5 text-sm text-fg-muted transition-opacity transition-colors hover:text-danger max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                    className="absolute top-1/2 right-1 -translate-y-1/2 rounded-sm px-1.5 py-0.5 text-fg-muted transition-opacity transition-colors hover:text-danger max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
                   >
-                    ×
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 )}
               </li>

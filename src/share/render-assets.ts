@@ -44,6 +44,18 @@ export const STYLES = `
     display: flex; flex-direction: column; gap: 4px;
     padding: 12px 56px 16px 0; margin-bottom: 24px;
     border-bottom: 1px solid var(--border);
+    transition: padding 120ms ease-out;
+  }
+  /* B28 (m-share-sticky-shrink-mobile): once user scrolls past the
+   * sentinel, IntersectionObserver toggles .shrunk on header. mobile
+   * only — desktop keeps comfortable spacing. */
+  .sticky-sentinel { height: 1px; margin-top: -1px; }
+  @media (max-width: 768px) {
+    header.page.shrunk {
+      padding-top: 4px;
+      padding-bottom: 6px;
+    }
+    header.page.shrunk h1 { font-size: 15px; }
   }
   header.page h1 { margin: 0; font-size: 18px; font-weight: 600; }
   header.page .meta { font-size: 12px; color: var(--fg-muted); }
@@ -141,6 +153,28 @@ export const STYLES = `
     font-size: 11px; color: var(--fg-muted); text-align: center;
   }
 `;
+
+/**
+ * B28: shrink header.page when user scrolls below the first 1px of
+ * content (sentinel). IntersectionObserver fires reliably across
+ * mobile browsers; falls back to no-op when IO is unavailable (very
+ * old browsers — header just stays at full padding, no harm).
+ */
+export const STICKY_SHRINK_SCRIPT = `(function(){
+  if(!window.IntersectionObserver)return;
+  document.addEventListener('DOMContentLoaded',function(){
+    var s=document.querySelector('.sticky-sentinel');
+    var h=document.querySelector('header.page');
+    if(!s||!h)return;
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting)h.classList.remove('shrunk');
+        else h.classList.add('shrunk');
+      });
+    });
+    io.observe(s);
+  });
+})();`;
 
 export const THEME_SCRIPT = `(function(){
   var k='ccanywhere-share.theme';

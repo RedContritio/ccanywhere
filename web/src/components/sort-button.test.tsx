@@ -12,32 +12,30 @@ describe('SortButton', () => {
     expect(screen.getByText('Name')).toBeInTheDocument();
   });
 
-  it('shows ↓ arrow when active asc', () => {
-    render(
+  // B34: arrows are lucide SVG icons; query by aria-hidden class via parent button.
+  it('shows arrow icon when active (asc / desc)', () => {
+    const { container, rerender } = render(
       <SortButton active={true} dir="asc" onClick={() => {}}>
         Time
       </SortButton>,
     );
-    expect(screen.getByText('↓')).toBeInTheDocument();
-  });
-
-  it('shows ↑ arrow when active desc', () => {
-    render(
+    // asc → ArrowDown / desc → ArrowUp; both rendered as <svg>.
+    expect(container.querySelector('svg')).not.toBeNull();
+    rerender(
       <SortButton active={true} dir="desc" onClick={() => {}}>
         Time
       </SortButton>,
     );
-    expect(screen.getByText('↑')).toBeInTheDocument();
+    expect(container.querySelector('svg')).not.toBeNull();
   });
 
   it('no arrow when dir=null', () => {
-    render(
+    const { container } = render(
       <SortButton active={false} dir={null} onClick={() => {}}>
         Time
       </SortButton>,
     );
-    expect(screen.queryByText('↓')).not.toBeInTheDocument();
-    expect(screen.queryByText('↑')).not.toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeNull();
   });
 
   it('active uses text-brand, inactive uses text-fg-muted', () => {

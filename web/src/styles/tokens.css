@@ -81,6 +81,16 @@
   --success: #2f9d4a;
   --warning: #c47a00;
   --danger: #d33a3a;
+
+  /* B35: xterm theme raw values. xterm.js webgl canvas doesn't read
+   * CSS vars at render time, so terminal-config.ts reads these via
+   * getComputedStyle on mount + theme switch. Defined here so the
+   * 8 xterm hex live in the central design token file, not scattered
+   * in component code. Keep in sync with light/dark blocks below. */
+  --xterm-bg: #ffffff;
+  --xterm-fg: #1a1a1a;
+  --xterm-cursor: #1a1a1a;
+  --xterm-selection: #cfd8e3;
 }
 
 :root[data-theme='dark'] {
@@ -94,6 +104,10 @@
   --success: #5cd674;
   --warning: #ffb547;
   --danger: #ff6b6b;
+  --xterm-bg: #0a0a0a;
+  --xterm-fg: #e6e6e6;
+  --xterm-cursor: #e6e6e6;
+  --xterm-selection: #3a3a3a;
 }
 
 :root[data-theme='light'] {
@@ -107,4 +121,8 @@
   --success: #2f9d4a;
   --warning: #c47a00;
   --danger: #d33a3a;
+  --xterm-bg: #ffffff;
+  --xterm-fg: #1a1a1a;
+  --xterm-cursor: #1a1a1a;
+  --xterm-selection: #cfd8e3;
 }

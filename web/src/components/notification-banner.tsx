@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type Permission = 'default' | 'granted' | 'denied' | 'unsupported';
@@ -40,7 +41,7 @@ export function NotificationBanner(): JSX.Element | null {
           onClick={() => setDismissed(true)}
           aria-label="关闭"
         >
-          ×
+          <X className="h-3.5 w-3.5" />
         </Button>
       </div>
     );
@@ -76,7 +77,7 @@ export function NotificationBanner(): JSX.Element | null {
         onClick={() => setDismissed(true)}
         aria-label="关闭"
       >
-        ×
+        <X className="h-3.5 w-3.5" />
       </Button>
     </div>
   );

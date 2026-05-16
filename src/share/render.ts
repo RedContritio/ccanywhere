@@ -1,4 +1,4 @@
-import { STYLES, THEME_SCRIPT } from './render-assets.js';
+import { STICKY_SHRINK_SCRIPT, STYLES, THEME_SCRIPT } from './render-assets.js';
 import {
   composeMessageHtml,
   escapeHtml,
@@ -117,9 +117,11 @@ export function renderShareHtml(input: RenderInput): string {
 <title>${escapeHtml(title)}</title>
 <style>${STYLES}</style>
 <script>${THEME_SCRIPT}</script>
+<script>${STICKY_SHRINK_SCRIPT}</script>
 </head>
 <body>
 <div class="container">
+<div class="sticky-sentinel" aria-hidden="true"></div>
 <header class="page">
 <h1>${escapeHtml(input.projectName)}</h1>
 <div class="meta">${meta}</div>
