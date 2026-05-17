@@ -8,6 +8,7 @@ import {
   checkQuota,
   type UsageStore,
 } from './quota-check.js';
+import { copyForwardHeaders, forwardSseResponse } from './sse.js';
 import type { TokenIssuer } from './tokens.js';
 
 const DEFAULT_UPSTREAM = 'https://api.anthropic.com';
@@ -38,14 +39,46 @@ export function registerForwardRoutes(
   deps: ForwardDeps,
 ): void {
   app.post('/v1/messages', async (req, reply) => {
-    await handleForward(req, reply, deps);
+    await handleForward(req, reply, deps, {
+      upstreamPath: '/v1/messages',
+      allowMeter: true,
+    });
   });
+
+  // count_tokens is Anthropic-side free (no quota burn). We still
+  // require bearer + check quota — gating access to upstream, not
+  // metering — but skip recording any usage on response.
+  app.post('/v1/messages/count_tokens', async (req, reply) => {
+    await handleForward(req, reply, deps, {
+      upstreamPath: '/v1/messages/count_tokens',
+      allowMeter: false,
+    });
+  });
+
+  // D6: model discovery reserved. Returning 404 with explicit reason
+  // makes the gap loud if a future ccanywhere user enables
+  // CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1.
+  app.get('/v1/models', async (_req, reply) => {
+    await reply.code(404).send({
+      error: {
+        code: 'reserved',
+        message:
+          '/v1/models reserved follow-up (m-anthropic-proxy-models)',
+      },
+    });
+  });
+}
+
+interface RouteOpts {
+  readonly upstreamPath: string;
+  readonly allowMeter: boolean;
 }
 
 async function handleForward(
   req: FastifyRequest,
   reply: FastifyReply,
   deps: ForwardDeps,
+  route: RouteOpts,
 ): Promise<void> {
   // 1. Bearer auth
   const auth = req.headers.authorization;
@@ -88,7 +121,7 @@ async function handleForward(
 
   // 3. Build upstream request
   const baseUrl = deps.upstreamBaseUrl ?? DEFAULT_UPSTREAM;
-  const upstreamUrl = new URL('/v1/messages', baseUrl);
+  const upstreamUrl = new URL(route.upstreamPath, baseUrl);
   // spike F1: preserve query string (?beta=true etc.)
   const queryIdx = req.url.indexOf('?');
   if (queryIdx >= 0) {
@@ -144,12 +177,26 @@ async function handleForward(
     return;
   }
 
-  // 5. Read body
+  // 5. SSE branch (claude SDK uses streaming for /v1/messages when
+  // body has `stream: true`; count_tokens never streams). Detect by
+  // response content-type to handle both with a single forward path.
+  const respContentType = upstreamResp.headers.get('content-type') ?? '';
+  if (respContentType.includes('text/event-stream')) {
+    await forwardSseResponse(
+      reply,
+      upstreamResp,
+      { addUsage: deps.addUsage },
+      verified.userId,
+      route.allowMeter,
+    );
+    return;
+  }
+
+  // 6. JSON path: read full body, optional meter, send.
   const respBuf = Buffer.from(await upstreamResp.arrayBuffer());
   const respText = respBuf.toString('utf8');
 
-  // 6. Meter (only on 2xx — D3 prevents SDK retry double-counting)
-  if (upstreamResp.ok) {
+  if (upstreamResp.ok && route.allowMeter) {
     try {
       const parsed = JSON.parse(respText) as ResponseShape;
       const meter = meterResponse(parsed);
@@ -164,18 +211,7 @@ async function handleForward(
     }
   }
 
-  // 7. Forward response
   reply.code(upstreamResp.status);
-  upstreamResp.headers.forEach((value, key) => {
-    const lc = key.toLowerCase();
-    if (
-      lc === 'content-length' ||
-      lc === 'connection' ||
-      lc === 'transfer-encoding'
-    ) {
-      return;
-    }
-    reply.header(key, value);
-  });
+  copyForwardHeaders(reply, upstreamResp.headers);
   await reply.send(respText);
 }

@@ -326,3 +326,85 @@ describe('POST /v1/messages — metering', () => {
     await app.close();
   });
 });
+
+describe('GET /v1/models (D6 reserved)', () => {
+  it('returns 404 with reserved code', async () => {
+    const app = await buildProxyServer({
+      credentials,
+      forward: {
+        tokenIssuer: mkIssuer(),
+        usageStore: mkUsageStore({}),
+        addUsage: async () => {},
+        fetchImpl: mockFetch({ status: 200, headers: {}, body: '{}' }),
+      },
+    });
+    const res = await app.inject({ method: 'GET', url: '/v1/models' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('reserved');
+    await app.close();
+  });
+});
+
+describe('POST /v1/messages/count_tokens', () => {
+  it('still requires bearer (auth gate)', async () => {
+    const app = await buildProxyServer({
+      credentials,
+      forward: {
+        tokenIssuer: mkIssuer(),
+        usageStore: mkUsageStore({}),
+        addUsage: async () => {},
+        fetchImpl: mockFetch({ status: 200, headers: {}, body: '{}' }),
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/messages/count_tokens',
+      payload: {},
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('forwards but does NOT meter (count_tokens is free upstream)', async () => {
+    const issuer = mkIssuer();
+    const { token } = issuer.issue('alice');
+    const usageCalls: number[] = [];
+    const captured: { url?: string } = {};
+    const app = await buildProxyServer({
+      credentials,
+      forward: {
+        tokenIssuer: issuer,
+        usageStore: mkUsageStore({
+          alice: { used: 0, limit: 100, resetAt: Date.now() + 60_000 },
+        }),
+        addUsage: async (_uid, cost) => {
+          usageCalls.push(cost);
+        },
+        fetchImpl: mockFetch(
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              model: 'claude-opus-4-7',
+              usage: { input_tokens: 1_000_000, output_tokens: 0 },
+            }),
+          },
+          captured,
+        ),
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/messages/count_tokens',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { model: 'claude-opus-4-7', messages: [] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(captured.url).toBe(
+      'https://api.anthropic.com/v1/messages/count_tokens',
+    );
+    expect(usageCalls).toHaveLength(0); // NOT metered
+    await app.close();
+  });
+});
+

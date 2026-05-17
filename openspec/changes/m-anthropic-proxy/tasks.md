@@ -28,9 +28,12 @@
       query `?beta=...` （spike F1），转发到 api.anthropic.com，
       stainless headers 透传（spike F4），upstream 502/throw 转 502
       verbatim，其他 status code verbatim forward (C3)
-- [ ] SSE streaming pipe（chunked response 流式 forward）(C4)
-- [ ] `POST /v1/messages/count_tokens` 同上简化版（无 SSE）(C4)
-- [ ] `GET /v1/models` 返 404 with reserved 提示（D6）(C4)
+- [x] SSE streaming pipe（chunked response 流式 forward）+ usage 累
+      积 + reply.hijack + raw.write; 拆到独立 src/proxy/sse.ts 避
+      免 forward.ts 超 300 行 lint cap (C4)
+- [x] `POST /v1/messages/count_tokens` (allowMeter:false: 仍走 auth+
+      quota gate 但不计费，count_tokens 上游免费) (C4)
+- [x] `GET /v1/models` 返 404 with `code: reserved` (D6) (C4)
 - [x] `src/proxy/metering.ts`: 解析 response usage 字段 + priceFor
       算 USD cost，失败响应不计费 (D3, spike F3) (C3)
 - [x] `src/proxy/quota-store.ts`: FileUsageStore 实现 UsageStore
@@ -84,8 +87,12 @@
       unknown user → null + 无限 limit + accumulate + daily lazy
       reset + 持久化 mode 0600 + 重启读回 + corrupt file 走 fresh
       (C3)
-- [ ] SSE chunked 转发测试 (C4)
-- [ ] retry 不 double-count 完整 e2e (C4 真起 proxy)
+- [x] `src/proxy/sse.test.ts` (6): SSE 端到端 (2xx meter 累积 + 5xx
+      不 meter) + parser unit (splitSseChunks 边界 + extractSseUsage
+      message_start/_delta + 异常输入容错) (C4)
+- [x] forward.test.ts 加: GET /v1/models 404 reserved + count_tokens
+      auth gate + count_tokens 不计费 (C4)
+- [ ] retry 不 double-count 完整 e2e (C5 真起 proxy 验)
 - [ ] e2e: 起 proxy + curl 真打 `/v1/messages` 验完整链路 (C5
       manual-verify 脚本)
 
