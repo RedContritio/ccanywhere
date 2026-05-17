@@ -16,9 +16,11 @@
       （spike F2）+ /healthz + setNotFoundHandler / setErrorHandler
       (C1, 转发路由 C3+)
 - [x] `HEAD /` route 返 200（spike F5 启动 probe）(C1)
-- [ ] `src/proxy/tokens.ts`: bearer 颁发（5min TTL）+ 校验 + 解析
-      userId
-- [ ] `src/proxy/quota-check.ts`: inline check，超额返 429
+- [x] `src/proxy/tokens.ts`: bearer 颁发（5min TTL 默认）+ HMAC-SHA256
+      签名 + base64url 编码 + timingSafeEqual 验证 (C2)
+- [x] `src/proxy/quota-check.ts`: inline check 接口 + UsageStore 抽象;
+      unknown user 走 fail-closed (D7); store impl 留 C3 跟
+      metering 一起 (C2)
 
 ## 实现 — 转发 + 计量
 
@@ -51,7 +53,10 @@
 
 ## 测试
 
-- [ ] `src/proxy/tokens.test.ts`: 颁发 / 验证 / 过期 / 重放防护
+- [x] `src/proxy/tokens.test.ts`: 颁发 / 验证 / 过期 / HMAC 篡改 /
+      跨 secret 拒绝 / nonce 唯一性 (C2, 13 测试)
+- [x] `src/proxy/quota-check.test.ts`: unknown user / limit null /
+      used < limit / used === limit / overshoot / limit 0 (C2, 7 测试)
 - [x] `src/proxy/credentials.test.ts`: 文件 mode 校验 + 缺失走
       503 模式 (C1, 7 测试)
 - [x] `src/proxy/log-redact.test.ts`: redact rules + self-test
