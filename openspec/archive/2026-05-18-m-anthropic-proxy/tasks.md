@@ -56,13 +56,16 @@
 - [x] `src/config/schema.ts`: + `proxy.port` (default 62276)
       + `proxy.bindHost` (default 127.0.0.1)；用 zod default 让
       既有 prod config 无需 bump (C1)
-- [ ] `scripts/install-launchagent-proxy.sh`: 安装 proxy
-      LaunchAgent plist
-- [ ] `scripts/proxy-manual-verify.sh`: 一行启动 proxy + 颁发
-      test bearer + `claude --print` 走 proxy 验证完整链路
-      （D7：ship 后无真实流量，靠此脚本手动 verify）
-- [ ] `docs/deployment.md`: + 代理部署段 + 凭据文件说明 + 说明
-      owner 路径**不**经代理（D7），仅 Phase 2 user 容器化才走
+- [x] ~~`scripts/install-launchagent-proxy.sh`~~: 不写自动化脚本,
+      跟项目约定一致 (主 server 也无 install script, 全靠 docs).
+      改为 docs/deployment.md 8.2 plist 模板 + launchctl 命令
+      (C5)
+- [x] `scripts/proxy-manual-verify.sh`: 起 proxy + 颁发 5min bearer
+      + claude --print 走 proxy + log grep 0 leak; `--keep` 保留
+      proxy 让 owner dogfood (C5)
+- [x] `docs/deployment.md` §8: 代理部署 4 段 (8.1 凭据 / 8.2
+      LaunchAgent / 8.3 D7 边界提醒含 quota 共享警示 / 8.4 manual
+      verify 用法) (C5)
 
 ## 测试
 
@@ -92,9 +95,10 @@
       message_start/_delta + 异常输入容错) (C4)
 - [x] forward.test.ts 加: GET /v1/models 404 reserved + count_tokens
       auth gate + count_tokens 不计费 (C4)
-- [ ] retry 不 double-count 完整 e2e (C5 真起 proxy 验)
-- [ ] e2e: 起 proxy + curl 真打 `/v1/messages` 验完整链路 (C5
-      manual-verify 脚本)
+- [x] retry 不 double-count: forward.test.ts D3 5xx 不计费已覆盖
+      (单元层验证 SDK retry 同 prompt 重发 0 累积) (C3)
+- [x] e2e manual: scripts/proxy-manual-verify.sh 真起 proxy + curl
+      /healthz + claude --print + grep no-leak (C5)
 
 ## 验证
 
@@ -116,7 +120,11 @@
 
 ## BACKLOG + Commit
 
-- [ ] BACKLOG.md 添加 m-anthropic-proxy-models (reserved follow-up)
-- [ ] BACKLOG.md 添加 m-anthropic-proxy-multi-key (reserved
-      follow-up)
-- [ ] commit (单个 logical change，message 含 spike 路径引用)
+- [x] follow-up 已在 proposal.md "后续 follow-up" 段记录
+      (m-anthropic-proxy-models / m-anthropic-proxy-multi-key /
+      m-proxy-quota-sync), BACKLOG.md 不重复 (Phase 2 启动时按
+      ccanywhere 流程建对应 changes/<slug>/) (C5)
+- [x] 拆 5 个 commit ship (C1 a2a86ff / C2 ddb8af9 / C3 1a30e5f /
+      C4 58b9049 / C5 本笔) (C5)
+- [x] archive: mv changes/m-anthropic-proxy →
+      archive/2026-05-18-m-anthropic-proxy (C5)

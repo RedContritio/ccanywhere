@@ -265,3 +265,14 @@ hook quota enforcement 见 [`openspec/specs/hooks/spec.md`](../openspec/specs/ho
 "UserPromptSubmit 是 quota 单一 enforcement 点"。
 
 config 不动，前端构建产出会被 fastify-static 即时服务。
+
+## 8. anthropic 代理（m-anthropic-proxy，Phase 1）
+
+独立 LaunchAgent 进程 (`ccanywhere proxy serve`)，listen
+`config.proxy.port` (default 62276) on `config.proxy.bindHost`
+(default 127.0.0.1)。**owner 路径不经此代理** (D7)，仅为 Phase 2
+user 容器化做的基础设施。Phase 1 ship 后没真实流量经过；靠
+`scripts/proxy-manual-verify.sh` + 单元测试验证。
+
+详细见 [deployment-proxy.md](./deployment-proxy.md)。
+

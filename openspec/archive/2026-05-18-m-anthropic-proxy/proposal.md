@@ -1,5 +1,5 @@
 ---
-status: in-flight
+status: archived
 ---
 
 # Proposal: m-anthropic-proxy — 自建 Anthropic API 代理
