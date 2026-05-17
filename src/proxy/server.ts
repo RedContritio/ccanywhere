@@ -1,5 +1,13 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { OwnerCredentials } from './credentials.js';
+import { type ForwardDeps, registerForwardRoutes } from './forward.js';
+
+/**
+ * Forward route dependencies sans credentials — buildProxyServer
+ * injects credentials from its own opts (single source). C3+ omitted
+ * ⇒ /v1/messages stays unregistered (404).
+ */
+export type ForwardOptions = Omit<ForwardDeps, 'credentials'>;
 
 export interface BuildProxyOptions {
   /**
@@ -9,6 +17,12 @@ export interface BuildProxyOptions {
    * until credentials arrive).
    */
   readonly credentials: OwnerCredentials | null;
+  /**
+   * Forward route deps. Omit ⇒ /v1/messages stays unregistered (404
+   * from setNotFoundHandler). Credentials null also disables
+   * registration even if `forward` is provided — degraded mode wins.
+   */
+  readonly forward?: ForwardOptions;
 }
 
 export async function buildProxyServer(
@@ -32,6 +46,15 @@ export async function buildProxyServer(
   });
 
   app.get('/healthz', () => ({ ok: true, mode }));
+
+  // C3+: register forward routes only when credentials AND forward deps
+  // are both present. Either missing ⇒ degraded mode (404 on /v1/*).
+  if (opts.credentials !== null && opts.forward !== undefined) {
+    registerForwardRoutes(app, {
+      ...opts.forward,
+      credentials: opts.credentials,
+    });
+  }
 
   app.setErrorHandler((err, _req, reply) => {
     if (reply.statusCode < 400) reply.code(500);

@@ -24,14 +24,24 @@
 
 ## 实现 — 转发 + 计量
 
-- [ ] `src/proxy/forward.ts`: `POST /v1/messages` 接受 query
-      `?beta=...` （spike F1），转发到 api.anthropic.com，stainless
-      headers 透传（spike F4）
-- [ ] SSE streaming pipe（chunked response 流式 forward）
-- [ ] `POST /v1/messages/count_tokens` 同上简化版（无 SSE）
-- [ ] `GET /v1/models` 返 404 with reserved 提示（D6）
-- [ ] `src/proxy/metering.ts`: 解析 response usage 字段，按 userId
-      记账（失败响应不计费，spike F3）
+- [x] `src/proxy/forward.ts`: `POST /v1/messages` 非流式版接受
+      query `?beta=...` （spike F1），转发到 api.anthropic.com，
+      stainless headers 透传（spike F4），upstream 502/throw 转 502
+      verbatim，其他 status code verbatim forward (C3)
+- [ ] SSE streaming pipe（chunked response 流式 forward）(C4)
+- [ ] `POST /v1/messages/count_tokens` 同上简化版（无 SSE）(C4)
+- [ ] `GET /v1/models` 返 404 with reserved 提示（D6）(C4)
+- [x] `src/proxy/metering.ts`: 解析 response usage 字段 + priceFor
+      算 USD cost，失败响应不计费 (D3, spike F3) (C3)
+- [x] `src/proxy/quota-store.ts`: FileUsageStore 实现 UsageStore
+      接口；JSON file backed (0600)，daily UTC reset，limitOf
+      callback 注入；Phase 1 不 sync UserStore.quota (BACKLOG
+      follow-up) (C3)
+- [x] proxy-serve.ts wire: ensureProxyTokenSecret + TokenIssuer +
+      FileUsageStore (limitOf 读 users.json sync) + forward deps
+      装 buildProxyServer (仅 credentials !== null 时) (C3)
+- [x] server.ts wire: BuildProxyOptions.forward 字段 + 条件
+      registerForwardRoutes (credentials !== null && forward) (C3)
 
 ## 实现 — CLI + 部署
 
@@ -63,16 +73,21 @@
       (C1, 4 测试)
 - [x] `src/proxy/server.test.ts`: HEAD / probe + /healthz +
       404 + bodyLimit 10MB (C1, 6 测试)
-- [ ] `src/proxy/forward.test.ts`: mock upstream，验证
-  - `?beta=true` 透传
-  - stainless headers 透传
-  - SSE chunked 转发
-  - 5xx 不计费
-  - retry 不 double-count（同 idempotency key 两次）
-- [ ] `src/proxy/metering.test.ts`: usage 解析 + 按 user 记账
-- [ ] `src/proxy/quota-check.test.ts`: 超额 429 + 未超 200
-- [ ] e2e: 起 proxy + curl 真打 `/v1/messages` (mock upstream)
-      验完整链路
+- [x] `src/proxy/forward.test.ts` (10): auth 3 (无 bearer / 无效
+      token / unknown user 401) + quota 1 (429) + forward 4 (header
+      替换 + stainless 透传 + ?beta + 502 / 5xx verbatim) + metering
+      2 (2xx 记账 + 5xx 不记) (C3)
+- [x] `src/proxy/metering.test.ts` (7): opus/sonnet/haiku 单价 +
+      cache_read/creation + 未知 model + partial usage NaN-safe
+      (C3)
+- [x] `src/proxy/quota-store.test.ts` (12): nextDailyReset 边界 +
+      unknown user → null + 无限 limit + accumulate + daily lazy
+      reset + 持久化 mode 0600 + 重启读回 + corrupt file 走 fresh
+      (C3)
+- [ ] SSE chunked 转发测试 (C4)
+- [ ] retry 不 double-count 完整 e2e (C4 真起 proxy)
+- [ ] e2e: 起 proxy + curl 真打 `/v1/messages` 验完整链路 (C5
+      manual-verify 脚本)
 
 ## 验证
 
