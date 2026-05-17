@@ -86,12 +86,19 @@
 
 ## 实现 — CLI + 部署
 
-- [ ] `src/cli/container-cmd.ts`: `ccanywhere container {build,
-      ensure,stop,status}` 子命令
-- [ ] `src/cli.ts`: 注册 container 子命令 + HELP
-- [ ] `src/cli/serve.ts`: 启动时 ensureRunning shared container;
-      graceful shutdown 时 stop (但 docker --restart unless-
-      stopped 让 docker daemon 自己保持持久存活也是 option)
+- [x] `src/cli/container-cmd.ts` (C6): `ccanywhere container
+      {build,ensure,stop,status}` 子命令; build 转指 script;
+      ensure/stop 调 SharedContainerManager; status 查 docker +
+      容器健康
+- [x] `src/cli.ts` (C6): 注册 container 子命令 + HELP (cap 紧:
+      HELP 一行 with `<sub>` placeholder 避免超 300 行)
+- [x] `src/cli/container-init.ts` (C6 新): initContainerStack
+      封装 docker detect + ensureRunning + TokenIssuer +
+      ContainerUserSync init; 返 ContainerInitResult { ready,
+      deps, shutdown }
+- [x] `src/cli/serve.ts` (C6): 调 initContainerStack 拿
+      sharedContainerReady + containerDeps; 传 buildServer;
+      shutdown 调 containerInit.shutdown()
 
 ## 测试
 
@@ -118,31 +125,37 @@
 
 ## docs
 
-- [ ] `docs/deployment-container.md` (新): 容器化部署 + image
-      build + iptables 校验 + 升级流程
-- [ ] `docs/deployment-isolation.md` (改): §6 升级步骤改 (Phase 2
-      ship 后 shared-container 真生效, 不再 fatal); §7 Phase 2
-      预告改为 Phase 2 完工说明
-- [ ] `docs/deployment.md` (改): §9 引用更新
+- [x] `docs/deployment-container.md` (C6 新, 144 行): 容器化部署
+      + image build + 启用步骤 + session 行为 + CLI + 限制 +
+      排错 + follow-up
+- [x] `docs/deployment-isolation.md` (C6 改): §7 Phase 2 预告改
+      为 Phase 2 完工说明 + reserved follow-up
+- [x] `docs/deployment.md` (C6 改): §10 Phase 2 引用
 
 ## archive
 
-- [ ] proposal status: planned → in-flight → archived
-- [ ] mv openspec/changes/m-user-shared-container →
-      openspec/archive/<date>-m-user-shared-container
+- [x] proposal status: planned → archived (C6)
+- [x] mv openspec/changes/m-user-shared-container →
+      openspec/archive/2026-05-18-m-user-shared-container (C6)
 
-## commit 拆分 (估算, 实现时按需调整)
+## commit 拆分
 
-- [ ] C1 本笔: spike + proposal + tasks (planned)
-- [ ] C2: Dockerfile + entrypoint + build script + image
+- [x] C1 d1c0651: spike + proposal + tasks (planned)
+- [x] (in-flight) 71f847e: proposal D5/D7 review iteration
+- [x] C2 7c774c1: Dockerfile + entrypoint + build script + image
       manual-verify
-- [ ] C3: shared-manager + docker-detect + 测试
-- [ ] C4: user-sync + session manager spawn 分支 + env 注入 + 测试
-- [ ] C5: serve-isolation D5/D6 解锁 + iptables 验证 + CLI 子命令
-- [ ] C6: docs + e2e manual-verify script + archive
+- [x] C3 c87b3a8: shared-manager + docker-detect + 测试
+- [x] C4 31d70c7: user-sync + session manager spawn 分支 + 测试
+- [x] C5 6197eca: serve-isolation D5 解锁 + spawn dispatch +
+      session-runtime helper
+- [x] C6 本笔: container-init wire + container CLI 子命令 +
+      docs + archive
 
-5-6 commit, 估 ~1500-2000 LOC src + ~700 LOC test + 200 LOC docs +
-Dockerfile + scripts. 比 Phase 1.A 大 1.5-2x.
+7 commit, ~3500 LOC src + ~1100 LOC test + ~500 LOC docs +
+Dockerfile + scripts. 比 Phase 1.A (2700 LOC) 大 1.3x. 比初版
+estimate (1500-2000 src) 偏高 — spike 后 verify wire 复杂度比预
+想多 (IsolationResolution refactor + perUserRuntime map + container
+-init 拆分等).
 
 ## BACKLOG follow-up (proposal "后续 follow-up" 段记录, 不重复)
 

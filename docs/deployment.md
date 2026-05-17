@@ -279,9 +279,17 @@ user 容器化做的基础设施。Phase 1 ship 后没真实流量经过；靠
 ## 9. user runtime 隔离策略（m-user-runtime-schema，Phase 1.B）
 
 Phase 1.B 落了配置层：admin 在 `config.isolationPolicy` 声明全局
-策略，`config.users.<name>.runtime` 声明 per-user 沙箱。Phase 1.B
-**不**实现容器本身（Phase 2 m-user-shared-container），但启动时
-会校验配置 + 喊出当前 isolation 模式 + 在 `/healthz` 暴露状态。
+策略，`config.users.<name>.runtime` 声明 per-user 沙箱。启动时校
+验配置 + 喊出当前 isolation 模式 + 在 `/healthz` 暴露状态。
 
 详细见 [deployment-isolation.md](./deployment-isolation.md)。
+
+## 10. user 容器化（m-user-shared-container，Phase 2）
+
+Phase 2 落了 shared container spawn：admin 配
+`runtime: 'shared-container'` 时 user session 通过 `docker exec`
+进入 ccanywhere-shared-<port> 容器内跑 claude，anthropic 流量经
+proxy（Phase 1.A）。owner 路径 0 改动。
+
+详细见 [deployment-container.md](./deployment-container.md)。
 

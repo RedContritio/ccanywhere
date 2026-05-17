@@ -190,15 +190,24 @@ runtime 配置被忽略（audit warn）。适合单 owner 部署 + 偶尔几个
    `{"ok":true,"isolation":{"mode":"strict","ready":true}}` 或
    `"host-only"` mode
 
-## 7. Phase 2 预告
+## 7. Phase 2 (m-user-shared-container) — 已 ship
 
-Phase 2 m-user-shared-container 时:
-- 实现 shared container spawn (docker run 包装 + per-user
-  CLAUDE_CONFIG_DIR + 容器内 unix user 隔离 + iptables 出站锁
-  到代理)
-- 加 docker availability detection (让 `fallback` 模式真正生效:
-  docker 不可用时 warn + 全 user 降级 host)
-- web UI 顶条提示 user "你当前在 degraded host mode" 让 user
-  自己知情 (Phase 1.B 跳过, user 看不到容器/host 差异)
-- session manager spawn 路径加 host/container 分支 (Phase 1.B 还
-  是单一 host spawn)
+容器化 spawn 已 ship 在 m-user-shared-container archive (2026-05-18):
+- shared container spawn (docker exec into long-running container,
+  per-user CLAUDE_CONFIG_DIR + unix user 隔离 + iptables egress
+  锁 api.anthropic.com)
+- docker availability detection (启动 + ccanywhere 内部 health
+  poll)
+- session manager spawn 路径 host/container 分支
+- session env 自动注入 ANTHROPIC_BASE_URL/AUTH_TOKEN/
+  CLAUDE_CONFIG_DIR + DISABLE_AUTOUPDATER/TELEMETRY
+
+详细见 [deployment-container.md](./deployment-container.md).
+
+仍待 follow-up:
+- m-runtime-degraded-ui-banner: web 顶条提示 user 当前 runtime
+  (Phase 1.B + 2 都跳过, 改 web 后单独 ship)
+- m-runtime-fallback-real-degrade: `fallback` 模式真正"docker
+  不可用时 silent override host" 而非 fatal (m-user-shared-container
+  C6 中 fallback 行为仍同 strict; 改 serve-isolation 让 fallback
+  + sharedContainerReady=false 时 sliently set perUserRuntime=host)

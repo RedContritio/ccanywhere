@@ -1,5 +1,5 @@
 ---
-status: planned
+status: archived
 ---
 
 # Proposal: m-user-shared-container — Phase 2 容器化主体

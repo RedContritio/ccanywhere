@@ -10,6 +10,7 @@ import {
   runFeedbackShow,
 } from './cli/feedback.js';
 import { runRevoke } from './cli/revoke.js';
+import { runContainerSubcommand } from './cli/container-cmd.js';
 import { runProxySubcommand } from './cli/proxy-serve.js';
 import { runServe } from './cli/serve.js';
 import { runTokenIssue, runTokenList, runTokenRevoke } from './cli/token.js';
@@ -80,6 +81,7 @@ usage:
   ccanywhere proxy serve [--config <path>]
                                           start the anthropic API proxy (independent process,
                                           listens on config.proxy.port, default 62276)
+  ccanywhere container <sub> [--config]   admin tool: build (hint) | ensure | stop | status
   ccanywhere help                         show this help
 
 Multi-instance same-host deployments (e.g. prod + staging) just hand each
@@ -149,6 +151,8 @@ async function dispatch(argv: ReadonlyArray<string>): Promise<void> {
       return runFeedbackSubcommand([...positional], configPath);
     case 'proxy':
       return runProxySubcommand([...positional], configPath);
+    case 'container':
+      return runContainerSubcommand([...positional], configPath);
     case 'help':
     case '--help':
     case '-h':

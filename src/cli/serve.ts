@@ -15,6 +15,7 @@ import { SessionRegistry } from '../session/registry.js';
 import { ShareStore } from '../share/store.js';
 import { TokenStore } from '../tokens/store.js';
 import { UserStore } from '../users/store.js';
+import { initContainerStack } from './container-init.js';
 import { resolveIsolation } from './serve-isolation.js';
 
 /**
@@ -153,14 +154,21 @@ export async function runServe(configPathArg?: string): Promise<void> {
 
   const internalHookToken = randomBytes(32).toString('hex');
 
+  // m-user-shared-container C6: docker detect + shared container
+  // ensureRunning + ContainerUserSync + TokenIssuer init. Returns
+  // sharedContainerReady flag for resolveIsolation D5 decision +
+  // containerDeps for buildServer + shutdown hook for SIGTERM.
+  const containerInit = await initContainerStack(config, configDir);
+
   // m-user-runtime-schema. Resolve isolation policy + per-user runtime
   // BEFORE building the server (fatal on bad config; ready snapshot
   // exposed via /healthz). Owner D3 / strict-container D5 / host-only
-  // D4 all decide here. C6 will wire docker-detect + container deps
-  // before this call so sharedContainerReady can be set true.
+  // D4 all decide here. C6 wires sharedContainerReady from
+  // containerInit so D5 unlocks when container deps are ready.
   const { status: isolation, perUserRuntime } = resolveIsolation(
     config,
     ownerUser.username,
+    { sharedContainerReady: containerInit.sharedContainerReady },
   );
 
   const app = await buildServer({
@@ -176,6 +184,9 @@ export async function runServe(configPathArg?: string): Promise<void> {
     cliToken,
     isolation,
     perUserRuntime,
+    ...(containerInit.containerDeps !== undefined
+      ? { containerDeps: containerInit.containerDeps }
+      : {}),
   });
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
@@ -190,6 +201,8 @@ export async function runServe(configPathArg?: string): Promise<void> {
     // the metadata is durable before process.exit.
     await manager.killAll();
     await manager.detach();
+    // m-user-shared-container C6: stop shared container (idempotent).
+    await containerInit.shutdown();
     process.exit(0);
   };
   process.on('SIGINT', (s) => void shutdown(s));

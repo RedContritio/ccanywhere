@@ -32,7 +32,7 @@ export async function runProxySubcommand(
   process.exit(2);
 }
 
-function ensureProxyTokenSecret(path: string): Buffer {
+export function ensureProxyTokenSecret(path: string): Buffer {
   if (existsSync(path)) {
     const raw = readFileSync(path);
     if (raw.length >= 32) return raw;
