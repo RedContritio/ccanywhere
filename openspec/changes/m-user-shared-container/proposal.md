@@ -45,11 +45,11 @@ spike 数据 (spike-p3-p4.md) 解决了两个关键不确定性：
 新增 `docker/Dockerfile.ccanywhere-user` (在 repo root 不在
 src/):
 - base: alpine 或 debian-slim
-- install: node (跟 ccanywhere 主进程同版本) + claude binary +
-  iptables + 必要 shell tools
-- entrypoint: 初始化 iptables (sudo cap-add NET_ADMIN 或 init
-  container 模式) + 创建 per-user unix account (按 ccanywhere user
-  list 启动时 useradd)
+- install: node (跟 ccanywhere 主进程同版本) + iptables +
+  必要 shell tools (**claude binary mount 进, image 不打包, D7**)
+- entrypoint: iptables init (drop api.anthropic.com, ACCEPT 其他,
+  D5) + 创建 per-user unix account (按 ccanywhere user list 启动时
+  useradd) + sleep infinity 待命
 - `scripts/build-container-image.sh`: docker build + tag +
   ccanywhere instance 启动时 ensure
 
@@ -123,15 +123,25 @@ ccanywhere CLI 新增 user 时同步在 container 内 useradd (run-time
 mutation OR container restart-on-user-change)。两种 trade-off 在
 实现时决 — 倾向 run-time mutation (减少 restart 频率)。
 
-### D5. iptables egress 锁定
+### D5. iptables egress 仅锁 api.anthropic.com (默认 ACCEPT)
 
 shared container 启动时 init script 跑 iptables:
-- ACCEPT: host.docker.internal:62276 (proxy)
-- DROP: everything else (含 api.anthropic.com 直连)
+- DROP: outgoing to api.anthropic.com (强制 anthropic 流量经代理)
+- ACCEPT: rest (github / web_search / MCP servers / 其他外部 API)
+- ACCEPT: loopback + host.docker.internal:62276 (proxy)
 
-需要容器 cap-add NET_ADMIN。这是**安全 enforcement 的最后一道
-锁** (即便 claude 内部 hardcoded telemetry 走 api.anthropic.com
-也被阻断)。
+需要容器 `--cap-add NET_ADMIN`。这是 anthropic 流量经代理的
+**enforcement 最后一道锁**——claude 不能绕开代理直连
+api.anthropic.com 烧 owner 配额。
+
+**修订自原 D5 (default-DROP only-allow-proxy)**: claude 工具体系
+里 github MCP / web_search / fetch_url 等需要广域外部访问，全
+DROP 会断主要功能。仅 DROP anthropic 强制走代理，其他放行。
+
+**代价**: claude 内部如有 hardcoded telemetry 走非 anthropic 域名
+(如 anthropic-cdn / segment.io / amplitude) 会**绕过 enforcement**。
+mitigation: `DISABLE_TELEMETRY=1` env 兜底 (m-anthropic-proxy
+spike P2 实测无非 anthropic.com 直连)。低风险, 接受。
 
 ### D6. docker availability detection (m-runtime-docker-detection 内联)
 
@@ -144,21 +154,23 @@ alpine true` (实际容器拉起) 才算 ready。`fallback` 模式下 docker
 degraded mode (但不 down ccanywhere; user-affecting fatal 是过
 度反应)。
 
-### D7. claude binary 在 image 内 vendor (不 mount)
+### D7. claude binary mount 进容器 (不 vendor)
 
-vendor 进 image:
-- (+) image 可复现, 跟 ccanywhere 版本一起 tag
-- (+) 不依赖 host claude version
-- (-) image 大 (claude binary ~50MB)
-- (-) ccanywhere 升级要 rebuild image
+容器启动加 `-v <config.claudeBin>:/usr/local/bin/claude:ro` 复用
+ccanywhere 既有 `config.claudeBin` 字段 (该字段已经是绝对路径,
+LaunchAgent 要求)。
 
-mount /host/path/claude → /usr/local/bin/claude:
-- (+) 跟 host 同步
-- (-) host path 跨 mac/linux 不同, 配置复杂
-- (-) host claude 升级容器跟着升, 行为漂移
+- (+) host claude 升级 → 容器自动跟随，image 不需 rebuild
+- (+) image 小 (claude binary ~50MB 省掉)
+- (+) 复用既有配置, 不引入新字段
+- (-) host claude 版本变 → 容器跟随变 (但是 admin 主动控的)
+- (-) host claude path 跨平台异 (mac/linux 路径不同) — 但 ccanywhere
+  当前 mac-first, `claudeBin` 配置已有跨平台抽象需求, 不是新问题
 
-倾向 vendor。每次 claude release 时 ccanywhere CI rebuild + push
-image (实际本 repo 是 personal repo, 'CI' 是手动 build 脚本)。
+**修订自原 D7 (vendor 倾向)**: vendor 让 image rebuild 跟 claude
+release 强耦合, ccanywhere 是个人 repo 无 CI 自动 build, 实际负
+担大于"image 可复现"的收益。mount 路径复用既有 claudeBin 配置,
+零增量配置复杂度。
 
 ### D8. shared container 失败的 blast radius
 
@@ -196,7 +208,7 @@ Dockerfile + init script. **Phase 2 比 Phase 1.A 大 1.5-2x**。
 
 | 性质 | 机制 |
 |---|---|
-| 容器内 claude 走代理 (不绕) | D5 iptables 锁出站到 proxy 唯一 endpoint |
+| 容器内 claude anthropic 流量必经代理 | D5 iptables DROP api.anthropic.com (其他外部 API 如 github/web_search 仍 ACCEPT) |
 | owner 真凭据不进容器 | env 注入的是 ccanywhere-issued bearer，proxy 才有 owner key |
 | user 间 fs 隔离 | D4 per-user unix account + /home/<user> mode 0700 |
 | user 间 process 隔离 (best-effort) | unix user UID 分隔，ptrace_scope 容器 init 时设 |

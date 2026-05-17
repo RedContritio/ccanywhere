@@ -17,10 +17,12 @@
 ## 实现 — image + lifecycle
 
 - [ ] `docker/Dockerfile.ccanywhere-user`: base alpine/debian-slim +
-      node + claude binary (vendored, D7) + iptables + sh +
-      useradd helpers
-- [ ] `docker/entrypoint.sh`: iptables init (allow proxy endpoint,
-      drop rest, D5) + 留 sleep infinity 让 container 待命
+      node + iptables + sh + useradd helpers (**claude binary mount,
+      D7**)
+- [ ] `docker/entrypoint.sh`: iptables init (**DROP api.anthropic
+      .com, ACCEPT 其他**, D5) + sleep infinity 待命; 容器启动加
+      `-v <config.claudeBin>:/usr/local/bin/claude:ro` mount host
+      claude (D7)
 - [ ] `scripts/build-container-image.sh`: docker build + tag
       (ccanywhere/user-runtime:<version>) helper
 - [ ] `src/container/shared-manager.ts`: ensureRunning /

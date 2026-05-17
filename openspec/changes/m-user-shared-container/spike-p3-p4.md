@@ -150,11 +150,13 @@ claudeBin, ...args]`。零代码上 SIGWINCH 处理 (node-pty + docker
 - **P5**: 容器内 unix user 切换 (-u flag 或 sudo) + per-user
   `CLAUDE_CONFIG_DIR` + `~/.claude/` 隔离 — 跟 m-anthropic-proxy 时
   spike F6 "cwd 污染防御" 配套
-- **P6**: iptables 容器内出站锁定 (`api.anthropic.com` 直连阻断,
-  只允许 proxy endpoint) — 安全边界验证
-- **P7**: claude binary 在 docker image 内安装 + 启动正确 (跟
-  m-anthropic-proxy spike P2 实测一致): 验证容器内 claude
-  ANTHROPIC_BASE_URL 透传到 ccanywhere-anthropic-proxy
+- **P6**: iptables 容器内**DROP api.anthropic.com (ACCEPT 其他)** —
+  D5 修订后行为, 验证 NET_ADMIN cap 在 Docker Desktop 可用 +
+  github / web_search 等外部流量正常 ACCEPT + anthropic 直连被
+  阻断 (强制走代理)
+- **P7**: claude binary **mount** (D7 修订, 不 vendor) — 验证
+  `-v <config.claudeBin>:/usr/local/bin/claude:ro` 后容器内能
+  正常调用 + ANTHROPIC_BASE_URL 透传到 ccanywhere-anthropic-proxy
 - **P8**: shared container 崩溃恢复 (Phase 2 lifecycle): docker
   health-check + 自动重启 vs ccanywhere 主动 ensure
 
