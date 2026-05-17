@@ -1,5 +1,5 @@
 ---
-status: planned
+status: archived
 ---
 
 # Proposal: m-user-runtime-schema — isolationPolicy + per-user runtime

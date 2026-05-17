@@ -63,21 +63,25 @@
 
 ## docs
 
-- [ ] `docs/deployment.md` §9 isolation 配置段:
-      isolationPolicy 三档说明 + per-user runtime 三档说明 +
-      Phase 2 启用 container 的预告
+- [x] `docs/deployment.md` §9 isolation 概述 + 引用; 详细拆出
+      `docs/deployment-isolation.md` (跟 §8 + deployment-proxy.md
+      同款模式, 避免 deployment.md 超 300 行 cap) (C3)
+- [x] `docs/deployment-isolation.md` (148 行): 两字段说明 + owner
+      D3 强制 + boot banner + healthz field + 4 个配置示例 + Phase 2
+      预告 (C3)
 
 ## archive
 
-- [ ] proposal status: planned → in-flight → archived
-- [ ] mv openspec/changes/m-user-runtime-schema →
-      openspec/archive/<date>-m-user-runtime-schema
+- [x] proposal status: planned → in-flight (C2 ship 时漏改, C3 一笔
+      改 archived) → archived (C3)
+- [x] mv openspec/changes/m-user-runtime-schema →
+      openspec/archive/2026-05-18-m-user-runtime-schema (C3)
 
 ## commit 拆分
 
-- [ ] C1: openspec proposal + tasks (本笔)
-- [ ] C2: schema 字段 + serve 处理 + healthz + 全测试 (主体)
-- [ ] C3: docs + archive
+- [x] C1 (759f27e): openspec proposal + tasks
+- [x] C2 (7adec68): schema 字段 + serve 处理 + healthz + 21 新测试
+- [x] C3 本笔: docs + archive
 
 ## BACKLOG follow-up (不重复落 BACKLOG.md)
 

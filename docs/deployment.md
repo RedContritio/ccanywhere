@@ -276,3 +276,12 @@ user 容器化做的基础设施。Phase 1 ship 后没真实流量经过；靠
 
 详细见 [deployment-proxy.md](./deployment-proxy.md)。
 
+## 9. user runtime 隔离策略（m-user-runtime-schema，Phase 1.B）
+
+Phase 1.B 落了配置层：admin 在 `config.isolationPolicy` 声明全局
+策略，`config.users.<name>.runtime` 声明 per-user 沙箱。Phase 1.B
+**不**实现容器本身（Phase 2 m-user-shared-container），但启动时
+会校验配置 + 喊出当前 isolation 模式 + 在 `/healthz` 暴露状态。
+
+详细见 [deployment-isolation.md](./deployment-isolation.md)。
+
