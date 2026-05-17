@@ -44,14 +44,19 @@ spike 数据 (spike-p3-p4.md) 解决了两个关键不确定性：
 
 新增 `docker/Dockerfile.ccanywhere-user` (在 repo root 不在
 src/):
-- base: alpine 或 debian-slim
-- install: node (跟 ccanywhere 主进程同版本) + iptables +
-  必要 shell tools (**claude binary mount 进, image 不打包, D7**)
-- entrypoint: iptables init (drop api.anthropic.com, ACCEPT 其他,
-  D5) + 创建 per-user unix account (按 ccanywhere user list 启动时
-  useradd) + sleep infinity 待命
-- `scripts/build-container-image.sh`: docker build + tag +
-  ccanywhere instance 启动时 ensure
+- base: `node:20-alpine`
+- install: iptables + shadow + ca-certificates + bash + curl
+  (apk) + `npm install -g @anthropic-ai/claude-code` (Linux 版
+  claude-code, D7 第二次修订)
+- entrypoint (`docker/entrypoint.sh`): hosts override
+  (api.anthropic.com → 127.0.0.1, 零 cap requirement) + iptables
+  REJECT api.anthropic.com (best-effort, 需 NET_ADMIN cap) +
+  sleep infinity. per-user account 不在 entrypoint 建, 由
+  user-sync.ts (C4) 在 ccanywhere 加 user 时 docker exec useradd
+- `scripts/build-container-image.sh`: docker build + tag helper
+- `scripts/container-manual-verify.sh`: image build + run +
+  iptables/hosts/claude 验证 (跟 proxy-manual-verify.sh 同款
+  manual gate)
 
 ### session manager spawn 分支
 
@@ -154,23 +159,39 @@ alpine true` (实际容器拉起) 才算 ready。`fallback` 模式下 docker
 degraded mode (但不 down ccanywhere; user-affecting fatal 是过
 度反应)。
 
-### D7. claude binary mount 进容器 (不 vendor)
+### D7. claude binary 在 image 内 vendor via `npm install -g` (D7 第二次修订)
 
-容器启动加 `-v <config.claudeBin>:/usr/local/bin/claude:ro` 复用
-ccanywhere 既有 `config.claudeBin` 字段 (该字段已经是绝对路径,
-LaunchAgent 要求)。
+Dockerfile RUN `npm install -g @anthropic-ai/claude-code`. 容器内
+`/usr/local/lib/node_modules/@anthropic-ai/claude-code` + PATH 内
+`claude` shim. 不 mount host claude binary.
 
-- (+) host claude 升级 → 容器自动跟随，image 不需 rebuild
-- (+) image 小 (claude binary ~50MB 省掉)
-- (+) 复用既有配置, 不引入新字段
-- (-) host claude 版本变 → 容器跟随变 (但是 admin 主动控的)
-- (-) host claude path 跨平台异 (mac/linux 路径不同) — 但 ccanywhere
-  当前 mac-first, `claudeBin` 配置已有跨平台抽象需求, 不是新问题
+**修订历史**:
+- 原 D7: vendor (手动 copy binary 进 image), 跟 ccanywhere version
+  tag
+- D7 第一次修订: mount host claude (`-v config.claudeBin:/usr/
+  local/bin/claude:ro`), 复用 claudeBin 配置
+- **D7 第二次修订 (本次)**: mount 撞 ABI 墙 — host claude 是
+  macOS Mach-O native (Bun 编译, 含 `__BUN`/`__PAGEZERO`/`/usr/lib
+  /dyld` sections), Linux 容器跑 `exec format error`. mount 不可
+  行. 改回 vendor 但用 `npm install -g` 工程化分发 (vs 手动 copy
+  binary 文件).
 
-**修订自原 D7 (vendor 倾向)**: vendor 让 image rebuild 跟 claude
-release 强耦合, ccanywhere 是个人 repo 无 CI 自动 build, 实际负
-担大于"image 可复现"的收益。mount 路径复用既有 claudeBin 配置,
-零增量配置复杂度。
+**为何 npm install 而非手动 copy**:
+- npm 是 claude 官方分发渠道 — 标准, 0 手动 artifact 管理
+- 跟 ccanywhere image 一起 tag (image rebuild = claude 升级)
+- 默认拉 latest; ccanywhere 想 pin 在 Dockerfile 改成
+  `@anthropic-ai/claude-code@<version>` 即可
+
+**P7 spike 验证**: scripts/container-manual-verify.sh `claude
+--version` 在 alpine npm-installed 容器内输出 `2.1.143 (Claude
+Code)`. Linux 版 claude-code npm 包跟 musl (alpine) 兼容.
+
+**代价**:
+- image 663MB (vs 225MB 不含 claude). 一次性 build, ccanywhere
+  instance 启动 ensure 时复用. acceptable.
+- claude 每次 release ccanywhere image 要 rebuild + restart shared
+  container. 自动化: `scripts/build-container-image.sh` + 后续
+  ccanywhere instance auto-pull (TBD).
 
 ### D8. shared container 失败的 blast radius
 

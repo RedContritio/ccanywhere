@@ -16,15 +16,20 @@
 
 ## 实现 — image + lifecycle
 
-- [ ] `docker/Dockerfile.ccanywhere-user`: base alpine/debian-slim +
-      node + iptables + sh + useradd helpers (**claude binary mount,
-      D7**)
-- [ ] `docker/entrypoint.sh`: iptables init (**DROP api.anthropic
-      .com, ACCEPT 其他**, D5) + sleep infinity 待命; 容器启动加
-      `-v <config.claudeBin>:/usr/local/bin/claude:ro` mount host
-      claude (D7)
-- [ ] `scripts/build-container-image.sh`: docker build + tag
-      (ccanywhere/user-runtime:<version>) helper
+- [x] `docker/Dockerfile.ccanywhere-user` (C2): base `node:20-
+      alpine` + iptables + shadow + bash + curl + **npm install
+      -g @anthropic-ai/claude-code** (D7 第二次修订: vendor via
+      npm, 撤回 mount — host macOS Mach-O 跟 Linux ABI 不兼容)
+- [x] `docker/entrypoint.sh` (C2): hosts override + iptables
+      REJECT api.anthropic.com (best-effort, NET_ADMIN required)
+      + sleep infinity 待命. per-user account 不建 (留 C4 user-
+      sync runtime mutation)
+- [x] `scripts/build-container-image.sh` (C2): docker build + tag
+      helper (ccanywhere/user-runtime:latest, image 663MB)
+- [x] `scripts/container-manual-verify.sh` (C2): build + run +
+      hosts override / anthropic blocked / github ACCEPT / claude
+      --version 全验. PASS on claude 2.1.143 (image npm-installed
+      Linux 版)
 - [ ] `src/container/shared-manager.ts`: ensureRunning /
       stop / healthCheck (lifecycle methods)
 - [ ] `src/container/docker-detect.ts`: docker info + dry-run
