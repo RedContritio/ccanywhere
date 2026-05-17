@@ -30,12 +30,20 @@
       hosts override / anthropic blocked / github ACCEPT / claude
       --version 全验. PASS on claude 2.1.143 (image npm-installed
       Linux 版)
-- [ ] `src/container/shared-manager.ts`: ensureRunning /
-      stop / healthCheck (lifecycle methods)
-- [ ] `src/container/docker-detect.ts`: docker info + dry-run
-      container 启动验证, 30s 周期 health-check
+- [x] `src/container/exec.ts` (C3): 共享 ExecImpl interface +
+      defaultExec (promisify(execFile) wrapper, 统一返 ExecResult
+      不抛非 0)
+- [x] `src/container/shared-manager.ts` (C3): SharedContainerManager
+      ensureRunning (idempotent: absent→run, exited→start, running
+      →noop) / stop (No such container 视为 success) / healthCheck
+      (inspect + exec true 双层判)
+- [x] `src/container/docker-detect.ts` (C3): DockerDetector.detect
+      (docker info) + startMonitoring (周期 + flip-on-change
+      callback) + stopMonitoring; 不做 dry-run container 启动
+      (docker info 足够; dry-run alpine 拉去 keychain 复杂, 留
+      C5 实际 spawn 时验)
 - [ ] `src/container/user-sync.ts`: 在 running container 内
-      useradd / userdel (跟随 ccanywhere user CLI)
+      useradd / userdel (跟随 ccanywhere user CLI) — C4
 
 ## 实现 — spawn 分支
 
@@ -73,10 +81,13 @@
 
 ## 测试
 
-- [ ] `src/container/shared-manager.test.ts`: lifecycle / health /
-      重启 backoff
-- [ ] `src/container/docker-detect.test.ts`: docker 可达 / 不可达
-      / 中途挂 (mock docker CLI)
+- [x] `src/container/shared-manager.test.ts` (C3, 13): ensureRunning
+      4 case (absent/run / running/noop / exited/start / fail throw)
+      + 2 capAdd/extraArgs + stop 3 + healthCheck 4
+- [x] `src/container/docker-detect.test.ts` (C3, 8): detect 4
+      (available / unavailable / fallback reason source) +
+      startMonitoring 4 (first fire / flip-only / stop clear /
+      idempotent)
 - [ ] `src/container/user-sync.test.ts`: useradd / userdel +
       container 不可达时降级
 - [ ] `src/session/manager.spawn-container.test.ts`: runtime
