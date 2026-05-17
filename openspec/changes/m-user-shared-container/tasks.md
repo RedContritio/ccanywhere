@@ -42,21 +42,29 @@
       callback) + stopMonitoring; 不做 dry-run container 启动
       (docker info 足够; dry-run alpine 拉去 keychain 复杂, 留
       C5 实际 spawn 时验)
-- [ ] `src/container/user-sync.ts`: 在 running container 内
-      useradd / userdel (跟随 ccanywhere user CLI) — C4
+- [x] `src/container/user-sync.ts` (C4): ContainerUserSync lazy
+      ensureUser (idempotent useradd + chmod 0700 home; cache hit
+      bypass docker exec). deterministic uidOf sha256 in
+      [1000, 65000) range. 不做 active userdel (留 dormant 跨
+      container restart 自然清, D4 acceptable cost)
 
 ## 实现 — spawn 分支
 
-- [ ] `src/session/manager.ts`: SpawnOptions 加 `runtime` 字段;
-      spawn() 按 runtime 分支:
-  - host: 既有 ptySpawn (零改动)
-  - shared-container: ptySpawn('docker', ['exec', '-it',
-    SHARED_CTN, '-u', userUid, command, ...args], {...})
-- [ ] session 流程: spawn 前 env 注入 ANTHROPIC_BASE_URL +
-      ANTHROPIC_AUTH_TOKEN (proxy issue) + CLAUDE_CONFIG_DIR=
-      /home/<user>/.claude + DISABLE_AUTOUPDATER=1 +
-      DISABLE_TELEMETRY=1
-- [ ] `src/cli/serve-isolation.ts`: D5 解锁 'shared-container'
+- [x] `src/session/manager-types.ts` (C4): SpawnOptions 加
+      `runtime` (host/shared-container, optional) + `container`
+      (name + unixUser, optional but required when runtime=shared)
+- [x] `src/session/spawn-command.ts` (C4 新): buildSpawnCommand
+      纯函数 — host 返 identity, shared-container 包成
+      `docker exec -it -u <user> -e ... <ctn> <cmd> ...args`
+      并把 user env 通过 `-e KEY=VAL` 注入 (不让 docker CLI
+      proc env 看到). 拆出避免 manager.ts 超 300 行 lint cap
+- [x] `src/session/manager.ts` (C4): spawn() 调 buildSpawnCommand
+      路由; 既有 host 路径 0 改动 (零回归)
+- [ ] session 流程 (sessions.ts call site C5): spawn 前 env 注入
+      ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN (proxy issue) +
+      CLAUDE_CONFIG_DIR=/home/<user>/.claude +
+      DISABLE_AUTOUPDATER=1 + DISABLE_TELEMETRY=1
+- [ ] `src/cli/serve-isolation.ts` (C5): D5 解锁 'shared-container'
       (Phase 2 ready) + D6 加 docker availability detection
       (strict 模式 docker 不可达 fatal; fallback 模式 override
       host + warn)
@@ -88,10 +96,14 @@
       (available / unavailable / fallback reason source) +
       startMonitoring 4 (first fire / flip-only / stop clear /
       idempotent)
-- [ ] `src/container/user-sync.test.ts`: useradd / userdel +
-      container 不可达时降级
-- [ ] `src/session/manager.spawn-container.test.ts`: runtime
-      分支 + env 注入 + host 路径零回归
+- [x] `src/container/user-sync.test.ts` (C4, 8): uidOf
+      determinism / range / 不同 username 不撞 + ensureUser
+      noop-on-exist / useradd+chmod 路径 / cache 路径 / useradd
+      错 / chmod 错
+- [x] `src/session/manager.spawn-container.test.ts` (C4, 7):
+      host 路径 2 (omitted/host) + shared-container 5 (missing
+      container throw / docker exec 包装 / env→-e / no env /
+      args 顺序)
 - [ ] `src/cli/serve-isolation.test.ts` 加: D5 shared-container
       Phase 2 ready 后通过 + D6 docker detection 行为
 - [ ] e2e: 真起 shared container + spawn user session + claude

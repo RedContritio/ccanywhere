@@ -2,16 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { spawn as ptySpawn } from 'node-pty';
 import { logger } from '../log.js';
 import { makeDeadStub, type DeadStub } from './dead-stub.js';
-import {
-  buildEnv,
-  type SessionManagerOptions,
-  type SpawnOptions,
-  type SpawnResult,
-} from './manager-types.js';
+import type { SessionManagerOptions, SpawnOptions, SpawnResult } from './manager-types.js';
 import type { SessionRegistry } from './registry.js';
 import { ScreenState } from './screen-state.js';
 import { Scrollback } from './scrollback.js';
 import { SessionImpl } from './session-impl.js';
+import { buildSpawnCommand } from './spawn-command.js';
 import type { Session, SessionInfo, SessionRow } from './types.js';
 
 export type {
@@ -92,12 +88,15 @@ export class SessionManager {
     const id = opts.forcedSessionId ?? randomUUID();
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
-    // Inherit parent env (HOME, PATH, …); MUST NOT override CLAUDE_CONFIG_DIR (M5).
-    const pty = ptySpawn(opts.command, [...opts.args], {
+
+    // m-user-shared-container: host = identity spawn; shared-container
+    // wraps in `docker exec -it -u <user> -e KEY=VAL ...` via helper.
+    const { command, args, ptyEnv } = buildSpawnCommand(opts);
+    const pty = ptySpawn(command, [...args], {
       cwd: opts.cwd,
       cols,
       rows,
-      env: buildEnv(opts.env),
+      env: ptyEnv,
       name: 'xterm-256color',
     });
     const info = makeSessionInfo(id, opts);

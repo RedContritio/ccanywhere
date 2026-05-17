@@ -26,6 +26,29 @@ export interface SpawnOptions {
    * original ccanywhere id (and thus the original cc jsonl).
    */
   readonly forcedSessionId?: string;
+  /**
+   * m-user-shared-container: runtime sandbox.
+   * - `host` (default, omitted = host): spawn `command` directly via
+   *   node-pty (legacy behavior — owner path + 既有 multi-user
+   *   admin-trusted users)
+   * - `shared-container`: wrap spawn as `docker exec -it -u <user>
+   *   -e KEY=VAL ... <container.name> <command> ...args`. caller
+   *   (sessions.ts in C5) sources from user.runtime config + a live
+   *   SharedContainerManager + ContainerUserSync
+   *
+   * When `shared-container`, `container` MUST be set.
+   */
+  readonly runtime?: 'host' | 'shared-container';
+  /**
+   * Required when `runtime === 'shared-container'`. caller is
+   * responsible for ensuring the container is running (shared-
+   * manager.ensureRunning) and the unix user exists in it
+   * (user-sync.ensureUser) BEFORE calling spawn.
+   */
+  readonly container?: {
+    readonly name: string;
+    readonly unixUser: string;
+  };
 }
 
 /**
