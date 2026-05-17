@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-flight
 ---
 
 # Proposal: m-anthropic-proxy — 自建 Anthropic API 代理

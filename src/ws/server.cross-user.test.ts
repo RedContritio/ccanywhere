@@ -26,6 +26,7 @@ const baseConfig: Config = {
   workspace: '/tmp/placeholder-workspace',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
+  proxy: { port: 62276, bindHost: '127.0.0.1' },
 };
 
 function waitOpen(ws: WebSocket, timeoutMs = 4000): Promise<void> {

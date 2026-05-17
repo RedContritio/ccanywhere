@@ -10,6 +10,7 @@ import {
   runFeedbackShow,
 } from './cli/feedback.js';
 import { runRevoke } from './cli/revoke.js';
+import { runProxySubcommand } from './cli/proxy-serve.js';
 import { runServe } from './cli/serve.js';
 import { runTokenIssue, runTokenList, runTokenRevoke } from './cli/token.js';
 import { runUserCreate, runUserList, runUserQuotaSet } from './cli/user.js';
@@ -76,6 +77,9 @@ usage:
                                           mark a feedback as seen (excluded from default list)
   ccanywhere feedback mark-all-seen       mark every feedback file as seen
   ccanywhere feedback forget <id-prefix>  remove from seen set (re-appears in default list)
+  ccanywhere proxy serve [--config <path>]
+                                          start the anthropic API proxy (independent process,
+                                          listens on config.proxy.port, default 62276)
   ccanywhere help                         show this help
 
 Multi-instance same-host deployments (e.g. prod + staging) just hand each
@@ -143,6 +147,8 @@ async function dispatch(argv: ReadonlyArray<string>): Promise<void> {
       return runTokenSubcommand([...positional], configPath);
     case 'feedback':
       return runFeedbackSubcommand([...positional], configPath);
+    case 'proxy':
+      return runProxySubcommand([...positional], configPath);
     case 'help':
     case '--help':
     case '-h':

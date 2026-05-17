@@ -7,14 +7,15 @@
 
 ## 实现 — 代理 server core
 
-- [ ] `src/proxy/credentials.ts`: 启动时读
+- [x] `src/proxy/credentials.ts`: 启动时读
       `~/.config/ccanywhere/anthropic-credentials.json`，校验 mode
-      0600，加载到内存。文件不存在 → 503 模式启动
-- [ ] `src/proxy/log-redact.ts`: pino redact rules + 启动 self-test
-      （写一条假 auth log，grep 必须看不到原 token）
-- [ ] `src/proxy/server.ts`: fastify 主入口，挂 cookie/log/redact
-      + bodyLimit 抬到 10MB（spike F2）
-- [ ] `HEAD /` route 返 200（spike F5 启动 probe）
+      0600，加载到内存。文件不存在 → 503 模式启动 (C1)
+- [x] `src/proxy/log-redact.ts`: pino redact rules + 启动 self-test
+      （写一条假 auth log，grep 必须看不到原 token）(C1)
+- [x] `src/proxy/server.ts`: fastify 主入口，bodyLimit 抬到 10MB
+      （spike F2）+ /healthz + setNotFoundHandler / setErrorHandler
+      (C1, 转发路由 C3+)
+- [x] `HEAD /` route 返 200（spike F5 启动 probe）(C1)
 - [ ] `src/proxy/tokens.ts`: bearer 颁发（5min TTL）+ 校验 + 解析
       userId
 - [ ] `src/proxy/quota-check.ts`: inline check，超额返 429
@@ -32,10 +33,14 @@
 
 ## 实现 — CLI + 部署
 
-- [ ] `src/cli/proxy-serve.ts`: proxy CLI 入口
-- [ ] `src/cli.ts`: 注册 `ccanywhere proxy serve` 子命令
-- [ ] `src/config/schema.ts`: + `proxy.port` (default 62276)
-      + `proxy.bindHost` (default 127.0.0.1)
+- [x] `src/cli/proxy-serve.ts`: proxy CLI 入口 + 顶层
+      `runProxySubcommand` dispatcher (拆出避免 cli.ts 超 300 行
+      cap) (C1)
+- [x] `src/cli.ts`: 注册 `ccanywhere proxy serve` 子命令 + HELP
+      (C1)
+- [x] `src/config/schema.ts`: + `proxy.port` (default 62276)
+      + `proxy.bindHost` (default 127.0.0.1)；用 zod default 让
+      既有 prod config 无需 bump (C1)
 - [ ] `scripts/install-launchagent-proxy.sh`: 安装 proxy
       LaunchAgent plist
 - [ ] `scripts/proxy-manual-verify.sh`: 一行启动 proxy + 颁发
@@ -47,9 +52,12 @@
 ## 测试
 
 - [ ] `src/proxy/tokens.test.ts`: 颁发 / 验证 / 过期 / 重放防护
-- [ ] `src/proxy/credentials.test.ts`: 文件 mode 校验 + 缺失走
-      503 模式
-- [ ] `src/proxy/log-redact.test.ts`: redact rules + self-test
+- [x] `src/proxy/credentials.test.ts`: 文件 mode 校验 + 缺失走
+      503 模式 (C1, 7 测试)
+- [x] `src/proxy/log-redact.test.ts`: redact rules + self-test
+      (C1, 4 测试)
+- [x] `src/proxy/server.test.ts`: HEAD / probe + /healthz +
+      404 + bodyLimit 10MB (C1, 6 测试)
 - [ ] `src/proxy/forward.test.ts`: mock upstream，验证
   - `?beta=true` 透传
   - stainless headers 透传

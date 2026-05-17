@@ -88,6 +88,18 @@ export const ConfigSchema = z.object({
    * need a schema-bump migration (m-share-static-export D3).
    */
   shareTtlMs: z.number().int().positive().optional(),
+  /**
+   * m-anthropic-proxy. ccanywhere-anthropic-proxy listen address.
+   * Independent process (own LaunchAgent). user containers (Phase 2)
+   * point `ANTHROPIC_BASE_URL` here; owner path 完全不经此代理 (D7).
+   * Defaults let existing prod config files load without a bump.
+   */
+  proxy: z
+    .object({
+      port: z.number().int().min(1).max(65535).default(62276),
+      bindHost: z.string().default('127.0.0.1'),
+    })
+    .default({ port: 62276, bindHost: '127.0.0.1' }),
 }).superRefine((cfg, ctx) => {
   // Per-user `workspace` override checks (m-user-symmetric):
   //   1. absolute path
