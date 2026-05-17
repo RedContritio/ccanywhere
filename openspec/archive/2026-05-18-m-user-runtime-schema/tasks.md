@@ -81,7 +81,26 @@
 
 - [x] C1 (759f27e): openspec proposal + tasks
 - [x] C2 (7adec68): schema 字段 + serve 处理 + healthz + 21 新测试
-- [x] C3 本笔: docs + archive
+- [x] C3 (ac62c1b): docs + archive
+- [x] C4 本笔: D2 amendment — 撤回 default 'host' 修订, 改回原
+      D2 default 'shared-container'; serve-isolation D5 加
+      undefined runtime fatal (既有 prod 显式 schema bump 流程);
+      proposal.md D2 加 amendment 注释 + 形式化保证 D7 改;
+      deployment-isolation.md §6 升级步骤段; schema/serve test 同步
+
+## C4 amendment scope
+
+- [x] schema runtime default 改回 'shared-container' + 注释
+- [x] serve-isolation D5 加 `userCfg.runtime ?? 'shared-container'`
+      处理 + log message 区分 explicit / default
+- [x] schema.test.ts default expectation 改 + workspace/runtime
+      independence test 改
+- [x] serve.test.ts 加 "non-owner without runtime → fatal" test
+- [x] archive proposal.md D2 段加 amendment 注释 + 形式化保证 D7
+      改 wording
+- [x] archive proposal.md "两字段都带 zod default" wording 改
+- [x] docs/deployment-isolation.md §6 升级步骤段 (必读 + 两种
+      migration + checklist)
 
 ## BACKLOG follow-up (不重复落 BACKLOG.md)
 

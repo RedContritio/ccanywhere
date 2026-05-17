@@ -134,7 +134,63 @@ user 当前行为。
 Phase 1.B 启动 fatal："Phase 2 not ready"。等
 m-user-shared-container ship 后才生效。
 
-## 6. Phase 2 预告
+## 6. 从 m-multi-user 升级（Phase 1.B schema bump，必读）
+
+Phase 1.B 引入 `users.<name>.runtime` 字段，默认 `shared-
+container`。**既有 multi-user prod 部署升级后启动 fatal**：
+
+```
+fatal: users.alice.runtime: <unset, default shared-container> but
+container runtime is Phase 2 (m-user-shared-container) — not ready.
+Fix: set users.alice.runtime: 'host' OR top-level
+isolationPolicy: 'host-only' to override all.
+```
+
+这是 deliberate schema bump 行为变更（跟 ccanywhere CLAUDE.md
+"Schema bump 必须同步 prod config" 一致），让 admin 主动决策每
+个 user 走哪个 runtime，避免 isolation 机制被 default 偷偷绕过。
+
+**两种 migration**:
+
+**6.1 显式 host (跟既有 m-multi-user 行为一致)**
+
+每个非 owner user 加 `runtime: 'host'`:
+
+```json
+{
+  "users": {
+    "alice": { "workspace": "/path", "runtime": "host" },
+    "bob": { "runtime": "host" }
+  }
+}
+```
+
+效果：alice / bob 跟 owner 同身份跑（既有 m-multi-user 行为）。
+Phase 2 ship 后想容器化某个 user，再改对应 runtime 为
+`shared-container`。
+
+**6.2 全局 host-only (单租户 / windows / 不想 per-user 配)**
+
+```json
+{ "isolationPolicy": "host-only" }
+```
+
+所有非 owner user runtime 内存 override `host`，per-user
+runtime 配置被忽略（audit warn）。适合单 owner 部署 + 偶尔几个
+信任的小号场景。
+
+### 升级 checklist
+
+1. `pnpm build:all` 拉新版
+2. 编辑 `~/.config/ccanywhere/config.json`：
+   - 为每个 user 加 `runtime: 'host'`，**或**
+   - 加全局 `isolationPolicy: 'host-only'`
+3. `launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere`
+4. `curl -sf http://127.0.0.1:62275/healthz` → 必须返
+   `{"ok":true,"isolation":{"mode":"strict","ready":true}}` 或
+   `"host-only"` mode
+
+## 7. Phase 2 预告
 
 Phase 2 m-user-shared-container 时:
 - 实现 shared container spawn (docker run 包装 + per-user

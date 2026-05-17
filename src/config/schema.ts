@@ -52,20 +52,22 @@ export const ConfigSchema = z.object({
         workspace: z.string().optional(),
         /**
          * m-user-runtime-schema. user's runtime sandbox.
-         * - `host` (default): spawn with owner identity on the mac
-         *   (admin-trusted). Default is 'host' rather than 'shared-
-         *   container' so既有 prod config 不需 bump — admin must
-         *   explicitly opt into container isolation when Phase 2 ships.
-         * - `shared-container`: rejected in Phase 1.B with explicit
-         *   error pointing at fix; Phase 2 m-user-shared-container
-         *   implements actual container spawn.
+         * - `host`: spawn with owner identity on the mac (admin-
+         *   trusted). owner MUST be 'host' (D3).
+         * - `shared-container` (default): reflects Phase 2 direction;
+         *   rejected in Phase 1.B with explicit error pointing at fix.
+         *   Phase 2 m-user-shared-container implements actual container
+         *   spawn. Default reflects target architecture rather than
+         *   既有 behavior — admin must explicitly opt to `host` to
+         *   keep existing multi-user prod working (D2 amended; see
+         *   archive proposal C4 amendment).
          * - `isolated-container`: reserved schema enum; rejected at
          *   parse time (Phase 1 and Phase 2 both don't implement —
          *   needed only for truly untrusted users, BACKLOG long-term).
          */
         runtime: z
           .enum(['host', 'shared-container', 'isolated-container'])
-          .default('host'),
+          .default('shared-container'),
       }),
     )
     .optional(),

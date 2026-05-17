@@ -92,6 +92,19 @@ describe('resolveIsolation — D3 owner runtime', () => {
       ),
     ).toThrow(ExitCalled);
   });
+
+  it('non-owner without runtime → fatal (default shared-container, D2 amendment)', () => {
+    // raw Config bypassing zod parse: userCfg.runtime is undefined.
+    // serve-isolation treats undefined as 'shared-container' and
+    // fatals, mirroring what happens on既有 prod after schema bump.
+    expect(() =>
+      resolveIsolation(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mkConfig({ users: { alice: { workspace: '/tmp/a' } as any } }),
+        'owner',
+      ),
+    ).toThrow(ExitCalled);
+  });
 });
 
 describe('resolveIsolation — D4 host-only override', () => {

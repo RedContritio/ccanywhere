@@ -37,7 +37,11 @@ const UserConfigSchema = z.object({
 });
 ```
 
-两字段都带 zod default：既有 prod config 零改动可加载。
+两字段都带 zod default：parse 永远成功，但 **D2 amendment 后既有
+multi-user prod 启动会 fatal** (runtime default 是 shared-
+container, serve.ts D5 强制 fatal until admin 显式配 runtime 或
+切 host-only)。这是 deliberate schema bump 行为变更, 见
+deployment-isolation.md §6 升级步骤。
 
 ### 启动行为（serve.ts）
 
@@ -100,26 +104,42 @@ host-only  全 user override host，per-user runtime 被忽略
 理由：默认 strict 是 fail-safe。owner 改这个字段会被强迫思考"我
 在改安全级别"。命名是 forcing function。
 
-### D2. 三档 per-user runtime（默认 host）
+### D2. 三档 per-user runtime（默认 shared-container）
+
+> **⚠️ C4 Amendment (2026-05-18, on m-user-runtime-schema branch)**:
+> C2 ship 时把 D2 default 修订为 'host' (理由: 既有 prod 不破坏);
+> review 后撤回回到原 D2 default 'shared-container'. 理由:
+> - default 应反映方向 (Phase 2 容器化是目标); 'host' 让既有 prod
+>   永远不容器化, owner 加新 user 默认 host = 隐藏 isolation 机制
+> - 既有 prod schema bump 应走 ccanywhere 显式同步流程 (CLAUDE.md
+>   "Schema bump 必须同步 prod config" + #44 教训), 不靠 default
+>   偷偷继承旧行为
+> - 既有 prod 启动 fatal "users.X.runtime undefined, set host or
+>   切 host-only" 是合理 prompt, 不是缺陷
+>
+> 同时撤回 D7 "既有 prod 零改动" wording (跟 default shared-
+> container 矛盾). 修订后 D7 是 "Phase 1.B 是 schema bump 行为变更,
+> 既有 prod 部署后启动 fatal 直到 admin 显式配 runtime".
 
 ```
-host                  默认。跟 owner 同身份跑 (admin-trusted)
-shared-container      Phase 1.B 显式配 + strict 模式 → fatal "not
-                      ready"; Phase 2 m-user-shared-container 实现
+host                  跟 owner 同身份跑 (admin-trusted); owner
+                      MUST be 'host' (D3)
+shared-container      默认。反映 Phase 2 方向; Phase 1.B 配置或
+                      未显式配 (default applied) → 启动 fatal
+                      "Phase 2 not ready"; Phase 2 ship 后才真容器
 isolated-container    reserved schema enum; Phase 1+2 都不实现;
                       parse 阶段直接 zod superRefine 拒
 ```
 
-理由 (default 'host'): 既有 prod config 可能 multi-user 部署里有
-alice 配 `workspace` 但没配 `runtime`。如果 default 是 shared-
-container,既有 prod 一启动就 fatal — 违反 D7 "向前兼容"。
-default host 让既有 prod 行为不变 (一直是 host spawn);admin 想
-opt-in 容器隔离时 Phase 2 ship 后显式配 'shared-container'。
+理由 (default 'shared-container'): default 反映目标架构而不是既有
+行为。admin 必须主动声明每个 user 走哪个 runtime — 不让 isolation
+机制被 default 偷偷绕过。既有 multi-user prod 升级走显式 schema
+bump 同步流程 (deployment-isolation.md §6 升级步骤)。
 
-理由 (rejected isolated-container at parse time): 真正不可信
-user 才需要 per-user 独立容器;ccanywhere 当前 use-case (owner +
-admin-trusted 小号) 不需要。schema 接受 enum 是 forward-compat,
-parse 拒避免 owner 写错以为安全实际无效。
+理由 (rejected isolated-container at parse time): 真正不可信 user
+才需要 per-user 独立容器; ccanywhere 当前 use-case (owner + admin-
+trusted 小号) 不需要。schema 接受 enum 是 forward-compat, parse
+拒避免 owner 写错以为安全实际无效。
 
 ### D3. owner 强制 host (fatal)
 
@@ -198,7 +218,7 @@ runtime 分支。Phase 2 m-user-shared-container 才在 spawn 前根据
 
 | 性质 | 机制 |
 |---|---|
-| Phase 1.B ship 不副作用现有部署 | 两字段都带 zod default，既有 prod config 不需 bump |
+| Phase 1.B 是 schema bump 行为变更 (D2 amendment) | 既有 multi-user prod 部署后启动 fatal until admin 显式配 user runtime; deployment-isolation.md §6 升级步骤; 跟 ccanywhere CLAUDE.md schema bump 流程一致 |
 | owner 永远 host 身份 | serve.ts startup fatal (D3) |
 | Phase 1.B 时 container 配置不静默回退 | strict + container → fatal (D5) |
 | 配置可见性 | 启动 banner + healthz field (D7) |

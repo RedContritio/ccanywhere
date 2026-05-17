@@ -33,11 +33,11 @@ describe('ConfigSchema — isolationPolicy', () => {
 });
 
 describe('ConfigSchema — users.<name>.runtime', () => {
-  it('defaults to host when user listed without runtime', () => {
+  it('defaults to shared-container when user listed without runtime', () => {
     const cfg = ConfigSchema.parse(
       baseRaw({ users: { alice: {} } }),
     );
-    expect(cfg.users?.['alice']?.runtime).toBe('host');
+    expect(cfg.users?.['alice']?.runtime).toBe('shared-container');
   });
 
   it('accepts explicit host', () => {
@@ -82,6 +82,6 @@ describe('ConfigSchema — users.<name>.runtime', () => {
     expect(cfg.users?.['alice']?.workspace).toBe('/tmp/alice');
     expect(cfg.users?.['alice']?.runtime).toBe('host');
     expect(cfg.users?.['bob']?.workspace).toBeUndefined();
-    expect(cfg.users?.['bob']?.runtime).toBe('host'); // default
+    expect(cfg.users?.['bob']?.runtime).toBe('shared-container'); // default reflects Phase 2 direction
   });
 });

@@ -65,15 +65,22 @@ export function resolveIsolation(
   // Phase 2 m-user-shared-container ships actual container spawn; until
   // then, silent fallback to host would hide the isolation gap. Fail
   // loud so admin notices.
+  //
+  // Treat undefined runtime as 'shared-container' (schema default):
+  // 既有 multi-user prod config 没显式配 runtime 启动也 fatal, 走
+  // ccanywhere schema bump 同步流程 (admin 看到 fatal → 编辑
+  // config 显式声明 runtime: 'host' 或切 host-only). D2 amendment.
   for (const [username, userCfg] of Object.entries(users)) {
     if (username === ownerUsername) continue;
-    if (userCfg.runtime === 'shared-container') {
+    const runtime = userCfg.runtime ?? 'shared-container';
+    if (runtime === 'shared-container') {
       logger.fatal(
-        { username },
-        `users.${username}.runtime: 'shared-container' but container ` +
-          `runtime is Phase 2 (m-user-shared-container) — not ready. ` +
-          `Fix: set users.${username}.runtime: 'host' OR top-level ` +
-          `isolationPolicy: 'host-only' to override all.`,
+        { username, runtime: userCfg.runtime },
+        `users.${username}.runtime: ` +
+          `${userCfg.runtime === undefined ? '<unset, default shared-container>' : `'${userCfg.runtime}'`} ` +
+          `but container runtime is Phase 2 (m-user-shared-container) — ` +
+          `not ready. Fix: set users.${username}.runtime: 'host' OR ` +
+          `top-level isolationPolicy: 'host-only' to override all.`,
       );
       process.exit(2);
     }
