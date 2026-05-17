@@ -7,38 +7,43 @@
 
 ## 实现 — schema
 
-- [ ] `src/config/schema.ts`: 加 `isolationPolicy` enum
-      (strict/fallback/host-only, default strict) + 注释
-- [ ] `src/config/schema.ts`: 加 `UserConfigSchema.runtime` enum
-      (host/shared-container/isolated-container, default
-      shared-container) + 注释
-- [ ] `src/config/schema.ts`: superRefine 拒 `runtime:
-      'isolated-container'` v1 不实现 (跟 spec.md '决策 D2' 一致)
+- [x] `src/config/schema.ts`: 加 `isolationPolicy` enum
+      (strict/fallback/host-only, default strict) + 注释 (C2)
+- [x] `src/config/schema.ts`: 加 `UserConfigSchema.runtime` enum
+      (host/shared-container/isolated-container, **default host**
+      D2 修订: 既有 prod 不破坏) + 注释 (C2)
+- [x] `src/config/schema.ts`: superRefine 拒 `runtime:
+      'isolated-container'` (parse 阶段直接 fatal) (C2)
 
 ## 实现 — serve.ts
 
-- [ ] serve.ts: 拿到 ownerUser 后校验 `config.users[ownerUsername]
-      .runtime !== 'host'` → fatal (D3)
-- [ ] serve.ts: isolationPolicy 处理
-  - `strict` / `fallback`: 任何非 owner 配 container → fatal
+- [x] serve.ts: 拿到 ownerUser 后校验 `config.users[ownerUsername]
+      .runtime !== 'host'` → fatal (D3, 防御 undefined: 仅 explicit
+      非 host 才 fatal, 既有 prod owner 未列字段时通过) (C2)
+- [x] serve.ts: isolationPolicy 处理 (C2)
+  - `strict` / `fallback`: 任何非 owner 配 shared-container → fatal
     "Phase 2 not ready" (D5)
   - `host-only`: 全 user override 'host' + warn 列被忽略的 runtime
     override (D4)
-- [ ] serve.ts: 启动 banner (pino info 一次性，列 runtime breakdown
-      + degraded warning if any) (D7)
-- [ ] serve.ts: 传 isolation 状态进 buildServer opts
+- [x] serve.ts: 启动 banner (pino info 一次性，列 runtime breakdown)
+      (D7) (C2)
+- [x] serve.ts: 传 isolation 状态进 buildServer opts (C2)
+- [x] resolveIsolation 拆到 `src/cli/serve-isolation.ts` (避免
+      serve.ts 超 300 行 lint cap; 跟 m-anthropic-proxy 时 sse.ts
+      拆分一致) (C2)
 
 ## 实现 — server.ts /healthz
 
-- [ ] `src/server/server.ts`: BuildServerOptions 加可选
-      `isolation` field (`{ mode, ready, reason? }`)
-- [ ] `/healthz` route 返 `{ ok: true, isolation: {...} }` (字段
-      可选，向后兼容当前 `{ ok: true }`)
+- [x] `src/server/server.ts`: BuildServerOptions 加可选
+      `isolation` field (IsolationStatus 类型: `{ mode, ready,
+      reason? }`) (C2)
+- [x] `/healthz` route 返 `{ ok: true, isolation: {...} }` 当
+      opt 提供, 否则 `{ ok: true }` (向后兼容) (C2)
 
 ## 实现 — test fixture
 
-- [ ] 5 处 baseConfig 加 `isolationPolicy: 'strict'` (跟 proxy
-      字段同处加)，确保现有 test 仍能 build Config
+- [x] 5 处 baseConfig 加 `isolationPolicy: 'strict'` (跟 proxy
+      字段同处加)，确保现有 test 仍能 build Config (C2)
   - `src/server/server.test-helpers.ts`
   - `src/server/routes/feedback.test.ts`
   - `src/ws/server.test.ts`
@@ -47,11 +52,14 @@
 
 ## 测试
 
-- [ ] `src/config/schema.test.ts`: enum 校验 + default 行为 +
-      isolated-container 拒
-- [ ] serve.ts 启动 unit test: owner host fatal / strict +
-      container fatal / host-only override
-- [ ] server.ts /healthz field 注入 unit test
+- [x] `src/config/schema.test.ts` (8): isolationPolicy enum +
+      default + runtime enum + isolated-container 拒 + workspace/
+      runtime independence (C2)
+- [x] `src/cli/serve.test.ts` (10): happy path 3 + D3 owner 3 + D4
+      host-only 3 + D5 strict container fatal 1 (C2, process.exit
+      spy 转 ExitCalled error 验证) (C2)
+- [x] `src/server/server.test.ts` 加 healthz isolation field (3):
+      omit / strict ready / host-only mode (C2)
 
 ## docs
 

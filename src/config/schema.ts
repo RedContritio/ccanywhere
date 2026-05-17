@@ -50,6 +50,22 @@ export const ConfigSchema = z.object({
       z.string().min(1),
       z.object({
         workspace: z.string().optional(),
+        /**
+         * m-user-runtime-schema. user's runtime sandbox.
+         * - `host` (default): spawn with owner identity on the mac
+         *   (admin-trusted). Default is 'host' rather than 'shared-
+         *   container' so既有 prod config 不需 bump — admin must
+         *   explicitly opt into container isolation when Phase 2 ships.
+         * - `shared-container`: rejected in Phase 1.B with explicit
+         *   error pointing at fix; Phase 2 m-user-shared-container
+         *   implements actual container spawn.
+         * - `isolated-container`: reserved schema enum; rejected at
+         *   parse time (Phase 1 and Phase 2 both don't implement —
+         *   needed only for truly untrusted users, BACKLOG long-term).
+         */
+        runtime: z
+          .enum(['host', 'shared-container', 'isolated-container'])
+          .default('host'),
       }),
     )
     .optional(),
@@ -100,7 +116,42 @@ export const ConfigSchema = z.object({
       bindHost: z.string().default('127.0.0.1'),
     })
     .default({ port: 62276, bindHost: '127.0.0.1' }),
+  /**
+   * m-user-runtime-schema. Three-tier isolation policy:
+   * - `strict`: per-user `runtime` honored; any non-owner configured
+   *   with container runtime causes startup fatal (Phase 2 not ready).
+   *   Fail-safe default — owner must explicitly opt into degraded
+   *   isolation.
+   * - `fallback`: docker availability detection (Phase 2 only) would
+   *   degrade to host on detection failure. Phase 1.B equivalent to
+   *   strict (no detection yet).
+   * - `host-only`: all non-owner user.runtime override 'host' with
+   *   audit warn. Use for windows / single-tenant / docker-unavailable
+   *   environments.
+   */
+  isolationPolicy: z
+    .enum(['strict', 'fallback', 'host-only'])
+    .default('strict'),
 }).superRefine((cfg, ctx) => {
+  // m-user-runtime-schema. Reject `runtime: 'isolated-container'` at
+  // parse time — schema accepts the enum for forward-compat but no
+  // phase implements it. Caller gets a clear message at config load
+  // instead of a confused fatal at serve.ts.
+  if (cfg.users !== undefined) {
+    for (const [username, userCfg] of Object.entries(cfg.users)) {
+      if (userCfg.runtime === 'isolated-container') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `users.${username}.runtime: 'isolated-container' is ` +
+            `reserved (Phase 1/2 don't implement). Use 'host' or ` +
+            `'shared-container'.`,
+          path: ['users', username, 'runtime'],
+        });
+      }
+    }
+  }
+
   // Per-user `workspace` override checks (m-user-symmetric):
   //   1. absolute path
   //   2. any two overrides MUST NOT nest

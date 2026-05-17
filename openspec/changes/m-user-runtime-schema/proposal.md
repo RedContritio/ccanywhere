@@ -100,19 +100,26 @@ host-only  全 user override host，per-user runtime 被忽略
 理由：默认 strict 是 fail-safe。owner 改这个字段会被强迫思考"我
 在改安全级别"。命名是 forcing function。
 
-### D2. 三档 per-user runtime（默认 shared-container）
+### D2. 三档 per-user runtime（默认 host）
 
 ```
-host                  跟 owner 同身份跑 (admin-trusted)
-shared-container      默认。容器化 Phase 2 才实现；Phase 1.B 配
-                      置时 strict → fatal
-isolated-container    reserved，schema 接受但 Phase 1 / Phase 2
-                      都不实现；启动 fatal "reserved, use shared"
+host                  默认。跟 owner 同身份跑 (admin-trusted)
+shared-container      Phase 1.B 显式配 + strict 模式 → fatal "not
+                      ready"; Phase 2 m-user-shared-container 实现
+isolated-container    reserved schema enum; Phase 1+2 都不实现;
+                      parse 阶段直接 zod superRefine 拒
 ```
 
-理由：shared-container 是 Phase 2 主体 user 模式；默认值反映"将
-来的样子"，但 Phase 1 ship 时主动报错而不是沉默落到 host (防止
-owner 以为 isolation 已经在跑实际没有)。
+理由 (default 'host'): 既有 prod config 可能 multi-user 部署里有
+alice 配 `workspace` 但没配 `runtime`。如果 default 是 shared-
+container,既有 prod 一启动就 fatal — 违反 D7 "向前兼容"。
+default host 让既有 prod 行为不变 (一直是 host spawn);admin 想
+opt-in 容器隔离时 Phase 2 ship 后显式配 'shared-container'。
+
+理由 (rejected isolated-container at parse time): 真正不可信
+user 才需要 per-user 独立容器;ccanywhere 当前 use-case (owner +
+admin-trusted 小号) 不需要。schema 接受 enum 是 forward-compat,
+parse 拒避免 owner 写错以为安全实际无效。
 
 ### D3. owner 强制 host (fatal)
 

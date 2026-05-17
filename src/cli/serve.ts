@@ -15,6 +15,7 @@ import { SessionRegistry } from '../session/registry.js';
 import { ShareStore } from '../share/store.js';
 import { TokenStore } from '../tokens/store.js';
 import { UserStore } from '../users/store.js';
+import { resolveIsolation } from './serve-isolation.js';
 
 /**
  * Read the cliToken from `<configDir>/cli-token`, or create one if
@@ -152,6 +153,12 @@ export async function runServe(configPathArg?: string): Promise<void> {
 
   const internalHookToken = randomBytes(32).toString('hex');
 
+  // m-user-runtime-schema. Resolve isolation policy + per-user runtime
+  // BEFORE building the server (fatal on bad config; ready snapshot
+  // exposed via /healthz). Owner D3 / strict-container D5 / host-only
+  // D4 all decide here.
+  const isolation = resolveIsolation(config, ownerUser.username);
+
   const app = await buildServer({
     config,
     configDir,
@@ -163,6 +170,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
     shareStore,
     internalHookToken,
     cliToken,
+    isolation,
   });
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
@@ -181,6 +189,8 @@ export async function runServe(configPathArg?: string): Promise<void> {
   };
   process.on('SIGINT', (s) => void shutdown(s));
   process.on('SIGTERM', (s) => void shutdown(s));
+
+  void isolation; // referenced by buildServer above; keep var live
 
   await app.listen({ host: config.bindHost, port: config.port });
   const addr = app.server.address();

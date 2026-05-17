@@ -28,6 +28,7 @@ export const baseConfig: Config = {
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
   proxy: { port: 62276, bindHost: '127.0.0.1' },
+  isolationPolicy: 'strict',
 };
 
 export interface UserWithToken {

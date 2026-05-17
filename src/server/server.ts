@@ -27,6 +27,21 @@ import { registerShareRoutes } from './routes/share.js';
 import type { ShareStore } from '../share/store.js';
 import { registerHookRoutes } from './routes/hook.js';
 
+/**
+ * m-user-runtime-schema. /healthz isolation reporting payload.
+ * `ready: true` ⇔ every user.runtime in config is honored as-is
+ * (host-only mode or strict mode with all host users). `ready: false`
+ * + reason ⇔ at least one user requested container runtime but the
+ * runtime layer doesn't implement it yet — startup would have
+ * fataled in current code path, so seeing ready:false in healthz
+ * means a future Phase 2 build is in a transitional state.
+ */
+export interface IsolationStatus {
+  readonly mode: 'strict' | 'fallback' | 'host-only';
+  readonly ready: boolean;
+  readonly reason?: string;
+}
+
 export interface BuildServerOptions {
   readonly config: Config;
   /**
@@ -54,6 +69,14 @@ export interface BuildServerOptions {
   readonly shareStore?: ShareStore;
   readonly internalHookToken: string;
   readonly cliToken: string;
+  /**
+   * m-user-runtime-schema. Isolation status snapshot computed by
+   * serve.ts at startup, exposed via `/healthz` so admins / monitoring
+   * can verify the running mode without parsing logs. Optional for
+   * backwards compat — tests that build server without isolation
+   * resolution still get `{ ok: true }`.
+   */
+  readonly isolation?: IsolationStatus;
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
   /**
@@ -129,7 +152,11 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     configDir: opts.configDir,
   });
 
-  app.get('/healthz', () => ({ ok: true }));
+  app.get('/healthz', () =>
+    opts.isolation !== undefined
+      ? { ok: true, isolation: opts.isolation }
+      : { ok: true },
+  );
 
   // m-user-symmetric: per-user ProjectStore lazy 构造。owner 复用注入的单例
   // (caller 用 owner override 或默认 <workspace>/owner 构造)；其他 user 在

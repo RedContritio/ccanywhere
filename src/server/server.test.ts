@@ -400,3 +400,77 @@ describe('REST API', () => {
     expect(del3.statusCode).toBe(404);
   });
 });
+
+describe('healthz isolation field (m-user-runtime-schema)', () => {
+  let env: TestProjectsEnv;
+
+  beforeEach(() => {
+    env = setupProjects();
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
+  it('omits isolation field when buildServer opt not provided', async () => {
+    const mgr = new SessionManager();
+    const app = await buildServer({
+      config: baseConfig,
+      manager: mgr,
+      projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
+      internalHookToken,
+      cliToken,
+      webDistDir: null,
+      injectCcSessionId: false,
+    });
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    expect(res.json()).toEqual({ ok: true });
+    await mgr.killAll();
+    await app.close();
+  });
+
+  it('exposes isolation in healthz when provided (strict ready)', async () => {
+    const mgr = new SessionManager();
+    const app = await buildServer({
+      config: baseConfig,
+      manager: mgr,
+      projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
+      internalHookToken,
+      cliToken,
+      webDistDir: null,
+      injectCcSessionId: false,
+      isolation: { mode: 'strict', ready: true },
+    });
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    expect(res.json()).toEqual({
+      ok: true,
+      isolation: { mode: 'strict', ready: true },
+    });
+    await mgr.killAll();
+    await app.close();
+  });
+
+  it('exposes host-only mode in healthz', async () => {
+    const mgr = new SessionManager();
+    const app = await buildServer({
+      config: baseConfig,
+      manager: mgr,
+      projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
+      internalHookToken,
+      cliToken,
+      webDistDir: null,
+      injectCcSessionId: false,
+      isolation: { mode: 'host-only', ready: true },
+    });
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    expect(res.json()).toEqual({
+      ok: true,
+      isolation: { mode: 'host-only', ready: true },
+    });
+    await mgr.killAll();
+    await app.close();
+  });
+});
