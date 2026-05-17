@@ -26,6 +26,9 @@ import { registerSessionResumeRoutes } from './routes/sessions-resume.js';
 import { registerShareRoutes } from './routes/share.js';
 import type { ShareStore } from '../share/store.js';
 import { registerHookRoutes } from './routes/hook.js';
+import type { SessionContainerDeps } from './routes/session-runtime.js';
+
+export type { SessionContainerDeps } from './routes/session-runtime.js';
 
 /**
  * m-user-runtime-schema. /healthz isolation reporting payload.
@@ -77,6 +80,19 @@ export interface BuildServerOptions {
    * resolution still get `{ ok: true }`.
    */
   readonly isolation?: IsolationStatus;
+  /**
+   * m-user-shared-container C5: effective per-user runtime map from
+   * resolveIsolation. Lookup by username; missing = host. sessions.ts
+   * + sessions-resume.ts use this to decide host vs container dispatch.
+   */
+  readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
+  /**
+   * m-user-shared-container C5: deps for shared-container session
+   * spawn. undefined = no container path available (sessions degrade
+   * to host even if perUserRuntime says shared). C6 wires via serve.ts
+   * after docker-detect + SharedContainerManager.ensureRunning.
+   */
+  readonly containerDeps?: SessionContainerDeps;
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
   /**
@@ -194,12 +210,24 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     idempotencyStore: IdempotencyStore;
     userStore?: UserStore;
     injectCcSessionId?: boolean;
+    perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
+    containerDeps?: SessionContainerDeps;
   } = { idempotencyStore };
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
   if (opts.userStore !== undefined) sessionOpts.userStore = opts.userStore;
   if (opts.injectCcSessionId !== undefined) sessionOpts.injectCcSessionId = opts.injectCcSessionId;
+  if (opts.perUserRuntime !== undefined) sessionOpts.perUserRuntime = opts.perUserRuntime;
+  if (opts.containerDeps !== undefined) sessionOpts.containerDeps = opts.containerDeps;
   await registerSessionRoutes(app, opts.config, opts.manager, resolveProjectStore, sessionOpts);
-  await registerSessionResumeRoutes(app, opts.config, opts.manager, resolveProjectStore);
+  const resumeOpts: {
+    perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
+    containerDeps?: SessionContainerDeps;
+    userStore?: UserStore;
+  } = {};
+  if (opts.perUserRuntime !== undefined) resumeOpts.perUserRuntime = opts.perUserRuntime;
+  if (opts.containerDeps !== undefined) resumeOpts.containerDeps = opts.containerDeps;
+  if (opts.userStore !== undefined) resumeOpts.userStore = opts.userStore;
+  await registerSessionResumeRoutes(app, opts.config, opts.manager, resolveProjectStore, resumeOpts);
   if (opts.shareStore !== undefined) {
     await registerShareRoutes(
       app,

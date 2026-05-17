@@ -10,6 +10,11 @@ import { listHistory } from '../history.js';
 import type { IdempotencyStore} from '../idempotency.js';
 import { hashBody, isValidIdempotencyKey } from '../idempotency.js';
 import type { ResolveProjectStore } from './projects.js';
+import {
+  buildSessionRuntimeOverlay,
+  buildThemeEnv,
+  type SessionContainerDeps,
+} from './session-runtime.js';
 
 export interface SessionRoutesOptions {
   readonly historyRoot?: string;
@@ -22,6 +27,17 @@ export interface SessionRoutesOptions {
    * `false` because sh rejects `--session-id`.
    */
   readonly injectCcSessionId?: boolean;
+  /**
+   * m-user-shared-container C5: effective per-user runtime (from
+   * resolveIsolation). Lookup by username; missing = host.
+   */
+  readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
+  /**
+   * m-user-shared-container C5: shared container + token issuer +
+   * user-sync deps for shared-container path. undefined ⇒ host-only
+   * even when perUserRuntime says container.
+   */
+  readonly containerDeps?: SessionContainerDeps;
 }
 
 function isWithinSubtree(child: string, parent: string): boolean {
@@ -47,22 +63,6 @@ const CreateBodySchema = z.discriminatedUnion('mode', [
     webTheme: z.enum(['dark', 'light']).optional(),
   }),
 ]);
-
-/**
- * Build env vars to override on the spawned cc process. Currently only
- * COLORFGBG, which cc reads when its `theme` setting is `"auto"` to pick
- * dark vs light. Format is `<fg>;<bg>` (ANSI color indices); bg=0 means
- * black (=> dark theme), bg=15 means white (=> light theme).
- *
- * cc still falls back to its `~/.claude/settings.json` `theme` field if
- * that's not set to "auto", so users have to opt in once. See README.
- */
-function buildThemeEnv(webTheme: 'dark' | 'light' | undefined): Record<string, string> {
-  if (webTheme === undefined) return {};
-  return webTheme === 'dark'
-    ? { COLORFGBG: '15;0' }
-    : { COLORFGBG: '0;15' };
-}
 
 export async function registerSessionRoutes(
   app: FastifyInstance,
@@ -193,6 +193,13 @@ export async function registerSessionRoutes(
 
     const themeEnv = buildThemeEnv(body.webTheme);
     const userId = req.user?.id ?? 'legacy-no-user';
+    // m-user-shared-container C5: host vs shared-container dispatch.
+    const overlay = await buildSessionRuntimeOverlay(
+      req.user,
+      options.perUserRuntime,
+      options.containerDeps,
+      themeEnv,
+    );
     const baseSpawn = {
       projectId: project.id,
       cwd: project.cwd,
@@ -202,7 +209,9 @@ export async function registerSessionRoutes(
       mode: body.mode,
       userId,
       ...(forcedSessionId !== undefined ? { forcedSessionId } : {}),
-      ...(Object.keys(themeEnv).length > 0 ? { env: themeEnv } : {}),
+      ...(overlay.env !== undefined ? { env: overlay.env } : {}),
+      ...(overlay.runtime !== undefined ? { runtime: overlay.runtime } : {}),
+      ...(overlay.container !== undefined ? { container: overlay.container } : {}),
     };
     const withSize: Pick<SpawnOptions, 'cols' | 'rows'> = {
       ...(body.cols !== undefined ? { cols: body.cols } : {}),

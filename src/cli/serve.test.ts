@@ -39,7 +39,7 @@ afterEach(() => {
 describe('resolveIsolation — happy path', () => {
   it('default strict + no users → mode:strict ready:true', () => {
     const r = resolveIsolation(mkConfig(), 'owner');
-    expect(r).toEqual({ mode: 'strict', ready: true });
+    expect(r.status).toEqual({ mode: 'strict', ready: true });
   });
 
   it('strict + non-owner host user → mode:strict ready:true', () => {
@@ -47,7 +47,7 @@ describe('resolveIsolation — happy path', () => {
       mkConfig({ users: { alice: { runtime: 'host' } } }),
       'owner',
     );
-    expect(r).toEqual({ mode: 'strict', ready: true });
+    expect(r.status).toEqual({ mode: 'strict', ready: true });
   });
 
   it('fallback policy returned verbatim', () => {
@@ -55,14 +55,14 @@ describe('resolveIsolation — happy path', () => {
       mkConfig({ isolationPolicy: 'fallback' }),
       'owner',
     );
-    expect(r).toEqual({ mode: 'fallback', ready: true });
+    expect(r.status).toEqual({ mode: 'fallback', ready: true });
   });
 });
 
 describe('resolveIsolation — D3 owner runtime', () => {
   it('owner not in users field → OK (default behavior)', () => {
     const r = resolveIsolation(mkConfig({ users: {} }), 'owner');
-    expect(r.ready).toBe(true);
+    expect(r.status.ready).toBe(true);
   });
 
   it('owner with explicit host runtime → OK', () => {
@@ -72,7 +72,7 @@ describe('resolveIsolation — D3 owner runtime', () => {
       }),
       'owner',
     );
-    expect(r.ready).toBe(true);
+    expect(r.status.ready).toBe(true);
   });
 
   it('owner runtime: shared-container → fatal', () => {
@@ -116,7 +116,7 @@ describe('resolveIsolation — D4 host-only override', () => {
       }),
       'owner',
     );
-    expect(r).toEqual({ mode: 'host-only', ready: true });
+    expect(r.status).toEqual({ mode: 'host-only', ready: true });
   });
 
   it('host-only with all-host config still returns host-only mode', () => {
@@ -127,7 +127,7 @@ describe('resolveIsolation — D4 host-only override', () => {
       }),
       'owner',
     );
-    expect(r).toEqual({ mode: 'host-only', ready: true });
+    expect(r.status).toEqual({ mode: 'host-only', ready: true });
   });
 
   it('host-only does NOT reject owner=shared-container (owner check first)', () => {

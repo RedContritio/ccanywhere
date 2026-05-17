@@ -60,14 +60,20 @@
       proc env 看到). 拆出避免 manager.ts 超 300 行 lint cap
 - [x] `src/session/manager.ts` (C4): spawn() 调 buildSpawnCommand
       路由; 既有 host 路径 0 改动 (零回归)
-- [ ] session 流程 (sessions.ts call site C5): spawn 前 env 注入
-      ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN (proxy issue) +
-      CLAUDE_CONFIG_DIR=/home/<user>/.claude +
-      DISABLE_AUTOUPDATER=1 + DISABLE_TELEMETRY=1
-- [ ] `src/cli/serve-isolation.ts` (C5): D5 解锁 'shared-container'
-      (Phase 2 ready) + D6 加 docker availability detection
-      (strict 模式 docker 不可达 fatal; fallback 模式 override
-      host + warn)
+- [x] sessions.ts + sessions-resume.ts call site (C5): spawn 前调
+      buildSessionRuntimeOverlay → 注入 ANTHROPIC_BASE_URL +
+      ANTHROPIC_AUTH_TOKEN + CLAUDE_CONFIG_DIR + DISABLE_AUTOUPDATER
+      + DISABLE_TELEMETRY when 走 shared-container 路径
+- [x] `src/server/routes/session-runtime.ts` (C5 新): buildSession
+      RuntimeOverlay (host vs shared dispatch) + buildThemeEnv
+      (移自 sessions.ts/sessions-resume.ts 共享)
+- [x] `src/cli/serve-isolation.ts` (C5): D5 解锁 sharedContainerReady
+      opt (默认 false 保 Phase 1.B 行为); IsolationResolution 加
+      perUserRuntime map; D6 docker availability detection 留 C6
+      (跟 serve.ts wire 一起做)
+- [x] BuildServerOptions (C5): 加 perUserRuntime + containerDeps
+      字段, 透传给 registerSessionRoutes + registerSessionResume
+      Routes options
 
 ## 实现 — workspace 隔离
 

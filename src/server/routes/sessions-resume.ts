@@ -4,22 +4,25 @@ import type { Config } from '../../config/schema.js';
 import { logger } from '../../log.js';
 import type { SessionManager } from '../../session/manager.js';
 import { buildResumeArgs } from '../../session/resume-args.js';
+import type { UserStore } from '../../users/store.js';
 import type { ResolveProjectStore } from './projects.js';
+import {
+  buildSessionRuntimeOverlay,
+  buildThemeEnv,
+  type SessionContainerDeps,
+} from './session-runtime.js';
+
+export interface SessionResumeRoutesOptions {
+  readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
+  readonly containerDeps?: SessionContainerDeps;
+  readonly userStore?: UserStore;
+}
 
 const ResumeBodySchema = z.object({
   cols: z.number().int().min(1).optional(),
   rows: z.number().int().min(1).optional(),
   webTheme: z.enum(['dark', 'light']).optional(),
 });
-
-function buildThemeEnv(
-  webTheme: 'dark' | 'light' | undefined,
-): Record<string, string> {
-  if (webTheme === undefined) return {};
-  return webTheme === 'dark'
-    ? { COLORFGBG: '15;0' }
-    : { COLORFGBG: '0;15' };
-}
 
 /**
  * m-session-persistence C4: two endpoints to drive the dead-stub UX.
@@ -35,6 +38,7 @@ export async function registerSessionResumeRoutes(
   config: Config,
   manager: SessionManager,
   resolveStore: ResolveProjectStore,
+  options: SessionResumeRoutesOptions = {},
 ): Promise<void> {
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/api/sessions/:id/resume',
@@ -90,6 +94,16 @@ export async function registerSessionResumeRoutes(
 
       const resumeInput = { webId: id, resumeSessionId: stub.info.resumeSessionId };
       const themeEnv = buildThemeEnv(parsed.data.webTheme);
+      // m-user-shared-container C5: host vs shared-container dispatch
+      // (looked up via stub.userId when req.user absent).
+      const userForRuntime =
+        req.user ?? options.userStore?.findById(stub.info.userId) ?? undefined;
+      const overlay = await buildSessionRuntimeOverlay(
+        userForRuntime,
+        options.perUserRuntime,
+        options.containerDeps,
+        themeEnv,
+      );
       try {
         const result = manager.resumeDeadStub(id, {
           command: config.claudeBin,
@@ -97,7 +111,9 @@ export async function registerSessionResumeRoutes(
           scrollbackBytes: config.scrollbackBytes,
           ...(parsed.data.cols !== undefined ? { cols: parsed.data.cols } : {}),
           ...(parsed.data.rows !== undefined ? { rows: parsed.data.rows } : {}),
-          ...(Object.keys(themeEnv).length > 0 ? { env: themeEnv } : {}),
+          ...(overlay.env !== undefined ? { env: overlay.env } : {}),
+          ...(overlay.runtime !== undefined ? { runtime: overlay.runtime } : {}),
+          ...(overlay.container !== undefined ? { container: overlay.container } : {}),
         });
 
         if (result.kind === 'attached') {

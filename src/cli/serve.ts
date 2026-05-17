@@ -156,8 +156,12 @@ export async function runServe(configPathArg?: string): Promise<void> {
   // m-user-runtime-schema. Resolve isolation policy + per-user runtime
   // BEFORE building the server (fatal on bad config; ready snapshot
   // exposed via /healthz). Owner D3 / strict-container D5 / host-only
-  // D4 all decide here.
-  const isolation = resolveIsolation(config, ownerUser.username);
+  // D4 all decide here. C6 will wire docker-detect + container deps
+  // before this call so sharedContainerReady can be set true.
+  const { status: isolation, perUserRuntime } = resolveIsolation(
+    config,
+    ownerUser.username,
+  );
 
   const app = await buildServer({
     config,
@@ -171,6 +175,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
     internalHookToken,
     cliToken,
     isolation,
+    perUserRuntime,
   });
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
@@ -191,6 +196,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
   process.on('SIGTERM', (s) => void shutdown(s));
 
   void isolation; // referenced by buildServer above; keep var live
+  void perUserRuntime; // ditto — C5 wired into sessions.ts via buildServer
 
   await app.listen({ host: config.bindHost, port: config.port });
   const addr = app.server.address();
