@@ -1,0 +1,51 @@
+# frpc.toml — 拷贝到 frpc 工作目录，填上 auth.token 和域名后跑：
+#   frpc -c frpc.toml
+#
+# 拓扑（推荐 https + https2http plugin）:
+#   browser ──https──▶ frps :443 ──tunnel──▶ frpc on host
+#                                        └─ TLS 终结于 frpc 本机 ──HTTP──▶ ccanywhere :8081
+#
+# 远端 frps.toml 必需:
+#   bindPort = 7000              # frpc 控制连接口
+#   vhostHTTPSPort = 443         # https vhost 监听口（必须在公网防火墙放行）
+#   auth.method = "token"
+#   auth.token  = "..."          # 跟下面 auth.token 一致
+#
+# 本机必需:
+#   ccanywhere 已跑在 :8081
+#   acme.sh 已申到 cc.<your-domain> 的证书（见 scripts/cert-issue.sh）
+
+serverAddr = "<frps host or IP>"
+serverPort = 7000
+
+auth.method = "token"
+auth.token = "REPLACE-WITH-YOUR-FRPS-TOKEN"
+
+# 控制连接的 TLS（frpc ↔ frps），与下方 vhost https 是两件独立的事
+transport.tls.enable = true
+
+# ── ccanywhere（https + https2http plugin，TLS 终结在本机）─────────────────
+[[proxies]]
+name = "ccanywhere"
+type = "https"
+customDomains = ["cc.<your-domain>"]
+
+[proxies.plugin]
+type = "https2http"
+localAddr = "127.0.0.1:8081"
+crtPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.crt"
+keyPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.key"
+hostHeaderRewrite = "cc.<your-domain>"
+
+# ── 备选：plain TCP（无 TLS，仅 LAN/调试用）──────────────────────────────
+# 如果你只想先验证端到端连通，不申证书，注释掉上面的 [[proxies]] 段，
+# 改用下面的：
+#
+# [[proxies]]
+# name = "ccanywhere"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 8081
+# remotePort = 8081
+#
+# 公网入口变成 http://<frps host>:8081/ — 仅在你完全信任公网链路时合适。

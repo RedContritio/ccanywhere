@@ -1,0 +1,114 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { SessionManager } from '../session/manager.js';
+import { encodeProjectCwd } from './history.js';
+import { buildServer } from './server.js';
+import {
+  baseConfig,
+  CLI_TOKEN,
+  INTERNAL_HOOK_TOKEN,
+  setupProjects,
+  type TestProjectsEnv,
+} from './server.test-helpers.js';
+
+describe('REST API with historyRoot for resume validation', () => {
+  let mgr: SessionManager;
+  let app: FastifyInstance;
+  let historyRoot: string;
+  let env: TestProjectsEnv;
+
+  beforeEach(async () => {
+    env = setupProjects();
+    historyRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-srv-hist-'));
+    const projDir = join(historyRoot, encodeProjectCwd(env.demoCwd));
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(
+      join(projDir, 'known-session.jsonl'),
+      JSON.stringify({ type: 'user', message: { content: 'old' } }) + '\n',
+    );
+
+    mgr = new SessionManager();
+    app = await buildServer({
+      config: baseConfig,
+      manager: mgr,
+      projectStore: env.projectStore,
+      deviceStore: env.deviceStore,
+      internalHookToken: INTERNAL_HOOK_TOKEN,
+      cliToken: CLI_TOKEN,
+      historyRoot,
+      webDistDir: null,
+      injectCcSessionId: false,
+    });
+  });
+
+  afterEach(async () => {
+    await mgr.killAll();
+    await app.close();
+    rmSync(historyRoot, { recursive: true, force: true });
+    env.cleanup();
+  });
+
+  it('accepts resume when sessionId exists in history', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
+      payload: { projectId: 'demo', mode: 'resume', sessionId: 'known-session' },
+    });
+    expect(res.statusCode).toBe(201);
+    expect((res.json() as { mode: string }).mode).toBe('resume');
+  });
+
+  it('rejects resume when sessionId is not in history (boundary)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
+      payload: { projectId: 'demo', mode: 'resume', sessionId: 'never-was' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect((res.json() as { error: { code: string } }).error.code).toBe('invalid_resume');
+  });
+
+  /**
+   * #38 resume-singleton (5cbed9f) HTTP contract:
+   * second `POST /api/sessions { mode: 'resume', sessionId: 'X' }` while
+   * an active web-session is already driving cc-X MUST attach to the
+   * existing web-session (status 200, same body.id) rather than spawn a
+   * second cc process for the same jsonl history.
+   *
+   * Feedback 2026-05-09 "两次 resume 同 session 但有两个窗口" — pre-fix
+   * report. This test guards the fix from regressing.
+   */
+  it('second resume of same sessionId attaches (200) to existing web session', async () => {
+    // First resume spawned by hand with a long-lived sleep so the lock
+    // entry persists across the second POST. injectCcSessionId is false
+    // (default in this fixture), so cc-id == resumeSessionId.
+    const first = mgr.spawn({
+      projectId: 'demo',
+      cwd: env.demoCwd,
+      command: '/bin/sleep',
+      args: ['30'],
+      scrollbackBytes: 4096,
+      mode: 'resume',
+      resumeSessionId: 'known-session',
+      userId: 'legacy-no-user',
+    });
+    if (first.kind !== 'created') throw new Error('expected created');
+    const webIdA = first.session.info.id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: { cookie: env.authCookie, 'content-type': 'application/json' },
+      payload: { projectId: 'demo', mode: 'resume', sessionId: 'known-session' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { id: string }).id).toBe(webIdA);
+    // Still only one session in the manager — no second cc process.
+    expect(mgr.list()).toHaveLength(1);
+  });
+});

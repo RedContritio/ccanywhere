@@ -1,0 +1,47 @@
+# m-user-shared-container Phase 2: user runtime image
+#
+# D7 修订 (第二次): claude binary 通过 `npm install -g` 装 Linux 版
+# 进 image. 撤回 mount 路径 — host claude 是 macOS Mach-O native
+# binary, Linux container 跑会 `exec format error`. 改用 npm 标准
+# 分发渠道, 跟 ccanywhere image 版本一起 tag.
+#
+# per-user unix account 也不在这 build (D4 是 user-sync.ts 在
+# ccanywhere 加 user 时 docker exec useradd 建)。
+
+FROM node:20-alpine
+
+# Packages:
+#   iptables           — m-user-shared-container D5 egress 锁
+#   shadow             — useradd/userdel for per-user account (D4)
+#   ca-certificates    — HTTPS 出站 (github / web_search / proxy)
+#   bash               — entrypoint shell + manual debug
+#   curl               — manual verify + 调试网络
+RUN apk add --no-cache \
+    iptables \
+    shadow \
+    ca-certificates \
+    bash \
+    curl
+
+# claude code Linux build (D7 修订, vendor via npm). ccanywhere 升级
+# 时 pin 版本: `@anthropic-ai/claude-code@<version>`.
+RUN npm install -g @anthropic-ai/claude-code
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
+
+# m-host-credentials-share D6 + Managed Light (2026-05-20): all policy
+# (deny rules + LLM soft norm CLAUDE.md text via `claudeMd` field) lives
+# in cc anthropic-spec managed scope path. user-level settings.json /
+# CLAUDE.md cannot override (allowManagedPermissionRulesOnly + managed
+# precedence). ContainerUserSync no longer cp's per-user CLAUDE.md.
+COPY managed-settings.json /etc/claude-code/managed-settings.json
+RUN chmod 0644 /etc/claude-code/managed-settings.json
+
+# m-host-credentials-share C5c/C5d: cc apiKeyHelper rotation script.
+# settings.json's `apiKeyHelper` field points to this; cc calls it on
+# 401 to swap stale ANTHROPIC_AUTH_TOKEN for a fresh 5-min bearer.
+COPY cc-helper.sh /usr/local/bin/cc-helper.sh
+RUN chmod 0755 /usr/local/bin/cc-helper.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
