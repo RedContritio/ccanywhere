@@ -1,0 +1,46 @@
+/* Kill native scroll on xterm's actual scroll container. cc runs in
+ * alt-screen (no scrollback to expose) and any inertial / native scroll
+ * over `.xterm-viewport` desyncs xterm's row state on Android Chrome,
+ * showing duplicated or dropped rows on the banner/status line. We have
+ * nothing to scroll, so the simplest fix is to take the scroll container
+ * out of the picture entirely.
+ *
+ * `touch-action: none` blocks the OS from generating ballistic scroll
+ * events on this element; `overscroll-behavior: contain` prevents the
+ * gesture from chaining out (pull-to-refresh, etc).
+ *
+ * !important is intentional — xterm sets inline overflow on the viewport
+ * itself when scrollback updates.
+ */
+.xterm-viewport {
+  overflow: hidden !important;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+/* xterm.css sets `.xterm { user-select:
+ * none }` which kills native HTML selection on every cell, regardless
+ * of renderer. Dead pane uses xterm's default DOM renderer (no WebGL/
+ * Canvas addon loaded) so each cell is a real <span> with inline fg/bg
+ * — overriding user-select to `text` lets mobile long-press fire the
+ * system-native selection (handles + word picking + system copy menu)
+ * directly on the spans, with xterm's own cell metrics guaranteeing
+ * perfect glyph alignment.
+ *
+ * Active pane is left untouched (`.xterm` selector matches both, so we
+ * scope by data-dead-pane on the wrapping container).
+ */
+[data-dead-pane='true'] .xterm,
+[data-dead-pane='true'] .xterm * {
+  user-select: text;
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* The viewport's `touch-action: none` blocks the OS long-press selection
+ * gesture as well. Dead pane doesn't scroll inside xterm (snapshot is
+ * one-shot, no scrollback), so unblocking touch-action here is safe. */
+[data-dead-pane='true'] .xterm-viewport {
+  touch-action: auto;
+}

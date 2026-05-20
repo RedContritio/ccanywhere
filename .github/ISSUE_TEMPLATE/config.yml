@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞 (private)
+    url: https://github.com/RedContritio/ccanywhere/security/advisories/new
+    about: 安全问题走 GitHub Security Advisory,不要开 public issue
+  - name: 一般问题 / 讨论
+    url: https://github.com/RedContritio/ccanywhere/discussions
+    about: 问"how to" / 用法 / 设计讨论
