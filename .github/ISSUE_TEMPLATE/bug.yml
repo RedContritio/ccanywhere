@@ -1,0 +1,76 @@
+name: Bug report
+description: 报告一个 ccanywhere 缺陷
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 先看
+
+        - 安全问题请走 [Security Advisory](https://github.com/RedContritio/ccanywhere/security/advisories/new),**不要**开 public issue
+        - 检查现有 issue 看是否已报告
+        - 尽可能用最少复现路径(单独 cc session / 全新 config 等)
+
+  - type: input
+    id: ccanywhere-version
+    attributes:
+      label: ccanywhere version
+      description: "`git rev-parse HEAD` 或 release tag"
+      placeholder: "e.g. v0.1.0 or 5af3a5b"
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "e.g. 14.6 Sonoma"
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "e.g. v20.18.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 越精确越好
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志片段
+      description: "`tail -100 ~/.config/ccanywhere/server.log` (请脱敏)"
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 其他上下文
+      description: frpc.toml 片段 / 浏览器 console 错误 / 截图等

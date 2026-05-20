@@ -148,6 +148,15 @@ export class ShareStore {
     return this.loadAllSync().filter((r) => r.createdBy === userId);
   }
 
+  /** Resolves when any pending write/delete for `code` settles. Exists
+   *  for tests that need to await fire-and-forget lazy GC (load() voids
+   *  the delete promise so callers don't block on read paths). Production
+   *  callers don't need this — load/save round-trips are deterministic
+   *  through the queue. */
+  async idle(code: string): Promise<void> {
+    return this.queue.idle(code);
+  }
+
   private metadataPath(code: string): string {
     return join(this.dir, `${code}.json`);
   }

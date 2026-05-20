@@ -19,9 +19,9 @@ const __dirname = dirname(__filename);
  *    only the token rotates.
  * 3. Issue a fresh token (ttl 7d) for that user.
  * 4. Write storageState.json that playwright contexts auto-load, planting
- *    `ccanywhere_session=<token-plaintext>` on the prod webOrigin
- *    (`https://cc.recoco.xyz` by default — drives the prod frpc / HTTPS
- *    path, no localhost shortcut).
+ *    `ccanywhere_session=<token-plaintext>` on the prod webOrigin (from
+ *    your ccanywhere config.webOrigin — drives the prod frpc / HTTPS path,
+ *    no localhost shortcut).
  * 5. Save `{ tokenId }` to teardown.json for globalTeardown to revoke.
  *
  * Playwright BrowserContext cookies are isolated from your real browser,
@@ -162,7 +162,10 @@ export default async function globalSetup(): Promise<void> {
     expiresAt = issued.expiresAt;
   }
 
-  const webOrigin = config.webOrigin ?? 'https://cc.recoco.xyz';
+  const webOrigin = config.webOrigin;
+  if (webOrigin === undefined) {
+    throw new Error('ccanywhere config.webOrigin must be set for e2e');
+  }
   const cookieName = config.cookieName ?? 'ccanywhere_session';
   const url = new URL(webOrigin);
   const isSecure = url.protocol === 'https:';

@@ -39,7 +39,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 |------|------|
 | `port` | 默认 `62275`（一次性随机选定）。多机部署改成别的 |
 | `claudeBin` | 写**绝对路径**。LaunchAgent 的 PATH 不含 `~/.local/bin`，相对名 `claude` 会找不到导致 spawn 立即 dead |
-| `webOrigin` | web SPA 实际服务的 origin（如 `https://ccanywhere.example.com`）。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；改这一项会让所有已配对设备失效 |
+| `webOrigin` | web SPA 实际服务的 origin（如 `https://cc.example.com`）。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；改这一项会让所有已配对设备失效 |
 | `projectsRoot` | 项目集合根目录（绝对路径），其直接子目录被自动列为可选项目；启动时不存在会自动 mkdir，不可读直接 fatal，不可写则只能列/选不能新建 |
 | `guestProjectsRoot` | **必填**（m-multi-user）。limited user 项目沙盒父目录（绝对路径），其下每个 limited user 拿到一个 `<username>/` 子目录作 cwd 根。**MUST NOT** 与 `projectsRoot` 相同，**MUST NOT** 互为父子。启动时自动 `mkdir -p` (mode 0700)。详见 §7 |
 | `outputFps` | WS 输出最大帧率，1..240 默认 60。带宽紧张可调到 24 |
@@ -50,7 +50,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 
 ```bash
 which claude
-# /Users/you/.local/bin/claude
+# /Users/<you>/.local/bin/claude
 ```
 
 LaunchAgent / LaunchDaemon 的 PATH 默认是 `/usr/bin:/bin:/usr/sbin:/sbin`，

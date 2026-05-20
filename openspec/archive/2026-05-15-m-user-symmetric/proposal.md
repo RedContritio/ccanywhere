@@ -76,9 +76,9 @@ enforce kind 差异**。
 
 ```jsonc
 {
-  "workspace": "/Users/redcontritio/ccanywhere-workspace",   // 默认 user 父目录
+  "workspace": "/Users/<you>/ccanywhere-workspace",   // 默认 user 父目录
   "users": {
-    "owner": { "workspace": "/Users/redcontritio/Projects" }   // 可选 override，绝对路径
+    "owner": { "workspace": "/Users/<you>/Projects" }   // 可选 override，绝对路径
   }
 }
 ```
@@ -191,7 +191,7 @@ enforce kind 差异**。
 ## 影响范围
 
 - **owner 视角**：dogfood 后 user 验证看不到 owner 项目少了一份 ProjectStore；
-  ship + 改 config 后行为 0 变化（owner override `/Users/redcontritio/Projects`）
+  ship + 改 config 后行为 0 变化（owner override `/Users/<you>/Projects`）
 - **user 视角**：不再被 owner 数据污染；浏览 / 创建 / 删除 / 历史
   全部按自己 workspace 走；可创建 session（不再 project_not_found）
 - **prod fs**：mkdir `~/ccanywhere-workspace/`；删 `~/Projects-guests/`（含空

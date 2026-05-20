@@ -267,9 +267,12 @@ export class SessionManager {
     }
   }
 
-  /** Awaits pending registry writes (shutdown flush). Does not kill PTYs. */
+  /** Awaits pending writes (shutdown flush, no PTY kill). Loops because
+   *  handleSessionExit can trackWrite during await — snapshot leaks. */
   async detach(): Promise<void> {
-    await Promise.allSettled([...this.pendingWrites]);
+    while (this.pendingWrites.size > 0) {
+      await Promise.allSettled([...this.pendingWrites]);
+    }
   }
 
   async killAll(): Promise<void> {

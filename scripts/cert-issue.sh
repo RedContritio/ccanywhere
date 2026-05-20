@@ -2,6 +2,8 @@
 # 一键申请 Let's Encrypt 证书 + 装到 ccanywhere 期望的路径。
 #
 # 前置：
+#   export CCANYWHERE_DOMAIN='cc.your-domain.com'
+#   export CCANYWHERE_ACME_EMAIL='you@your-domain.com'
 #   export Tencent_SecretId='...'
 #   export Tencent_SecretKey='...'
 #
@@ -10,8 +12,15 @@
 
 set -euo pipefail
 
-DOMAIN="${CCANYWHERE_DOMAIN:-cc.recoco.xyz}"
-EMAIL="${CCANYWHERE_ACME_EMAIL:-redcontritio@gmail.com}"
+if [[ -z "${CCANYWHERE_DOMAIN:-}" || -z "${CCANYWHERE_ACME_EMAIL:-}" ]]; then
+  echo "[cert-issue] 错误：先 export CCANYWHERE_DOMAIN 和 CCANYWHERE_ACME_EMAIL" >&2
+  echo "  export CCANYWHERE_DOMAIN='cc.your-domain.com'" >&2
+  echo "  export CCANYWHERE_ACME_EMAIL='you@your-domain.com'" >&2
+  exit 2
+fi
+
+DOMAIN="$CCANYWHERE_DOMAIN"
+EMAIL="$CCANYWHERE_ACME_EMAIL"
 CERT_DIR="$HOME/.config/ccanywhere/certs"
 ACME_HOME="$HOME/.acme.sh"
 RELOAD_CMD="sudo /bin/launchctl kickstart -k system/com.fatedier.frpc"

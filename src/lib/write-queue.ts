@@ -33,4 +33,21 @@ export class WriteQueue<K extends string> {
       .catch(() => {});
     return next;
   }
+
+  /** Resolves when all in-flight ops for `key` settle. If no chain
+   *  exists (no pending op), resolves immediately. Used by tests that
+   *  trigger fire-and-forget ops (e.g. lazy GC unlink) and need to wait
+   *  for the IO to settle deterministically — replaces `setImmediate × N`
+   *  guesswork. Rejections of in-flight ops are swallowed here (idle
+   *  reports "queue drained" regardless of op outcome). */
+  async idle(key: K): Promise<void> {
+    const chain = this.chains.get(key);
+    if (chain === undefined) return;
+    try {
+      await chain;
+    } catch {
+      // queue already swallows op rejection for chain bookkeeping; idle
+      // observes the same drained state.
+    }
+  }
 }

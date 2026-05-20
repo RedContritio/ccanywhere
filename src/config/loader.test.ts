@@ -116,12 +116,13 @@ describe('loadConfig', () => {
 
   describe('users.<name>.workspace override (m-user-symmetric)', () => {
     it('accepts owner override pointing at an existing project tree', () => {
+      const ownerWorkspace = join(tmpdir(), 'projects');
       write({
         ...validBase,
-        users: { owner: { workspace: '/Users/redcontritio/Projects' } },
+        users: { owner: { workspace: ownerWorkspace } },
       });
       const cfg = loadConfig(path);
-      expect(cfg.users?.['owner']?.workspace).toBe('/Users/redcontritio/Projects');
+      expect(cfg.users?.['owner']?.workspace).toBe(ownerWorkspace);
     });
 
     it('rejects relative path override', () => {

@@ -181,7 +181,7 @@ launch agent 用不同的 `--config` 指向不同 config 文件，state 自然�
 | `scrollbackBytes`        | ≥ 65536 的整数                        | `1048576`     | 单 session scrollback 上限 |
 | `workspace`              | string                                | （必填）      | 所有 user 项目根的父目录（绝对路径）。每 user 默认 root = `<workspace>/<username>`；可被 `users.<name>.workspace` override（m-user-symmetric） |
 | `users`                  | `Record<string, { workspace?: string }>` | `undefined` | 可选 per-user 配置；目前仅识别 `workspace` 子字段（绝对路径 override） |
-| `webOrigin`              | URL                                   | （必填）      | web SPA 实际服务的 origin（如 `https://ccanywhere.example.com`）。WebAuthn `rpID` 由其 hostname 派生；`expectedOrigin` 校验也用它。改变 `webOrigin` 会让所有已配对设备失效 |
+| `webOrigin`              | URL                                   | （必填）      | web SPA 实际服务的 origin（如 `https://cc.example.com`）。WebAuthn `rpID` 由其 hostname 派生；`expectedOrigin` 校验也用它。改变 `webOrigin` 会让所有已配对设备失效 |
 | `deletedSessionTtlMs`    | ≥ 60000 的整数                        | `600000`      | 软删除 session 在 manager 中保留时长（10 分钟，覆盖弱网络重试窗口） |
 | `wsHeartbeat`            | `{ intervalMs, timeoutMs }`           | 见下          | WS 帧级心跳参数 |
 | `cookieName`             | 非空 string                           | `"ccanywhere_session"` | session cookie 名。仅在同一 domain 跑多个 ccanywhere 实例（如 prod + staging 不同 port）时 override —— RFC 6265 cookie 忽略 port，同 host 同 cookie name 浏览器 last-write-wins，会让 staging 的 Set-Cookie 踢掉 prod 的会话。staging 实例 MUST 设成与 prod 不同的值（如 `"ccanywhere_session_e2e"`） |

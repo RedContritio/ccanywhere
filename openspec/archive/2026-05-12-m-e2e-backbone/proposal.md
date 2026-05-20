@@ -3,7 +3,7 @@
 ## Intent
 
 承接 m-multi-user (#44) 解锁的 token-based limited user 登录路径。
-playwright e2e 直接打 prod 域名 `https://cc.recoco.xyz`（走真 frpc /
+playwright e2e 直接打 prod 域名 `https://cc.example.com`（走真 frpc /
 HTTPS 链路），用 globalSetup 通过本地 internal RPC 颁固定 'e2e'
 limited user + token，写 storageState cookie，浏览器 context 天然隔离
 不串你真浏览器 cookie。
@@ -24,7 +24,7 @@ m-multi-user archive tasks.md 列了 "#32 e2e backbone v12.1 (~40 LOC)"
 
 ## 落地
 
-- `web/playwright.config.ts` baseURL=https://cc.recoco.xyz + globalSetup +
+- `web/playwright.config.ts` baseURL=https://cc.example.com + globalSetup +
   globalTeardown + storageState
 - `web/e2e/global-setup.ts` (206 LOC): 读 cli-token + GET/POST internal
   users + 写 .auth/storageState.json + teardown.json

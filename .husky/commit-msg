@@ -1,12 +1,14 @@
 #!/usr/bin/env sh
-# OpenSpec guard: any src/ or web/src/ change MUST accompany openspec/ updates.
+# OpenSpec guard (warning mode): src/ or web/src/ changes are expected to
+# accompany openspec/ updates (proposal / tasks / archive / spec / BACKLOG).
 #
-# No bypass. No skip marker. No test-only exemption. If you touch code, you
-# touch a proposal / archive / spec / BACKLOG entry in the same commit.
+# This hook PRINTS A WARNING but does NOT block the commit. Maintainers
+# self-enforce; external PRs are reviewed against this convention.
 #
-# Why: backlog / decisions / spec drift can't be tracked from memory or
-# convention. A leak-proof commit-time gate is the only way to keep
-# OpenSpec the actual source of truth.
+# Why warning not block: a hard fail wedges fork PRs that touch src/ for a
+# typo or backport, and CONTRIBUTING.md describes the convention clearly.
+# The signal is preserved (you see the warning every time you forget) but
+# the commit proceeds.
 
 STAGED=$(git diff --cached --name-only)
 
@@ -15,9 +17,9 @@ SPEC_CHANGED=$(printf '%s\n' "$STAGED" | grep -cE '^openspec/' || true)
 
 if [ "$CODE_CHANGED" -gt 0 ] && [ "$SPEC_CHANGED" -eq 0 ]; then
     cat >&2 <<'EOF'
-ERROR: src/ or web/src/ changed but no openspec/ updates in this commit.
+WARNING: src/ or web/src/ changed but no openspec/ updates in this commit.
 
-Every code change MUST accompany an OpenSpec change in the SAME commit:
+OpenSpec convention expects every code change to carry one of:
 
   - openspec/changes/<slug>/proposal.md         (start of in-flight work)
   - openspec/changes/<slug>/tasks.md            (tasks log update)
@@ -25,15 +27,13 @@ Every code change MUST accompany an OpenSpec change in the SAME commit:
   - openspec/specs/<area>/spec.md               (spec delta: Requirement / Scenario)
   - openspec/BACKLOG.md                         (newly discovered backlog item)
 
-There is no override. Tests, comment-only fixes, refactors — all of them
-need an OpenSpec touchpoint. If the change is too small to deserve a
-spec edit, it should be folded into a proposal / archive / BACKLOG entry
-that explains why it landed.
+If you intend to land this commit without one (small fix / backport /
+docs touch in src), proceed — but a maintainer will likely ask for the
+OpenSpec touchpoint at PR review time. See CONTRIBUTING.md.
 
 Staged files:
 EOF
     printf '%s\n' "$STAGED" | sed 's/^/    /' >&2
-    exit 1
 fi
 
 exit 0

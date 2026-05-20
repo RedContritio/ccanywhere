@@ -1,4 +1,18 @@
-# ccanywhere — 项目级约束
+# ccanywhere — 项目级约束 (模板)
+
+> 这是 `CLAUDE.md` 的脱敏模板。本仓库的真正 `CLAUDE.md` 不入版本控制
+> (见 `.gitignore`),要用的话:
+>
+> ```bash
+> cp CLAUDE.template.md CLAUDE.md
+> # 然后把 com.<you>.ccanywhere 替换成你自己的 launchd label
+> ```
+>
+> 或者拷到 claude code 的 per-project 路径让它自动加载:
+>
+> ```bash
+> cp CLAUDE.template.md ~/.claude/projects/$(pwd | sed 's|/|-|g')/CLAUDE.md
+> ```
 
 跨项目通用工作风格在 `~/.claude/CLAUDE.md`。本文件只放 ccanywhere 特有的
 强制约束。
@@ -79,7 +93,7 @@ ccanywhere 是 user 本机 LaunchAgent。web 改动 + cli 改动都要走完整�
 ```bash
 pnpm typecheck:all && pnpm lint && pnpm lint:md && pnpm test
 pnpm build:all                                                    # web/dist + dist/cli.js
-launchctl kickstart -k gui/$(id -u)/com.redcontritio.ccanywhere   # respawn LaunchAgent
+launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere   # respawn LaunchAgent
 sleep 3 && curl -sf http://127.0.0.1:62275/healthz                # 必须返 200 {"ok":true}
 ```
 

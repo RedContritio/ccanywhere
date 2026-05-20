@@ -58,4 +58,53 @@ describe('WriteQueue', () => {
     const v = await q.enqueue('k', async () => 42);
     expect(v).toBe(42);
   });
+
+  it('idle(unknown key) resolves immediately', async () => {
+    const q = new WriteQueue<string>();
+    await expect(q.idle('never-enqueued')).resolves.toBeUndefined();
+  });
+
+  it('idle(key) waits for in-flight op to complete', async () => {
+    const q = new WriteQueue<string>();
+    let opDone = false;
+    void q.enqueue('k', async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      opDone = true;
+    });
+    await q.idle('k');
+    expect(opDone).toBe(true);
+  });
+
+  it('idle(key) waits for the whole chain, not just the latest op', async () => {
+    const q = new WriteQueue<string>();
+    const order: string[] = [];
+    void q.enqueue('k', async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      order.push('op1');
+    });
+    void q.enqueue('k', async () => {
+      order.push('op2');
+    });
+    await q.idle('k');
+    expect(order).toEqual(['op1', 'op2']);
+  });
+
+  it('idle(key) after the chain drains resolves immediately', async () => {
+    const q = new WriteQueue<string>();
+    await q.enqueue('k', async () => 'done');
+    // chain cleanup runs in finally microtask; one tick.
+    await new Promise((r) => setTimeout(r, 0));
+    // No chain for 'k' anymore — idle resolves on the undefined branch.
+    await expect(q.idle('k')).resolves.toBeUndefined();
+  });
+
+  it('idle(key) swallows op rejection (reports drained regardless)', async () => {
+    const q = new WriteQueue<string>();
+    const p = q.enqueue('k', async () => {
+      throw new Error('op failed');
+    });
+    // Caller observes rejection via the returned promise; idle does not.
+    await expect(p).rejects.toThrow('op failed');
+    await expect(q.idle('k')).resolves.toBeUndefined();
+  });
 });

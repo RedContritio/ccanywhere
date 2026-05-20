@@ -67,7 +67,7 @@
 - [ ] U3. `frpc.toml` 加 staging tunnel + remotePort=7443
 - [ ] U4. `launchctl bootstrap` staging plist；`launchctl kickstart -k`
   reload frpc
-- [ ] U5. 浏览器访问 https://cc.recoco.xyz:7443 走一次 webauthn pair（无
+- [ ] U5. 浏览器访问 https://cc.example.com:7443 走一次 webauthn pair（无
   e2e 时人工；e2e 时 #32 globalSetup 通过 CDP 自动）
 
 ## 归档

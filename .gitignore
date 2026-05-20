@@ -13,3 +13,8 @@ playwright-report/
 .playwright-mcp/
 .auth/
 .husky/_/
+
+# CLAUDE.md is user-private (含本机部署流程 / prod config 约定 / 个人
+# OpenSpec 工作流). 不进公开仓库. 本地副本 user 自己管理 (可放
+# ~/.claude/projects/<encoded-cwd>/CLAUDE.md 让 claude code 自动加载).
+CLAUDE.md

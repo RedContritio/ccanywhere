@@ -28,7 +28,7 @@
 
 - [ ] T5.1 `pnpm typecheck:all && pnpm lint && pnpm lint:md && pnpm test` 全绿
 - [ ] T5.2 `pnpm build:all`
-- [ ] T5.3 `launchctl kickstart -k gui/$(id -u)/com.redcontritio.ccanywhere`；`curl -sf http://127.0.0.1:62275/healthz` 返 200
+- [ ] T5.3 `launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere`；`curl -sf http://127.0.0.1:62275/healthz` 返 200
 - [ ] T5.4 server.log 检查无 fatal
 
 ## 段 6：BACKLOG + Commit + Archive

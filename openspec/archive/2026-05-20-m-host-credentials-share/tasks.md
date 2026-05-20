@@ -175,7 +175,7 @@
 - [ ] **请求 user 授权写 `~/.config/ccanywhere/config.json`**
       加 `userClaudeRoot` 字段 (schema bump 必须同步 prod
       config — 跟 CLAUDE.md 一致)
-- [ ] `launchctl kickstart -k gui/$(id -u)/com.redcontritio
+- [ ] `launchctl kickstart -k gui/$(id -u)/com.<you>
       .ccanywhere`
 - [ ] `curl -sf http://127.0.0.1:62275/healthz` 验 200
 - [ ] tail server.log 看 fatal (若 config 字段缺则 server 起
@@ -214,7 +214,7 @@
       COPY + ContainerUserSync ensureUser cp 进 per-user .claude.
 - [x] C5b (post-deploy fix): spawn command override for container
       runtime. e2e dogfood 触发 `OCI runtime exec failed: exec:
-      "/Users/redcontritio/.local/bin/claude": stat ... no such file
+      "/Users/<you>/.local/bin/claude": stat ... no such file
       or directory` — sessions{,-resume}.ts 把 config.claudeBin
       (host abs path) 当 docker exec 命令传, container 内不存在.
       Fix: SessionRuntimeOverlay 加 `command?: string`, shared-

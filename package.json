@@ -1,8 +1,17 @@
 {
   "name": "ccanywhere",
   "version": "0.0.1",
-  "private": true,
   "description": "Map a local Claude Code session to the web for remote access",
+  "license": "Apache-2.0",
+  "author": "RedContritio",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RedContritio/ccanywhere.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RedContritio/ccanywhere/issues"
+  },
+  "homepage": "https://github.com/RedContritio/ccanywhere#readme",
   "type": "module",
   "bin": {
     "ccanywhere": "./dist/cli.js"

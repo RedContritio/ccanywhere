@@ -82,27 +82,48 @@ vhostHTTPSPort = 443
 
 #### B.3 申请证书（一次性）
 
-仓库里 `scripts/cert-issue.sh` 封装了 acme.sh 安装 + Let's Encrypt 申请 + 安装到固定路径：
+ccanywhere 用 acme.sh 通过 DNS-01 challenge 申 Let's Encrypt 证书。
+acme.sh 支持 50+ DNS provider,常见的：
+
+- Cloudflare（`dns_cf`）— 国际域名首选
+- 阿里云（`dns_ali`）
+- 腾讯云 DNSPod（`dns_tencent` 新 API / `dns_dp` 老 API）
+- AWS Route53（`dns_aws`）
+- 完整列表：[acme.sh DNS API](https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
+  (每个 plugin 各自的环境变量名也在那里)
+
+仓库 `scripts/cert-issue.sh` 默认用腾讯云作 example。换 provider 时改
+脚本里 `--dns dns_tencent` 为对应 plugin + 改 export 凭证变量即可。
+
+**腾讯云示例:**
 
 ```bash
 export Tencent_SecretId='<腾讯云 SecretId>'
 export Tencent_SecretKey='<腾讯云 SecretKey>'
-CCANYWHERE_DOMAIN=cc.<your-domain> ./scripts/cert-issue.sh
+export CCANYWHERE_DOMAIN='cc.<your-domain>'
+export CCANYWHERE_ACME_EMAIL='you@<your-domain>'
+./scripts/cert-issue.sh
+```
+
+**Cloudflare 示例（改脚本一处 + 不同 env）:**
+
+```bash
+export CF_Key='<global-api-key>' CF_Email='<account-email>'   # 或用 CF_Token
+export CCANYWHERE_DOMAIN='cc.<your-domain>'
+export CCANYWHERE_ACME_EMAIL='you@<your-domain>'
+# 把 cert-issue.sh 里 `--dns dns_tencent` 改成 `--dns dns_cf`
+./scripts/cert-issue.sh
 ```
 
 脚本做的事：
 
 - 没装 acme.sh 的话用官方一行 installer 装到 `~/.acme.sh/`
 - `--set-default-ca --server letsencrypt`（acme.sh 默认 ZeroSSL 需要 EAB，绕开）
-- `--issue --dns dns_tencent -d cc.<your-domain>`（DNS-01 challenge）
+- `--issue --dns <plugin> -d cc.<your-domain>`（DNS-01 challenge）
 - `--install-cert` 安装到 `~/.config/ccanywhere/certs/`
 - `--reloadcmd "sudo /bin/launchctl kickstart -k system/com.fatedier.frpc"`（写进 acme.sh
   config，续签时自动跑）
 - `chmod 600` 收紧 `account.conf` 和 `.key` 文件
-
-DNS 提供商不是腾讯云的话，参考 [acme.sh DNS API 列表](https://github.com/acmesh-official/acme.sh/wiki/dnsapi)
-找对应的 plugin（`dns_cf` Cloudflare、`dns_aliyun` 阿里云、`dns_dp` DNSPod 老 API、…），
-脚本里把 `dns_tencent` 替换即可。
 
 #### B.4 sudoers NOPASSWD（让续签后能 reload frpc）
 

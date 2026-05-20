@@ -16,7 +16,12 @@ import { defineConfig, devices } from '@playwright/test';
  * jar, so this never collides with the owner WebAuthn session you keep
  * logged in elsewhere.
  */
-const baseURL = process.env['CCANYWHERE_TEST_URL'] ?? 'https://cc.recoco.xyz';
+const baseURL = process.env['CCANYWHERE_TEST_URL'];
+if (baseURL === undefined) {
+  throw new Error(
+    'CCANYWHERE_TEST_URL must be set for e2e (e.g. https://cc.example.com)',
+  );
+}
 
 export default defineConfig({
   testDir: './e2e',

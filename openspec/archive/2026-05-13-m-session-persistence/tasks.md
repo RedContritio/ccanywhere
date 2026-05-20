@@ -183,7 +183,7 @@
   POST /resume → 201，原 id，state='idle'，mode='resume'，session
   转回 active 路径
 - [x] T6.2. e2e 跨重启（本机 LaunchAgent 真实场景）— 留 user 手验：
-  浏览器创 session → `launchctl kickstart -k gui/$(id -u)/com.redcontritio.
+  浏览器创 session → `launchctl kickstart -k gui/$(id -u)/com.<you>.
   ccanywhere` → 刷新浏览器看 list 含 dead → 进 dead session → 看最
   后一屏 → 点 Resume → terminal 恢复
 - [x] T6.3. C6 commit + test:all (348 passed) + build:all + healthz 200 ✓ (637ed35)

@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Smoke against prod (https://cc.recoco.xyz). globalSetup planted a token
- * cookie for the e2e limited user; `request` and `page` both inherit
- * storageState so cookie auth works on the HTTP/UI boundary.
+ * Smoke against the prod ccanywhere instance (URL via CCANYWHERE_TEST_URL).
+ * globalSetup planted a token cookie for the e2e limited user; `request`
+ * and `page` both inherit storageState so cookie auth works on the
+ * HTTP/UI boundary.
  *
  * Covers:
  *   - API surface (healthz / me/quota / projects list / cwd guard / 401)
@@ -72,8 +73,10 @@ test.describe('ccanywhere smoke (prod URL, API surface)', () => {
   test('cookieless request → 401', async ({ playwright }) => {
     // Fresh request context, explicitly empty storageState so cookies
     // don't leak from the project-wide auth file.
+    const baseURL = process.env['CCANYWHERE_TEST_URL'];
+    if (baseURL === undefined) throw new Error('CCANYWHERE_TEST_URL must be set');
     const ctx = await playwright.request.newContext({
-      baseURL: process.env['CCANYWHERE_TEST_URL'] ?? 'https://cc.recoco.xyz',
+      baseURL,
       storageState: { cookies: [], origins: [] },
     });
     try {
