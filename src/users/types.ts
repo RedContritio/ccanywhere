@@ -6,8 +6,8 @@ export interface UserQuota {
 }
 
 /**
- * Mobile virtual-key toolbar customization. See
- * `openspec/changes/m-user-prefs/proposal.md` for the data model.
+ * Mobile virtual-key toolbar customization. Persisted per-user; the
+ * shapes below are the data model the server stores and returns.
  */
 export type ToolbarKeyAction = 'plain' | 'ctrl-letter' | 'toggle-sticky-ctrl';
 
@@ -41,14 +41,14 @@ export interface User {
   readonly createdAt: number;
   readonly lastLoginAt: number | null;
   readonly quota: UserQuota;
-  /** m-user-prefs: per-user UI customization. Defaults to `{}` for legacy
-   *  records / fresh users. */
+  /** Per-user UI customization. Defaults to `{}` for legacy records
+   *  / fresh users. */
   readonly preferences: UserPreferences;
   /**
-   * m-user-prefs: cross-device-synced "last selected session". Server
-   * stores the id verbatim; client validates against the live sessions
-   * list when restoring (a stale id from a deleted session is silently
-   * ignored). null = no selection.
+   * Cross-device-synced "last selected session". Server stores the id
+   * verbatim; client validates against the live sessions list when
+   * restoring (a stale id from a deleted session is silently ignored).
+   * null = no selection.
    */
   readonly lastActiveSessionId: string | null;
 }

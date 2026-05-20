@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 /**
- * Share code generator (m-share-static-export D2).
+ * Share code generator ( D2).
  *
  * UUID v4 via `crypto.randomUUID()` — 122-bit entropy ≈ 5.3×10³⁶ space.
  * Public share URLs have no auth gate, so the code MUST be

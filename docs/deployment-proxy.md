@@ -1,4 +1,4 @@
-# Deployment — anthropic 代理 (m-anthropic-proxy, Phase 1)
+# Deployment — anthropic 代理
 
 独立 LaunchAgent 进程 `ccanywhere proxy serve`，listen
 `config.proxy.port` (default 62276) on `config.proxy.bindHost`
@@ -56,9 +56,9 @@ admin 偶尔切回 apiKey 调试时.
 
 ## 2. 启动方式：由 ccanywhere main 自动 spawn (D7 amendment)
 
-**早期 ship (m-anthropic-proxy 原 D1) 用独立 LaunchAgent**，但 owner
+**早期设计 (D1) 用独立 LaunchAgent**，但 owner
 实际部署时容易忘装（实际 evidence: prod 第一次部署就漏了，proxy 全程
-没跑过）。m-host-credentials-share D7 amendment 改为 **ccanywhere main
+没跑过）。D7 amendment 改为 **ccanywhere main
 process 启动时通过 `child_process.spawn` 起 proxy 子进程**：
 
 - **独立 OS process** — credentials 文件 read 仅在 proxy 子进程，main
@@ -92,7 +92,7 @@ tail -f ~/.config/ccanywhere/proxy.log
 
 ## 3. D10 反转 (2026-05-20): proxy 当前不在 user 流量路径上
 
-**重要**: m-host-credentials-share D10 amendment 反转 proxy 在 user
+**重要**: D10 amendment 反转 proxy 在 user
 spawn 路径的 wire — 经验上 Anthropic 2026-02 起明确禁止第三方应用
 通过 Authorization: Bearer 转发 OAuth subscription token (cc binary
 自身仍可走 first-party). proxy 仍 listen `127.0.0.1:62276` (main
@@ -102,16 +102,13 @@ process cohost spawn, D7) 作 **future fallback**:
 - owner 切 Console API key (`sk-ant-api03-...` 烧 credit) → proxy
   forward X-Api-Key 走 Console billing, 此路径 anthropic 仍允许
 
-当前 user 流量 (m-user-shared-container shared-container path) **不
+当前 user 流量 (shared-container path) **不
 经 proxy**: 容器内 cc 用 `CLAUDE_CODE_OAUTH_TOKEN` env (容器内 issued
 via `claude setup-token`, 容器内 use, 同 device fingerprint) 直连
 `api.anthropic.com`. session-runtime D10 inject env, entrypoint 撤
 hosts override + iptables 允许直连.
 
-详见 `openspec/archive/<date>-m-host-credentials-share/proposal.md`
-D10 amendment 段.
-
-## 3a. D7 边界提醒 (原 §3, 仍生效)
+## 3a. D7 边界提醒
 
 owner 在主 ccanywhere session 内跑的 cc **不**经代理 — owner 直接
 用 mac Keychain / `~/.claude/.credentials.json` 走 api.anthropic.com。
@@ -171,7 +168,7 @@ docs 同步 + user 显式同步 prod config + kickstart 验证。Phase 1
 
 ## 6. Phase 2 实际 ship 行为 (D10 反转后)
 
-m-user-shared-container Phase 2 + m-host-credentials-share D10 后,
+Phase 2 (D10) 后,
 user 容器内 cc **不**走 proxy:
 
 - session-runtime inject `CLAUDE_CODE_OAUTH_TOKEN=<owner sk-ant-oat>`
@@ -179,7 +176,7 @@ user 容器内 cc **不**走 proxy:
 - 容器内 cc 直连 `api.anthropic.com`, anthropic first-party 接 OAuth
 - quota 跟 owner Pro/Max plan 共享 — ccanywhere 不在中间, 看不到
   upstream usage. QuotaWatcher 仅基于 cc 写的 jsonl 算本地账本
-  (m-quota-inline D5)
+  (D5)
 
 proxy `inline quota check` + `proxy-usage.json` 记账路径**当前未
 wire**. 仅当 anthropic 政策回退 / owner 切 Console key 时, 反 wire

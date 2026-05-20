@@ -1,7 +1,7 @@
 import { buildEnv, type SpawnOptions } from './manager-types.js';
 
 /**
- * m-user-shared-container: split `opts.runtime` into the actual spawn
+ * split `opts.runtime` into the actual spawn
  * command + args + pty env. host path is identity (legacy ptySpawn);
  * shared-container path wraps in `docker exec -it -u <user> -e ...
  * <container> <cmd> <args...>` and strips user env from the pty's own

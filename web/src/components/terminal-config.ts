@@ -71,9 +71,8 @@ export const FONT_SIZE_LS_KEY = 'ccanywhere.fontSize';
 export const FONT_FAMILY_DEFAULT =
   'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
-// Quiescence threshold derivation — see
-// openspec/changes/m-mobile-fit-timing/design.md "QUIESCENCE_MS 推导".
-// Don't tune the constant directly; adjust the inputs.
+// Quiescence threshold derivation: layout transition upper bound × safety
+// factor. Don't tune QUIESCENCE_MS directly; adjust the inputs.
 export const LAYOUT_TRANSITION_UPPER_BOUND_MS = 250;
 export const QUIESCENCE_SAFETY = 1.2;
 export const QUIESCENCE_MS = Math.ceil(LAYOUT_TRANSITION_UPPER_BOUND_MS * QUIESCENCE_SAFETY); // 300

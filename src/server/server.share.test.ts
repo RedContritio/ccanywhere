@@ -31,7 +31,7 @@ import {
 } from './server.test-helpers.js';
 
 /**
- * Share endpoints integration test (m-share-static-export C2).
+ * Share endpoints integration test ( C2).
  *
  * jsonl side-effect: each test writes a real cc-style jsonl into
  * `<homedir>/.claude/projects/<encoded-cwd>/<id>.jsonl`. The cwd is

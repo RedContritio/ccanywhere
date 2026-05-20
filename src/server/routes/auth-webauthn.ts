@@ -14,7 +14,7 @@ import type { CookieConfig } from './auth.js';
 
 export interface AuthWebauthnRoutesOptions {
   readonly store: DeviceStore;
-  /** m-multi-user: optional during step-3 rollout. */
+  /** : optional during step-3 rollout. */
   readonly userStore?: UserStore;
   readonly rp: RpInfo;
   readonly cookieName: string;
@@ -162,7 +162,7 @@ export async function registerAuthWebauthnRoutes(
         .send({ error: { code: 'not_found', message: 'device not found or revoked' } });
       return;
     }
-    // m-user-symmetric: only reject dangling device.userId; pair-time
+    // only reject dangling device.userId; pair-time
     // policy decides which kind may be paired.
     if (userStore !== undefined && userStore.findById(device.userId) === null) {
       await reply.code(403).send({

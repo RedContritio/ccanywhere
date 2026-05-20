@@ -56,14 +56,14 @@ export async function runServe(configPathArg?: string): Promise<void> {
   }
   const configDir = resolveConfigDir(config, configPath);
 
-  // m-user-symmetric: workspace 是所有 user 项目根的父目录。每 user 默认
+  // workspace 是所有 user 项目根的父目录。每 user 默认
   // 走 <workspace>/<username>/，可通过 users.<username>.workspace 显式
   // override。owner 的 username 不是字面 'owner'——prod 实例可能用任何
   // 合法 username（首次 ensureOwner 默认 'owner'，但允许手动改）。
   const workspace = resolve(config.workspace);
   mkdirSync(workspace, { recursive: true, mode: 0o700 });
 
-  // m-host-credentials-share D3: per-user `~/.claude` state root.
+  //  D3: per-user `~/.claude` state root.
   // Single bind mount into shared container (`/var/lib/ccanywhere/
   // user-claude:rw`); per-user sub-dirs created on-demand by
   // ContainerUserSync.ensureUser. Default falls under configDir so an
@@ -123,7 +123,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
   });
   const cliToken = ensureCliToken(configDir);
 
-  // m-pricing-staleness-sentinel (B7): one-line warn at boot if the
+  //  (B7): one-line warn at boot if the
   // hardcoded Anthropic pricing table is >180 days unverified. Side
   // effect only — priceFor() still returns the table.
   maybePricingStaleWarn(new Date(), (msg) => logger.warn(msg));
@@ -146,7 +146,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
     throw err;
   }
 
-  // m-session-persistence: hardcode <configDir>/sessions/ per D9. Boot
+  // hardcode <configDir>/sessions/ per D9. Boot
   // synchronously loads previously-persisted session metadata + last
   // screen snapshots into dead-stub map so list/Resume work from frame 0.
   const sessionRegistry = new SessionRegistry(join(configDir, 'sessions'));
@@ -156,7 +156,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
   });
   manager.loadDeadStubs();
 
-  // m-share-static-export: sweep expired snapshots at boot (per D6 lazy
+  // sweep expired snapshots at boot (per D6 lazy
   // GC). loadAllSync's side effect unlinks any record whose expiresAt
   // is past — we don't capture the return because the route handlers
   // re-read fresh.
@@ -165,9 +165,9 @@ export async function runServe(configPathArg?: string): Promise<void> {
 
   const internalHookToken = randomBytes(32).toString('hex');
 
-  // m-host-credentials-share D7: ccanywhere main spawns the anthropic
+  //  D7: ccanywhere main spawns the anthropic
   // proxy as a sub-process so deployment of `ccanywhere` LaunchAgent
-  // covers proxy too. Independent OS process (m-anthropic-proxy D1
+  // covers proxy too. Independent OS process ( D1
   // blast radius保留: credentials file read happens only in the proxy
   // child, never in main). Supervisor handles crash respawn with
   // backoff + give-up after consecutive failures so a broken proxy
@@ -185,13 +185,13 @@ export async function runServe(configPathArg?: string): Promise<void> {
   });
   logger.info({ proxyLogPath }, 'proxy cohost spawned');
 
-  // m-user-shared-container C6: docker detect + shared container
+  //  C6: docker detect + shared container
   // ensureRunning + ContainerUserSync + TokenIssuer init. Returns
   // sharedContainerReady flag for resolveIsolation D5 decision +
   // containerDeps for buildServer + shutdown hook for SIGTERM.
   const containerInit = await initContainerStack(config, configDir, userClaudeRoot);
 
-  // m-user-runtime-schema. Resolve isolation policy + per-user runtime
+  // Resolve isolation policy + per-user runtime
   // BEFORE building the server (fatal on bad config; ready snapshot
   // exposed via /healthz). Owner D3 / strict-container D5 / host-only
   // D4 all decide here. C6 wires sharedContainerReady from
@@ -224,7 +224,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     logger.info({ signal }, 'shutting down');
     await app.close();
-    // m-session-persistence: actively kill PTYs in-process. Earlier
+    // actively kill PTYs in-process. Earlier
     // attempt relied on the OS SIGHUP'ing the children after our exit,
     // but by then the JS event loop is gone and `pty.onExit` never
     // fires — last-screen snapshots were silently dropped. killAll()
@@ -233,9 +233,9 @@ export async function runServe(configPathArg?: string): Promise<void> {
     // the metadata is durable before process.exit.
     await manager.killAll();
     await manager.detach();
-    // m-user-shared-container C6: stop shared container (idempotent).
+    //  C6: stop shared container (idempotent).
     await containerInit.shutdown();
-    // m-host-credentials-share D7: stop proxy cohost (SIGTERM →
+    //  D7: stop proxy cohost (SIGTERM →
     // grace → SIGKILL). Final step so proxy serves any in-flight
     // bearer/forward requests until container/users are torn down.
     await proxyCohost.shutdown();

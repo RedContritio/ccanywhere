@@ -8,7 +8,7 @@ interface Props {
 }
 
 /**
- * Sidebar top header extracted from workspace.tsx (m-workspace-page-split).
+ * Sidebar top header extracted from workspace.tsx.
  * Title button → back to /workspace; label chip; theme cycle; logout.
  * Renders identically to the inlined version; no behavior change.
  */

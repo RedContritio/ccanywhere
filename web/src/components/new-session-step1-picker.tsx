@@ -34,7 +34,7 @@ interface Props {
 /**
  * Step 1 of NewSessionDialog: project picker + sort + inline new-project
  * form + create/resume mode tabs. Pure controlled component — all state
- * lives in NewSessionDialog (m-new-session-dialog-steps).
+ * lives in NewSessionDialog.
  */
 export function Step1ProjectPicker({
   sortedProjects,

@@ -13,7 +13,7 @@ export interface ContainerUserSyncOpts {
   /** Inject for tests; default real docker CLI. */
   readonly execImpl?: ExecImpl;
   /**
-   * m-host-credentials-share D3: container-side path that the host
+   *  D3: container-side path that the host
    * `userClaudeRoot` is mounted at (`-v <userClaudeRoot>:<root>:rw`,
    * wired in container-init.ts). ensureUser mkdirs `<root>/<username>`
    * + chowns to the user's uid + chmods 0700 so cc finds its jsonl
@@ -53,7 +53,7 @@ export class ContainerUserSync {
 
   async ensureUser(username: string): Promise<{ uid: number }> {
     const uid = ContainerUserSync.uidOf(username);
-    // m-host-credentials-share Managed (2026-05-20): cc Managed scope
+    //  Managed (2026-05-20): cc Managed scope
     // (/etc/claude-code/managed-settings.json) contains both deny rules
     // AND CLAUDE.md soft-norm text via `claudeMd` field. cc binary
     // reads /etc/claude-code/ directly — no per-user cp needed. cache
@@ -95,7 +95,7 @@ export class ContainerUserSync {
       );
     }
 
-    // Tighten /home/<user> perms to 0700 (fs isolation, m-user-runtime-
+    // Tighten /home/<user> perms to 0700 (fs isolation, -
     // schema D1 best-effort).
     const chmod = await this.exec('docker', [
       'exec',
@@ -110,7 +110,7 @@ export class ContainerUserSync {
       );
     }
 
-    // m-host-credentials-share D3: per-user `~/.claude` state dir under
+    //  D3: per-user `~/.claude` state dir under
     // the mounted userClaudeRoot. mkdir + chown + chmod 0700. macOS
     // docker desktop bind mount doesn't enforce inode perms (D4 +
     // P9 Step A spike-results), so chmod is best-effort / cosmetic on
@@ -153,7 +153,7 @@ export class ContainerUserSync {
           `chmod ${claudeDir} failed: ${chmodClaude.stderr}`,
         );
       }
-      // m-host-credentials-share D6 + Managed (2026-05-20): all policy
+      //  D6 + Managed (2026-05-20): all policy
       // (deny rules + LLM soft-norm CLAUDE.md text) ships in cc Managed
       // scope `/etc/claude-code/managed-settings.json`. cc binary reads
       // it directly — no per-user cp needed. Per-user `.claude` dir

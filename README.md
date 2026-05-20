@@ -121,8 +121,6 @@ launchctl print gui/$(id -u)/com.<you>.ccanywhere | head    # 看 state=running
 | `examples/frpc.toml` | frpc 配置模板（https + https2http plugin，注释里附 plain TCP fallback） |
 | `examples/launchd/` | LaunchAgent / LaunchDaemon plist 模板（含证书自动续签 timer） |
 | `scripts/cert-issue.sh` | 一键 Let's Encrypt 申请脚本（DNS-01 via 腾讯云 / 可改其他 DNS） |
-| `openspec/specs/` | 行为契约（人读真相） |
-| `openspec/archive/` | 已应用的变更提案历史 |
 
 ## 测试
 
@@ -146,14 +144,12 @@ self-hosted runner labels `[self-hosted, macOS, ccanywhere]`,外部 fork
 ## 设计原则
 
 - **单用户单服务**：不做 multi-tenant、不做协同。
-- **契约优先**：行为先写 `openspec/specs/`，跨契约改动走 `openspec/changes/`
-  提案 → 实现 → 归档流程。
 - **不污染 user 配置**：spawn cc 时直接继承 `~/.claude/`，hook 是 opt-in。
 - **明确退出码**：1=fatal、2=config 错误、3+=具体原因。
 
 ## Contributing
 
-见 [CONTRIBUTING.md](./CONTRIBUTING.md) — OpenSpec 工作流 / dev setup /
+见 [CONTRIBUTING.md](./CONTRIBUTING.md) — dev setup /
 commit 约定。
 
 ## Security

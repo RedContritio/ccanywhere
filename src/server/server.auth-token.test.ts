@@ -11,7 +11,7 @@ import {
 } from './server.test-helpers.js';
 
 /**
- * Integration tests for token-based user login (#44 m-multi-user).
+ * Integration tests for token-based user login (#44 ).
  *
  * Covers:
  *   POST /api/auth/token  — happy path / wrong token / revoked / short body

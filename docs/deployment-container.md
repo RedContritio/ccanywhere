@@ -1,4 +1,4 @@
-# Deployment — user shared container (m-user-shared-container, Phase 2)
+# Deployment — user shared container (, Phase 2)
 
 Phase 2 user runtime isolation：admin 配 `users.<name>.runtime:
 'shared-container'` 时，session spawn 通过 `docker exec` 进入一个
@@ -12,9 +12,9 @@ Phase 2 user runtime isolation：admin 配 `users.<name>.runtime:
 ## 1. 前置
 
 - macOS Docker Desktop 运行中
-- 已 ship Phase 1.A m-anthropic-proxy（`ccanywhere proxy serve`
+- 已 ship Phase 1.A （`ccanywhere proxy serve`
   独立 LaunchAgent listen :62276）
-- 已 ship Phase 1.B m-user-runtime-schema（schema 含
+- 已 ship Phase 1.B （schema 含
   `isolationPolicy` + `users.<name>.runtime`）
 
 ## 2. build user runtime image
@@ -70,7 +70,7 @@ sleep 3 && curl -sf http://127.0.0.1:62275/healthz
 [server] shared container running: ccanywhere-shared-62275
 ```
 
-## 5. session 行为 (m-host-credentials-share D10 反转后)
+## 5. session 行为 ( D10 反转后)
 
 alice/bob 通过 web 起 session:
 - ccanywhere ContainerUserSync.ensureUser 在 shared container 内
@@ -129,7 +129,7 @@ user 在 config 里加 `workspace` override + `runtime:
 'shared-container'` → 启动 fatal。原因: override path 不在 host
 workspace mount 内, container 看不到; cwd 翻译失败。fix 或者删
 workspace override 或者改 runtime 为 host。完整支持留
-BACKLOG `m-shared-container-workspace-override` follow-up。
+BACKLOG `` follow-up。
 
 ## 8. 排错
 
@@ -153,10 +153,10 @@ docker exec ccanywhere-shared-62275 iptables -L OUTPUT
 
 ## 9. follow-up (reserved, 见 archive proposal)
 
-- m-user-isolated-container: per-user 独立容器, 给真不可信用户
-- m-runtime-degraded-ui-banner: web 顶条提示 user host mode
-- m-runtime-status-endpoint: /api/internal/runtime-status admin
-- m-shared-container-max-users: 限上限
-- m-proxy-quota-sync: proxy 账本 + UserStore.quota 双向 sync
-- m-container-apikey-helper: 5min token 自动 rotation via
+- : per-user 独立容器, 给真不可信用户
+- : web 顶条提示 user host mode
+- : /api/internal/runtime-status admin
+- : 限上限
+- : proxy 账本 + UserStore.quota 双向 sync
+- : 5min token 自动 rotation via
   apiKeyHelper（替代每 session 启动新 token）

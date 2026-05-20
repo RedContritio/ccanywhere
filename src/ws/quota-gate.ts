@@ -21,12 +21,12 @@ const HARMLESS_CONTROL_SEQUENCES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * m-quota-inline: synchronous in-memory gate evaluated on every WS
+ * synchronous in-memory gate evaluated on every WS
  * `input` frame before writing to the PTY. Owner kind / unknown user /
  * missing UserStore / harmless control sequences all pass through;
  * otherwise check the per-user cost / tokens limits using the latest
  * QuotaWatcher-written `used` values. Cost first then tokens (mirror
- * of m-quota-cost-tracking "first to trip" semantics).
+ * of  "first to trip" semantics).
  */
 export function evaluateQuotaGate(
   userStore: UserStore | undefined,

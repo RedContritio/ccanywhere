@@ -4,7 +4,7 @@ export interface Device {
   /** UUIDv4. */
   readonly id: string;
   /**
-   * m-multi-user: User.id this device belongs to. m-user-symmetric reframe:
+   * User.id this device belongs to.  reframe:
    * data layer is symmetric — any user kind may be referenced here, but
    * pair policy currently restricts pair-time assignment to the owner
    * (CLI approve uses owner.id). Legacy records (pre-multi-user) load with

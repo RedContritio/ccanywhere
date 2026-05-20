@@ -5,7 +5,7 @@ import { logger } from '../log.js';
 /**
  * Read a JSON file and validate it against a zod schema. Replaces the
  * per-store hand-written `typeof` chain for store metadata files
- * (share/store + session/registry). Extracted by m-store-zod-load.
+ * (share/store + session/registry). Extracted by .
  *
  * Returns undefined for any failure mode (file missing / IO error /
  * invalid JSON / schema mismatch). Warns once for everything except

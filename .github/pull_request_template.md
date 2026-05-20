@@ -1,20 +1,10 @@
 <!--
-首次贡献者请先看 CONTRIBUTING.md (OpenSpec 流程 / dev setup / commit
-风格)。本模板帮助 reviewer 快速定位 PR 改动 + 验证。
+首次贡献者请先看 CONTRIBUTING.md (dev setup / commit 风格 / PR 流程)。
 -->
 
 ## 描述
 
 <!-- 一句话讲改动是什么 -->
-
-## OpenSpec reference
-
-<!--
-链接到 openspec/changes/<slug>/proposal.md 或 BACKLOG 条目。
-小项 (≤80 LOC) 可只引用 BACKLOG 条目;大项必须有 proposal/tasks。
--->
-
-`openspec/changes/<slug>/proposal.md`
 
 ## 改动类型
 

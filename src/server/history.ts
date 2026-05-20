@@ -17,7 +17,7 @@ export function encodeProjectCwd(cwd: string): string {
 }
 
 /**
- * m-host-credentials-share B26 helper: resolve effective (cwd, historyRoot)
+ *  B26 helper: resolve effective (cwd, historyRoot)
  * pair for listHistory call. host runtime → caller args unchanged.
  * shared-container runtime → translate host cwd to container cwd (D9
  * workspace mount inverse) + use per-user `<userClaudeRoot>/<user>/

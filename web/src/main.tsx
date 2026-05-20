@@ -7,7 +7,7 @@ import { recordOp } from './state/ops-log.js';
 import './styles/tokens.css';
 import './styles/xterm-overrides.css';
 
-// m-server-state-tanstack-query: server-state cache for new features
+// server-state cache for new features
 // (quota panel / shares list / feedback list). zustand stores stay for
 // UI state (modal open / theme / selection). Don't enable refetch-on-
 // window-focus globally — ccanywhere is single-user single-tab so the

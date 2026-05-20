@@ -46,7 +46,7 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    // m-e2e-multi-browser (B6): webkit / firefox 只跑 smoke.spec.ts。
+    //  (B6): webkit / firefox 只跑 smoke.spec.ts。
     // visual.spec.ts 用 page.screenshot({ path }) 直接写文件而非
     // toHaveScreenshot baseline 比较——跨 browser 共享同一 path 会互
     // 相覆盖，所以视觉截图限 chromium。

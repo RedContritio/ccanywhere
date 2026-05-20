@@ -19,7 +19,7 @@ export interface UserStoreOptions {
   /**
    * Default user-projects parent directory. Each user's project root
    * defaults to `<workspace>/<username>/` unless `userOverrides[username]
-   * .workspace` provides an absolute path override (m-user-symmetric).
+   * .workspace` provides an absolute path override.
    */
   readonly workspace: string;
   readonly userOverrides?: Record<string, { workspace?: string | undefined }> | undefined;
@@ -82,7 +82,7 @@ export class UserStore {
    * Project root for this user. Returns the user's `users.<name>.workspace`
    * override (absolute path) if present, else `<workspace>/<username>/`.
    * `kind` does NOT influence the lookup — owner and user resolve through
-   * the same path (m-user-symmetric).
+   * the same path.
    */
   projectsRootFor(user: User): string {
     const override = this.userOverrides?.[user.username]?.workspace;
@@ -265,8 +265,8 @@ export class UserStore {
     let dirty = false;
     for (const u of parsed.users) {
       if (typeof u?.id !== 'string') continue;
-      // m-user-symmetric: legacy 'limited' kind migrated to 'user'.
-      // m-user-prefs: legacy records lack `preferences` and
+      // legacy 'limited' kind migrated to 'user'.
+      // legacy records lack `preferences` and
       // `lastActiveSessionId`. Coerce to defaults so downstream code
       // (route handlers, ?? fallbacks) always sees defined values.
       let kind = u.kind;

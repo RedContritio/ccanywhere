@@ -66,7 +66,7 @@ function captureFitInputs(term: Terminal): FitInputs | null {
  * After a fit.fit() runs, record the inputs and check whether the post-fit
  * cols × cellW exceeds the usable width — that's the off-by-one signature
  * (cc draws into N columns but xterm physically renders into N-1 because
- * the Nth overflows the container). m-fit-cols-off-by-one Phase 1 trace.
+ * the Nth overflows the container).  Phase 1 trace.
  */
 function recordFitApplied(term: Terminal, source: string): void {
   const inputs = captureFitInputs(term);

@@ -2,9 +2,8 @@
  * Pure reducer for the terminal-host dimensions lifecycle. All timer /
  * DOM / IO side effects live in the caller; this module only computes
  * state transitions and emits an effects manifest. That split makes
- * the state machine trivially unit-testable (no fake timers, no DOM)
- * and matches the formal model in
- * openspec/changes/m-mobile-fit-timing/design.md.
+ * the state machine trivially unit-testable (no fake timers, no DOM);
+ * the formal state machine is documented inline below.
  *
  * State machine:
  *

@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 /**
- * Markdown line-count guard. Run via `pnpm lint:md` or precommit hook.
+ * Markdown line-count guard. Run via `pnpm lint:md`.
  *
- * Thresholds:
- *   openspec/**.md      → 600  (specs / proposals are single-source-of-truth)
- *   anything else .md   → 300  (docs / README)
+ * Threshold: 300 lines per .md file (keeps docs scannable).
  *
  * Usage:
  *   node scripts/check-md-lines.mjs              # scan all tracked .md
@@ -14,7 +12,6 @@ import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
 const LIMITS = [
-  { pattern: /^openspec\//, max: 600 },
   { pattern: /\.md$/, max: 300 },
 ];
 

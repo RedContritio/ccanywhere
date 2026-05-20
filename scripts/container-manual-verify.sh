@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# m-user-shared-container manual verify — Phase 2 image 健康检查.
+# Shared container manual verify — Phase 2 image 健康检查.
 #
 # 跑流程:
 #   1. build image (跑 build-container-image.sh)

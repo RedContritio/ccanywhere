@@ -156,7 +156,7 @@ export interface DiagExtra {
   readonly effectiveTheme?: string;
 }
 
-// ─── per-section collectors (m-diag-collectors-split) ────────────────
+// ─── per-section collectors ────────────────
 // Each is module-private + pure (no side effect; reads only the args it
 // takes). Browser-API-missing branches fail-soft → return without writing
 // the affected field. Tests stub the relevant global via vi.stubGlobal

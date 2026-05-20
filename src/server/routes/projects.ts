@@ -10,7 +10,7 @@ const CreateBodySchema = z.object({
 });
 
 /**
- * m-user-symmetric: caller injects a per-request store resolver instead
+ * caller injects a per-request store resolver instead
  * of a singleton. Owner → server-injected base store (config.users.owner
  * .workspace or default `<workspace>/owner/`); other users → lazy
  * `<workspace>/<username>/` (or per-user override) store (cached in

@@ -74,7 +74,7 @@ export async function registerShareRoutes(
       return;
     }
 
-    // m-user-symmetric: resolveStore by req.user — row.info.userId === req.user.id
+    // resolveStore by req.user — row.info.userId === req.user.id
     // already verified above.
     const project = resolveStore(req.user).get(row.info.projectId);
     if (!project) {

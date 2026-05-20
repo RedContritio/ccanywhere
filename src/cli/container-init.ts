@@ -22,7 +22,7 @@ export interface ContainerInitResult {
 }
 
 /**
- * m-user-shared-container C6: detect docker, ensure shared container
+ *  C6: detect docker, ensure shared container
  * running, build SessionContainerDeps. Returns a result the caller
  * (serve.ts) forwards into resolveIsolation (sharedContainerReady) and
  * buildServer (containerDeps).
@@ -63,7 +63,7 @@ export async function initContainerStack(
   // D9 amendment: mount host workspace into container 1:1 so per-user
   // project cwds resolve via session-runtime's relative-path translate.
   const containerWorkspacePath = '/workspace';
-  // m-host-credentials-share D3: mount per-user `~/.claude` state root.
+  //  D3: mount per-user `~/.claude` state root.
   // Per-user sub-dirs are created on demand by ContainerUserSync.ensureUser
   // (C3 commit). session-runtime sets CLAUDE_CONFIG_DIR per spawn so cc
   // finds the right per-user dir.
@@ -99,7 +99,7 @@ export async function initContainerStack(
     userClaudeContainerRoot: containerUserClaudePath,
   });
 
-  // m-host-credentials-share D10: load owner OAuth subscription token
+  //  D10: load owner OAuth subscription token
   // for direct injection into shared-container cc processes. Optional
   // here — when missing the container path 401s upstream (anthropic
   // rejects unauthenticated /v1/messages), which surfaces to cc UI as

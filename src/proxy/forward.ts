@@ -65,7 +65,7 @@ export function registerForwardRoutes(
       error: {
         code: 'reserved',
         message:
-          '/v1/models reserved follow-up (m-anthropic-proxy-models)',
+          '/v1/models reserved follow-up',
       },
     });
   });
@@ -85,7 +85,7 @@ async function handleForward(
   // 1. Auth: accept Authorization: Bearer OR X-Api-Key.
   // cc decides which header to use based on token prefix —
   // sk-ant-oat-... → Bearer, sk-ant-... → X-Api-Key. Our refreshed
-  // bearer carries the `cca.` prefix (m-anthropic-proxy D2 token
+  // bearer carries the `cca.` prefix ( D2 token
   // format), so cc treats it as a Console-style API key and sends it
   // via X-Api-Key. Accept both shapes and run the same TokenIssuer
   // verify either way — the HMAC validates regardless of header.

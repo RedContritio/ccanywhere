@@ -7,7 +7,7 @@ export type ServerFrame =
   | { type: 'status'; state: SessionState }
   | { type: 'error'; message: string }
   /**
-   * m-quota-inline: server input gate dropped this turn's input because
+   * Server input gate dropped this turn's input because
    * user.quota.{cost,tokens} would be exceeded. cc never saw the bytes;
    * UI should toast `reason` and refetch /api/me/quota. Session stays
    * alive — only this single input was rejected.
@@ -22,8 +22,9 @@ export type ClientFrame =
 
 /**
  * Why this socket entered terminal "do not reconnect" state. UI uses it
- * to pick between "会话已结束" / "会话不存在" / "已被删除" labels. See
- * openspec/specs/ws-protocol/spec.md "Close code 表".
+ * to pick between "会话已结束" / "会话不存在" / "已被删除" labels. Each
+ * variant maps 1:1 to a specific server close code (see the close-code
+ * dispatch in this file's `socket.onclose` handler).
  */
 export type DeadReason =
   | 'cc-exit'           // status='dead' frame from server, then close 1000
@@ -39,14 +40,14 @@ export interface SocketHandlers {
   onConnected?: () => void;
   onReconnecting?: () => void;
   onDead?: (reason: DeadReason) => void;
-  /** m-quota-inline: server-side input gate rejected user input. */
+  /** Server-side input gate rejected user input (e.g. quota exceeded). */
   onQuotaExhausted?: (reason: string) => void;
   /**
-   * m-resume-awaiting-pty: fires exactly once per TerminalSocket instance,
-   * on the first snapshot OR output frame. status/error/pong/quota frames
-   * don't count — UI distinguishes "WS connected" vs "cc actually pushed
-   * terminal-visible data" so the chip can drop the "等待 cc 输出…" hint
-   * after first byte instead of saying "已连接" while screen is still blank.
+   * Fires exactly once per TerminalSocket instance, on the first snapshot
+   * OR output frame. status/error/pong/quota frames don't count — UI
+   * distinguishes "WS connected" vs "cc actually pushed terminal-visible
+   * data" so the chip can drop the "等待 cc 输出…" hint after first byte
+   * instead of saying "已连接" while screen is still blank.
    */
   onFirstData?: () => void;
 }
@@ -83,10 +84,10 @@ export class TerminalSocket {
   private lastFrameTs = 0;
   private lastFrameType = '';
   private lastReconnectOpTs = 0;
-  // m-resume-awaiting-pty: latch flipped on first snapshot/output frame so
-  // onFirstData fires exactly once per socket lifecycle (reconnect doesn't
-  // rebuild the instance, so the latch survives — user has already seen
-  // terminal content, the chip doesn't need to degrade back to "等待…").
+  // Latch flipped on first snapshot/output frame so onFirstData fires
+  // exactly once per socket lifecycle (reconnect doesn't rebuild the
+  // instance, so the latch survives — user has already seen terminal
+  // content, the chip doesn't need to degrade back to "等待…").
   private firstDataDelivered = false;
 
   private readonly onOnline = (): void => {
@@ -200,8 +201,8 @@ export class TerminalSocket {
       recordOp('ws.close', { code: ev.code, reason: String(ev.reason ?? '').slice(0, 200) });
       if (this.closed || this.dead) return;
 
-      // Terminal close codes — see openspec/specs/ws-protocol/spec.md
-      // "Close code 表". 1000 'cc-exit' is normally reached via the
+      // Terminal close codes — map each code to a DeadReason variant.
+      // 1000 'cc-exit' is normally reached via the
       // status='dead' frame path which already set this.dead; the bare
       // 1000 close that follows is filtered by the (this.dead) guard
       // above. The codes here are the ones that arrive WITHOUT a prior

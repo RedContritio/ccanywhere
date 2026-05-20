@@ -20,7 +20,7 @@ import { join } from 'node:path';
  */
 /**
  * `claudeRoot` overrides the parent of `projects/` for non-owner / container
- * users (m-host-credentials-share D5). Defaults to `<homedir>/.claude` so
+ * users ( D5). Defaults to `<homedir>/.claude` so
  * owner host path continues to land in `~/.claude/projects/...` unchanged.
  */
 export function ccJsonlPathOf(

@@ -1,6 +1,6 @@
 /**
- * Inline CSS + theme-toggle JS for the share view (m-share-static-
- * export D11). Extracted from render.ts purely to keep render.ts under
+ * Inline CSS + theme-toggle JS for the share view.
+ * Extracted from render.ts purely to keep render.ts under
  * the project's 300-line cap; nothing here is tunable per-render.
  *
  * CSS variables follow ccanywhere's main app token names so the share
@@ -33,7 +33,7 @@ export const STYLES = `
   }
   .container { max-width: 900px; margin: 0 auto; padding: 24px 16px 80px; }
   header.page {
-    /* m-share-header-sticky: one unified sticky bar carries project
+    /* : one unified sticky bar carries project
      * name + meta + theme chip. sticky preserves layout space so
      * message bubbles flow below it (not under). position:relative
      * is the positioning context for the absolute-positioned chip
@@ -46,7 +46,7 @@ export const STYLES = `
     border-bottom: 1px solid var(--border);
     transition: padding 120ms ease-out;
   }
-  /* B28 (m-share-sticky-shrink-mobile): once user scrolls past the
+  /* B28: once user scrolls past the
    * sentinel, IntersectionObserver toggles .shrunk on header. mobile
    * only — desktop keeps comfortable spacing. */
   .sticky-sentinel { height: 1px; margin-top: -1px; }

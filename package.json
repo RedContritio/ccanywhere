@@ -29,7 +29,6 @@
     "lint": "eslint .",
     "lint:md": "node scripts/check-md-lines.mjs",
     "format": "prettier --write .",
-    "prepare": "husky",
     "test": "vitest run",
     "test:all": "pnpm run test && pnpm -F ccanywhere-web test",
     "test:watch": "vitest"
@@ -58,7 +57,6 @@
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "husky": "^9.1.7",
     "prettier": "^3.3.0",
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",

@@ -64,7 +64,7 @@ interface UsersFileShape {
  * decoupled-from-UserStore over performance: ccanywhere CLI can update
  * limits without proxy restart. File is small (KB), read latency
  * negligible vs upstream API roundtrip. BACKLOG follow-up
- * m-proxy-quota-sync: lru cache + fs.watch invalidation when traffic
+ * lru cache + fs.watch invalidation when traffic
  * scales (Phase 2 user containers).
  */
 function makeLimitLookup(

@@ -55,7 +55,7 @@ export async function buildProxyServer(
       ...opts.forward,
       credentials: opts.credentials,
     });
-    // m-host-credentials-share C5c: bearer rotation endpoint for cc's
+    //  C5c: bearer rotation endpoint for cc's
     // apiKeyHelper. Same TokenIssuer as forward routes; verifies the
     // caller's long-lived helper bearer and returns a fresh short
     // bearer scoped to the same user.

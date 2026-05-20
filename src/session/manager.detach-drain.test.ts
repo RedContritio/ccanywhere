@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { SessionManager } from './manager.js';
 
 /**
- * Regression for m-fix-detach-drain-loop.
+ * Regression for .
  *
  * Background: detach() used to do `await Promise.allSettled([...pendingWrites])`
  * — a single snapshot. handleSessionExit (called from pty.onExit, which fires

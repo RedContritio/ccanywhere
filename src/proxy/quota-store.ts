@@ -37,7 +37,7 @@ export interface FileUsageStoreOpts {
  * Daily-resetting USD usage accounting. Single source of truth for
  * proxy-routed traffic (D3 metering). Phase 1: no sync with
  * UserStore.quota.usedUsd; Phase 2 user-container flow will need
- * bidirectional reconciliation (BACKLOG m-proxy-quota-sync).
+ * bidirectional reconciliation (BACKLOG ).
  *
  * Reset window: per calendar day, UTC. First call of a new day
  * implicitly zeros the user's `used`; no background timer.

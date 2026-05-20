@@ -12,10 +12,10 @@ declare module 'fastify' {
     /** Set by the cookie session middleware on /api/* and /ws/* requests. */
     authDevice?: Device;
     /**
-     * m-multi-user: resolved user behind the request. Set whenever a valid
+     * resolved user behind the request. Set whenever a valid
      * session cookie (device-issued or token-issued) authenticates the
      * request. Either owner (device session) or any user kind (token
-     * session, m-user-symmetric).
+     * session, ).
      */
     user?: User;
     /** Legacy: filled when the request's bearer matches an internalHookToken. */
@@ -25,7 +25,7 @@ declare module 'fastify' {
 
 export interface RegisterAuthOptions {
   readonly store: DeviceStore;
-  /** m-multi-user: required once token-based login is wired (step 3). */
+  /** : required once token-based login is wired (step 3). */
   readonly userStore?: UserStore;
   readonly tokenStore?: TokenStore;
   readonly internalHookToken: string;
@@ -161,7 +161,7 @@ export async function registerAuth(
     }
 
     // Fall back to token session (any user kind via POST /api/auth/token,
-    // m-user-symmetric — owner can self-issue and use a token too).
+    //  — owner can self-issue and use a token too).
     if (opts.tokenStore !== undefined && opts.userStore !== undefined) {
       const token = opts.tokenStore.verify(sessionId);
       if (token) {

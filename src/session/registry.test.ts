@@ -158,7 +158,7 @@ describe('SessionRegistry', () => {
     expect(persisted!.lastScreen).toBe('');
   });
 
-  // m-registry-write-queue (B10) regression: two concurrent writes to
+  //  (B10) regression: two concurrent writes to
   // the same <id>.json used to be able to interleave truncate + partial
   // write, corrupting the file. Per-id chain in registry now serializes
   // them — final state MUST be a valid JSON matching the last issued

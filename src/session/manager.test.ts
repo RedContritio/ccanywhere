@@ -85,7 +85,7 @@ describe('SessionManager', () => {
     await session.kill();
     await Promise.all([exited, statusDead]);
     expect(session.state).toBe('dead');
-    // Dead row migrates to the dead-stub map (m-session-persistence);
+    // Dead row migrates to the dead-stub map;
     // findRow/list still surface it so DELETE stays idempotent.
     expect(mgr.get(session.info.id)).toBeUndefined();
     expect(mgr.findRow(session.info.id)?.state).toBe('dead');

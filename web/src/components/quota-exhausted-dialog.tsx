@@ -11,7 +11,7 @@ interface Props {
 }
 
 /**
- * m-quota-inline: surfaced when the server input gate drops a turn for
+ * surfaced when the server input gate drops a turn for
  * quota exhaustion. cc never received the user input — the conversation
  * stays clean. User can either close (and keep the session for read-only
  * inspection) or open the quota panel to see how far over.

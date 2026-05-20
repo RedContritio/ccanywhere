@@ -12,7 +12,7 @@ export interface SpawnOptions {
   readonly scrollbackBytes: number;
   readonly mode: SessionMode;
   readonly resumeSessionId?: string;
-  /** m-multi-user: User.id that owns this PTY session. */
+  /** : User.id that owns this PTY session. */
   readonly userId: string;
   /**
    * #46 quota: caller-provided session id, threaded both into SessionInfo.id
@@ -22,12 +22,12 @@ export interface SpawnOptions {
    * derive the jsonl path without ambiguity. Tests using non-cc binaries
    * (e.g. `sh`) MUST NOT pass this — manager falls back to randomUUID.
    *
-   * m-session-persistence: also used by `resumeDeadStub()` to reuse the
+   * also used by `resumeDeadStub()` to reuse the
    * original ccanywhere id (and thus the original cc jsonl).
    */
   readonly forcedSessionId?: string;
   /**
-   * m-user-shared-container: runtime sandbox.
+   * runtime sandbox.
    * - `host` (default, omitted = host): spawn `command` directly via
    *   node-pty (legacy behavior — owner path + 既有 multi-user
    *   admin-trusted users)
@@ -71,7 +71,7 @@ export type SpawnResult =
   | { readonly kind: 'attached'; readonly existingId: string };
 
 /**
- * m-quota-inline: optional per-session lifecycle observer, decoupled
+ * optional per-session lifecycle observer, decoupled
  * from QuotaWatcher class via this interface so SessionManager doesn't
  * import the quota module. Manager calls `start` after spawn /
  * resumeDeadStub, and `stop` on PTY exit + markDeleted teardown. Used
@@ -93,12 +93,12 @@ export interface SessionManagerOptions {
   /**
    * Optional disk persistence. When set, spawn/markDeleted/exit/gc all
    * write to disk so the next `loadDeadStubs()` can recover the session
-   * list (per m-session-persistence). Tests with no persistence needs
+   * list (per ). Tests with no persistence needs
    * leave this undefined.
    */
   readonly registry?: SessionRegistry;
   /**
-   * Optional per-session lifecycle observer (m-quota-inline). When set,
+   * Optional per-session lifecycle observer. When set,
    * `start(session)` fires after each successful spawn and `stop(id)`
    * fires on PTY exit and on markDeleted teardown.
    */

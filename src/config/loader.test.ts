@@ -21,7 +21,7 @@ describe('loadConfig', () => {
     writeFileSync(path, JSON.stringify(obj));
   }
 
-  // m-user-symmetric: workspace replaces projectsRoot + guestProjectsRoot.
+  // workspace replaces projectsRoot + guestProjectsRoot.
   const validBase = {
     workspace: '/tmp/ccanywhere-workspace',
     webOrigin: 'http://localhost:62275',
@@ -114,7 +114,7 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/webOrigin/);
   });
 
-  describe('users.<name>.workspace override (m-user-symmetric)', () => {
+  describe('users.<name>.workspace override', () => {
     it('accepts owner override pointing at an existing project tree', () => {
       const ownerWorkspace = join(tmpdir(), 'projects');
       write({

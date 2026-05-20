@@ -21,7 +21,7 @@ export interface DockerDetectorOpts {
 
 /**
  * Detects whether the host docker daemon is reachable. Used by
- * `m-user-runtime-schema` D6:
+ * `` D6:
  *   - strict + unavailable → fatal (serve.ts decides)
  *   - fallback + unavailable → override all user.runtime → 'host'
  *   - host-only → detection skipped entirely

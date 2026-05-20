@@ -37,7 +37,7 @@ export interface Persisted {
 }
 
 export class SessionRegistry {
-  // m-registry-write-queue (B10): per-id chain serializes concurrent
+  //  (B10): per-id chain serializes concurrent
   // writes to the same <id>.json / <id>.screen.txt. Without this two
   // racing writeFile calls (e.g. markDeleted's eager save + onExit's
   // post-SIGINT save) can interleave a truncate against a partial write

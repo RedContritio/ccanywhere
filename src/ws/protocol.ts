@@ -28,7 +28,7 @@ export type ServerFrame =
   | { type: 'status'; state: SessionState }
   | { type: 'error'; message: string }
   /**
-   * m-quota-inline: server-side input gate dropped this turn's input
+   * server-side input gate dropped this turn's input
    * because user.quota.{cost,tokens} would be exceeded. cc receives no
    * bytes; the client should surface `reason` (toast / dialog) and
    * refetch `/api/me/quota` to refresh the panel. The session stays

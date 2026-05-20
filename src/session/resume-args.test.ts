@@ -31,7 +31,7 @@ describe('buildResumeArgs', () => {
     ]);
   });
 
-  // Regression guard for P7 of m-session-persistence: cc rejects
+  // Regression guard for P7 of : cc rejects
   // --resume X --session-id X as conflicting. Asserting absence of
   // --session-id keeps that bug from sneaking back in.
   it('never emits --session-id flag', () => {

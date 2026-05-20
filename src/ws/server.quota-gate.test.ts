@@ -110,7 +110,7 @@ function collectFrames<T = unknown>(ws: WebSocket): FrameCollector<T> {
 }
 
 /**
- * m-quota-inline: WS input frame quota gate. When the user's quota.used
+ * WS input frame quota gate. When the user's quota.used
  * has crossed the limit (typically refreshed asynchronously by
  * QuotaWatcher reading cc's jsonl), the next 'input' frame from the
  * client MUST be dropped before reaching the PTY and the server MUST

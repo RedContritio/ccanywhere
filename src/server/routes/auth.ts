@@ -19,7 +19,7 @@ export interface CookieConfig {
 
 export interface AuthRoutesOptions {
   readonly store: DeviceStore;
-  /** m-multi-user: optional during step-3 rollout. */
+  /** : optional during step-3 rollout. */
   readonly userStore?: UserStore;
   readonly tokenStore?: TokenStore;
   readonly webOrigin: string;

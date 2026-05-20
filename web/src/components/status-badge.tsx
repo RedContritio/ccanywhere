@@ -25,7 +25,7 @@ const stateLabel: Record<SessionState, string> = {
   dead: 'dead',
 };
 
-// m-status-badge-zh-mobile (B27): mobile users (often limited e2e users
+//  (B27): mobile users (often limited e2e users
 // not familiar with shell jargon) get the Chinese variant; desktop keeps
 // the mono `idle / busy / ...` for power users / tighter info density.
 const stateLabelZh: Record<SessionState, string> = {

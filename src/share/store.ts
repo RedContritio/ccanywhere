@@ -23,11 +23,11 @@ const ShareRecordSchema = z.object({
 });
 
 /**
- * Share metadata persisted to disk per m-share-static-export D5.
+ * Share metadata persisted to disk per D5.
  *
  * One json file per share at `<configDir>/shares/<code>.json` carries
  * the metadata; the rendered HTML lives next to it as `<code>.html`.
- * The two-file split mirrors the session persistence layout (m-session-
+ * The two-file split mirrors the session persistence layout (-
  * persistence) — boot-time listing only needs the json, the html is
  * served straight to the public viewer.
  */
@@ -42,7 +42,7 @@ export interface ShareRecord {
 }
 
 export class ShareStore {
-  // Per-code chain (mirrors m-registry-write-queue B10): same-code save
+  // Per-code chain (mirrors B10): same-code save
   // / delete must serialize to avoid metadata vs html truncate races.
   // Cross-code writes run in parallel.
   private readonly queue = new WriteQueue<string>();

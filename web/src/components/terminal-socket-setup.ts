@@ -10,9 +10,9 @@ export interface TerminalSocketHandlers {
   onConnected?: () => void;
   onReconnecting?: () => void;
   onDead?: (reason: DeadReason) => void;
-  /** m-quota-inline: server-side input gate rejected this turn's input. */
+  /** : server-side input gate rejected this turn's input. */
   onQuotaExhausted?: (reason: string) => void;
-  /** m-resume-awaiting-pty: first snapshot/output frame delivered. */
+  /** : first snapshot/output frame delivered. */
   onFirstData?: () => void;
 }
 

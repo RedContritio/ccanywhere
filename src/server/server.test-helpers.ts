@@ -67,7 +67,7 @@ export interface TestProjectsEnv {
 }
 
 export function setupProjects(): TestProjectsEnv {
-  // m-user-symmetric: workspace 是所有 user 项目根的父目录。owner 走默认
+  // workspace 是所有 user 项目根的父目录。owner 走默认
   // <workspace>/owner/，便于测试覆盖默认路径解析。
   const workspace = mkdtempSync(join(tmpdir(), 'ccanywhere-workspace-'));
   const ownerProjectsRoot = join(workspace, 'owner');

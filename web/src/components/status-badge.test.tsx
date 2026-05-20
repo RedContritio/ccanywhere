@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { StatusBadge } from './status-badge.js';
 
 describe('StatusBadge', () => {
-  // B27 (m-status-badge-zh-mobile): text variant renders BOTH the mono
+  // B27: text variant renders BOTH the mono
   // label (desktop, `md:inline`) and the Chinese label (mobile, `md:hidden`)
   // — the inner mono <span> carries the english text, the inner zh <span>
   // carries 中文. Color / aria / custom className live on the outer wrapper.

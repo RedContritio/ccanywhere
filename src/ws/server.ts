@@ -17,7 +17,7 @@ export interface WebSocketRoutesOptions {
    */
   readonly outputFlushIntervalMs?: number;
   /**
-   * m-quota-inline: when set, every input frame is gated by
+   * when set, every input frame is gated by
    * `evaluateQuotaGate(userStore, session)` before being written to the
    * PTY. Owner kind / unknown userId pass through. Without userStore the
    * gate is disabled (legacy / fixture mode).
@@ -83,7 +83,7 @@ export async function registerWebSocketRoutes(
     bundle.disposers = [];
     // Close code by death cause: 4002 = DELETE-driven teardown (markDeleted
     // set deletedAt pre-kill); 1000 = cc self-exit; 1008 = not-found at
-    // upgrade. See openspec/specs/ws-protocol/spec.md "Close code 表".
+    // upgrade. Frontend DeadReason union in web/src/ws.ts maps to UI labels.
     const closeCode = bundle.session.deletedAt !== null ? 4002 : 1000;
     const closeReason = bundle.session.deletedAt !== null ? 'session deleted' : 'session ended';
     for (const c of bundle.clients) {
@@ -155,7 +155,7 @@ export async function registerWebSocketRoutes(
         { sessionId, deviceId: req.authDevice?.id, ip: req.ip, found: session !== undefined },
         'ws client connected',
       );
-      // m-multi-user: cross-user mismatch masked as 1008 (uniform with
+      // cross-user mismatch masked as 1008 (uniform with
       // not-found) — see ws-protocol spec on close codes.
       const userMismatch =
         session !== undefined &&
@@ -247,7 +247,7 @@ export async function registerWebSocketRoutes(
         const f = result.data;
         switch (f.type) {
           case 'input': {
-            // m-quota-inline: gate before PTY write; cc never sees blocked bytes.
+            // gate before PTY write; cc never sees blocked bytes.
             const gate = evaluateQuotaGate(options.userStore, session, f.data);
             if (gate.blocked) {
               sendFrame(sock, { type: 'quota_exhausted', reason: gate.reason ?? 'quota exhausted' });

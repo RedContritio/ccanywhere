@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { renderShareHtml, type RenderInput } from './render.js';
 
 /**
- * Tests for m-share-export-cleanup: rewind-aware filtering +
+ * Tests for : rewind-aware filtering +
  * tool-call folding into the surrounding assistant article. Split
  * from `render.test.ts` to stay under the max-lines lint cap.
  */

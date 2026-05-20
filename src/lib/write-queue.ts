@@ -2,12 +2,12 @@
  * Per-key serialization helper used by stores that persist to disk and
  * need same-key writes to chain (avoid truncate-vs-partial-write races)
  * while keeping cross-key writes parallel. Extracted from share/store +
- * session/registry which had near-identical chains (m-write-queue-extract).
+ * session/registry which had near-identical chains.
  *
  * Contract:
- *   - same key  enqueue(k,op1); enqueue(k,op2) → op2 starts only after
+ *   - same key enqueue(k,op1); enqueue(k,op2) → op2 starts only after
  *     op1 settles
- *   - diff key  enqueue('a',opA); enqueue('b',opB) → may run in parallel
+ *   - diff key enqueue('a',opA); enqueue('b',opB) → may run in parallel
  *   - rejection of an op does NOT block subsequent enqueue on the same
  *     key (caller's op is expected to log-and-swallow as before)
  *   - self-cleanup: when a chain fully settles, the Map entry for that

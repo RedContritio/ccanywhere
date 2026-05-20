@@ -41,7 +41,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 | `claudeBin` | 写**绝对路径**。LaunchAgent 的 PATH 不含 `~/.local/bin`，相对名 `claude` 会找不到导致 spawn 立即 dead |
 | `webOrigin` | web SPA 实际服务的 origin（如 `https://cc.example.com`）。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；改这一项会让所有已配对设备失效 |
 | `projectsRoot` | 项目集合根目录（绝对路径），其直接子目录被自动列为可选项目；启动时不存在会自动 mkdir，不可读直接 fatal，不可写则只能列/选不能新建 |
-| `guestProjectsRoot` | **必填**（m-multi-user）。limited user 项目沙盒父目录（绝对路径），其下每个 limited user 拿到一个 `<username>/` 子目录作 cwd 根。**MUST NOT** 与 `projectsRoot` 相同，**MUST NOT** 互为父子。启动时自动 `mkdir -p` (mode 0700)。详见 §7 |
+| `guestProjectsRoot` | **必填**（）。limited user 项目沙盒父目录（绝对路径），其下每个 limited user 拿到一个 `<username>/` 子目录作 cwd 根。**MUST NOT** 与 `projectsRoot` 相同，**MUST NOT** 互为父子。启动时自动 `mkdir -p` (mode 0700)。详见 §7 |
 | `outputFps` | WS 输出最大帧率，1..240 默认 60。带宽紧张可调到 24 |
 | `deletedSessionTtlMs` | 软删除保留时长，默认 600_000（10 分钟）|
 | `wsHeartbeat.timeoutMs` | 必须严格大于 `intervalMs`，默认 60000/30000 |
@@ -175,7 +175,7 @@ launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
 
 ### ⚠️ 从 quota 之前的版本升级（重要）
 
-m-quota-cost-tracking ship 后 `UserPromptSubmit` hook 命令的 curl 必须
+ ship 后 `UserPromptSubmit` hook 命令的 curl 必须
 保留 stdout（旧版用 `>/dev/null 2>&1` 丢掉 stdout）。服务端在配额耗尽时
 返回 cc 协议 JSON `{ decision: 'block', reason: ... }` 让 cc 停 prompt
 ——前提是 hook command 把这段 JSON 透传给 cc。
@@ -188,7 +188,7 @@ m-quota-cost-tracking ship 后 `UserPromptSubmit` hook 命令的 curl 必须
 
 owner 不受影响（owner 全程 quota skip）。
 
-## 7. multi-user 配置（m-multi-user）
+## 7. multi-user 配置（）
 
 ccanywhere 支持单 owner + N 个 limited user。owner 走 WebAuthn 配对，
 limited user 通过 token 登录（owner CLI 颁发）。每个 limited user 的项目
@@ -260,13 +260,12 @@ token 失效（revoke 或 expire）后 cookie 立即失效，回到登录页。
   对 limited user 直接 403。
 - token ttl ≤ 7d 硬限。要长期使用，owner 定期 re-issue。
 
-详细 REST API 契约见 [`openspec/specs/rest-api/multi-user.spec.md`](../openspec/specs/rest-api/multi-user.spec.md)。
-hook quota enforcement 见 [`openspec/specs/hooks/spec.md`](../openspec/specs/hooks/spec.md)
-"UserPromptSubmit 是 quota 单一 enforcement 点"。
+REST API 路由在 `src/server/routes/`;hook quota enforcement 单一节点
+在 `UserPromptSubmit` (见 `docs/hooks.md`)。
 
 config 不动，前端构建产出会被 fastify-static 即时服务。
 
-## 8. anthropic 代理（m-anthropic-proxy + m-host-credentials-share D7/D10）
+## 8. anthropic 代理（ +  D7/D10）
 
 由 ccanywhere main 启动时自动 spawn 的子进程 (`ccanywhere proxy serve`)，
 listen `config.proxy.port` (default 62276)。**D10 反转 (2026-05-20)
@@ -276,7 +275,7 @@ TOKEN` env 直连 anthropic. proxy 仍 listen 作 future fallback
 (anthropic 改回允许 / owner 切 Console API key 时 re-enable). 详
 [deployment-proxy.md](./deployment-proxy.md) §3.
 
-## 9. user runtime 隔离策略（m-user-runtime-schema，Phase 1.B）
+## 9. user runtime 隔离策略（，Phase 1.B）
 
 Phase 1.B 落了配置层：admin 在 `config.isolationPolicy` 声明全局
 策略，`config.users.<name>.runtime` 声明 per-user 沙箱。启动时校
@@ -284,7 +283,7 @@ Phase 1.B 落了配置层：admin 在 `config.isolationPolicy` 声明全局
 
 详细见 [deployment-isolation.md](./deployment-isolation.md)。
 
-## 10. user 容器化（m-user-shared-container + m-host-credentials-share）
+## 10. user 容器化（ + ）
 
 shared container spawn: admin 配 `runtime: 'shared-container'` 时 user
 session 通过 `docker exec` 进入 ccanywhere-shared-<port> 容器内跑

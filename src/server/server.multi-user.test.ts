@@ -14,7 +14,7 @@ import {
 
 /**
  * Integration tests for cross-user isolation on the REST surface
- * (#44 m-multi-user + m-projects-multi-user-isolation). Covers cwd guard,
+ * (#44  + ). Covers cwd guard,
  * GET filter, DELETE 404 mask, and per-user ProjectStore resolution
  * (limited user sees only `<guestProjectsRoot>/<username>/`).
  */
@@ -59,7 +59,7 @@ describe('REST API: cross-user isolation (multi-user)', () => {
       payload: { projectId: 'demo', mode: 'create' },
     });
 
-    // m-user-symmetric: store isolation masks cwd guard. alice's store
+    // store isolation masks cwd guard. alice's store
     // doesn't contain owner's 'demo' → 404 not_found before cwd check fires.
     expect(res.statusCode).toBe(404);
     const body = res.json() as { error: { code: string } };
@@ -164,7 +164,7 @@ describe('REST API: cross-user isolation (multi-user)', () => {
     expect(mgr.get(aliceSid)?.deletedAt).toBeNull();
   });
 
-  // m-projects-multi-user-isolation: projects 路由 4 个 endpoint 必须按
+  // projects 路由 4 个 endpoint 必须按
   // req.user 解析对应的 ProjectStore。owner 走注入的单例（含 demo），
   // limited user 走 lazy 构造的 `<guestRoot>/<username>/` store。
 
@@ -268,10 +268,10 @@ describe('REST API: cross-user isolation (multi-user)', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  // m-user-symmetric §6.1: end-to-end positive case — user creates own
+  //  §6.1: end-to-end positive case — user creates own
   // project then spawns a session in it (would have hit project_not_found
   // before reframe because sessions.ts used owner singleton store).
-  it('POST /api/sessions for own project → 201 (m-user-symmetric)', async () => {
+  it('POST /api/sessions for own project → 201', async () => {
     const { authCookie: aliceCookie } = env.createUserWithToken('alice');
 
     const create = await app.inject({
@@ -293,7 +293,7 @@ describe('REST API: cross-user isolation (multi-user)', () => {
     expect(body.projectId).toBe('p1');
   });
 
-  // m-user-symmetric §6.5: owner can self-issue + use a token (auth-multi-user
+  //  §6.5: owner can self-issue + use a token (auth-multi-user
   // route no longer hardcodes `kind === 'limited'`). Owner-via-token still
   // sees owner's projects.
   it('owner token login + GET /api/projects → still sees owner projects', async () => {

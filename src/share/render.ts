@@ -7,8 +7,8 @@ import {
 } from './render-parse.js';
 
 /**
- * Programmatic cc jsonl → HTML renderer (m-share-static-export D1, D8;
- * m-share-export-cleanup adds rewind-aware path filtering + tool-call
+ * Programmatic cc jsonl → HTML renderer ( D1, D8;
+ *  adds rewind-aware path filtering + tool-call
  * folding via the parseJsonl helper in `render-parse.ts`).
  *
  * cc writes one message per line. We care about user / assistant rows on

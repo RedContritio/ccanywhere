@@ -30,7 +30,7 @@ export interface QuotaWatcherOptions {
   /** Debounce window in ms; defaults to 500. */
   readonly debounceMs?: number;
   /**
-   * m-host-credentials-share D5: per-user effective runtime map (from
+   *  D5: per-user effective runtime map (from
    * resolveIsolation). When set, `start(session)` looks up the user's
    * runtime and points the watcher at `<userClaudeRoot>/<username>/
    * projects/...` for `shared-container` users instead of the owner's
@@ -39,13 +39,13 @@ export interface QuotaWatcherOptions {
    */
   readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
   /**
-   * m-host-credentials-share D5: host root that maps to per-user
+   *  D5: host root that maps to per-user
    * `~/.claude` for container users. Required when perUserRuntime maps
    * any user to 'shared-container'; ignored otherwise.
    */
   readonly userClaudeRoot?: string;
   /**
-   * m-host-credentials-share B24 fix: container-internal mount point
+   *  B24 fix: container-internal mount point
    * of hostWorkspace. cc inside container sees cwd at
    * `<containerWorkspacePath>/<rel>` and encodes that path into its
    * jsonl directory name. Watcher must translate `session.info.cwd`
@@ -57,7 +57,7 @@ export interface QuotaWatcherOptions {
 }
 
 /**
- * m-quota-inline: per-session jsonl fs.watch that recomputes ccusage and
+ * per-session jsonl fs.watch that recomputes ccusage and
  * writes `user.quota.used` whenever cc appends to its jsonl. Replaces the
  * hook回环 path where cc had to curl back into ccanywhere on every
  * UserPromptSubmit. owner kind sessions are skipped (no watcher allocated)
@@ -106,7 +106,7 @@ export class QuotaWatcher {
       isShared && this.userClaudeRoot !== undefined
         ? join(this.userClaudeRoot, user.username)
         : undefined;
-    // m-host-credentials-share B24 fix: shared-container cc writes
+    //  B24 fix: shared-container cc writes
     // jsonl under encoded container cwd, not host cwd. Translate
     // session.info.cwd → container path via D9 amendment workspace
     // mount mapping.

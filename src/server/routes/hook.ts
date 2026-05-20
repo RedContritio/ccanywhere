@@ -14,9 +14,9 @@ const STATE_TRANSITIONS: Readonly<Record<string, SessionState | null>> = {
 
 /**
  * cc-side hook events drive the per-session busy↔idle state machine
- * surfaced through the WS `status` frame. Pre m-quota-inline this route
+ * surfaced through the WS `status` frame. Pre this route
  * also did quota enforcement on `UserPromptSubmit` (cc → curl → here →
- * decide block). m-quota-inline moved enforcement to the inline ws
+ * decide block).  moved enforcement to the inline ws
  * input gate (`src/ws/server.ts`), backed by `QuotaWatcher` for jsonl
  * usage refresh — this route is now pure state machine and no longer
  * depends on UserStore.

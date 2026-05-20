@@ -16,7 +16,7 @@ export interface IsolationResolution {
 
 export interface ResolveIsolationOpts {
   /**
-   * m-user-shared-container C5: when true, D5 unlocks — non-owner
+   *  C5: when true, D5 unlocks — non-owner
    * `runtime: 'shared-container'` no longer fatals but flows into
    * perUserRuntime map. Default false keeps Phase 1.B behavior (fatal
    * on container config). serve.ts sets true after docker-detect
@@ -26,7 +26,7 @@ export interface ResolveIsolationOpts {
 }
 
 /**
- * m-user-runtime-schema. Validate config.isolationPolicy + per-user
+ * Validate config.isolationPolicy + per-user
  * runtime + emit boot banner. Fatal-exits on D3 (owner != host) or D5
  * (strict + container runtime configured without sharedContainerReady).
  * Returns IsolationResolution: status snapshot for /healthz + per-user
@@ -60,7 +60,7 @@ export function resolveIsolation(
     logger.fatal(
       { ownerUsername, configured: ownerCfg.runtime },
       `users.${ownerUsername}.runtime: '${ownerCfg.runtime}' invalid — ` +
-        `owner MUST be 'host' (D3 m-user-runtime-schema). Remove the ` +
+        `owner MUST be 'host' (D3 ). Remove the ` +
         `field or set to 'host'.`,
     );
     process.exit(2);
@@ -112,7 +112,7 @@ export function resolveIsolation(
           { username, runtime: userCfg.runtime },
           `users.${username}.runtime: ` +
             `${userCfg.runtime === undefined ? '<unset, default shared-container>' : `'${userCfg.runtime}'`} ` +
-            `but container runtime is Phase 2 (m-user-shared-container) — ` +
+            `but container runtime is Phase 2 — ` +
             `not ready. Fix: set users.${username}.runtime: 'host' OR ` +
             `top-level isolationPolicy: 'host-only' to override all.`,
         );
@@ -120,7 +120,7 @@ export function resolveIsolation(
       }
       // D9 amendment: workspace override + shared-container 不支持
       // (override path 不在 container workspace mount 内, project
-      // cwd 无法 translate). 留 BACKLOG m-shared-container-workspace
+      // cwd 无法 translate). 留 BACKLOG 
       // -override.
       if (userCfg.workspace !== undefined) {
         logger.fatal(

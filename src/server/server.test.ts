@@ -401,7 +401,7 @@ describe('REST API', () => {
   });
 });
 
-describe('healthz isolation field (m-user-runtime-schema)', () => {
+describe('healthz isolation field', () => {
   let env: TestProjectsEnv;
 
   beforeEach(() => {

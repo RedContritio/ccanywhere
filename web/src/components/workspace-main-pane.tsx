@@ -52,13 +52,13 @@ interface Props {
   readonly onResume: (sid: string) => Promise<void>;
   /** Open the share-create dialog (parent owns dialog state). */
   readonly onOpenShare: (sid: string) => void;
-  /** Server input-gate dropped this turn (m-quota-inline). */
+  /** Server input-gate dropped this turn (). */
   readonly onQuotaExhausted: (reason: string) => void;
 }
 
 /**
  * Workspace main pane — 5-branch renderer extracted from workspace.tsx
- * (m-workspace-page-split). Self-contained: owns WS connection state +
+ * Self-contained: owns WS connection state +
  * resume state + the terminal ref the mobile toolbar dispatches into.
  * Parent only threads through URL state, sessions / projects metadata,
  * and event callbacks for things that escape the pane (dialogs / navigate).

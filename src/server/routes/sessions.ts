@@ -19,7 +19,7 @@ import {
 export interface SessionRoutesOptions {
   readonly historyRoot?: string;
   readonly idempotencyStore?: IdempotencyStore;
-  /** m-multi-user: optional during step-4 rollout; required once wired. */
+  /** : optional during step-4 rollout; required once wired. */
   readonly userStore?: UserStore;
   /**
    * #46: when true (default), append `--session-id <uuid>` to cc args in
@@ -28,17 +28,17 @@ export interface SessionRoutesOptions {
    */
   readonly injectCcSessionId?: boolean;
   /**
-   * m-user-shared-container C5: effective per-user runtime (from
+   *  C5: effective per-user runtime (from
    * resolveIsolation). Lookup by username; missing = host.
    */
   readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
   /**
-   * m-user-shared-container C5: shared container + token issuer +
+   *  C5: shared container + token issuer +
    * user-sync deps for shared-container path. undefined ⇒ host-only
    * even when perUserRuntime says container.
    */
   readonly containerDeps?: SessionContainerDeps;
-  /** m-host-credentials-share B26: per-user claudeRoot for resume listHistory. */
+  /**  B26: per-user claudeRoot for resume listHistory. */
   readonly userClaudeRoot?: string;
 }
 
@@ -77,7 +77,7 @@ export async function registerSessionRoutes(
   app.get('/api/sessions', (req) => {
     const userId = req.user?.id;
     const all = manager.list();
-    // m-multi-user: filter by req.user.id once userStore wired; pre-wiring
+    // filter by req.user.id once userStore wired; pre-wiring
     // (userId undefined) returns all (legacy / test fixtures).
     const filtered = userId === undefined ? all : all.filter((s) => s.info.userId === userId);
     return {
@@ -151,7 +151,7 @@ export async function registerSessionRoutes(
       return;
     }
     const body = parsed.data;
-    // m-user-symmetric: per-user store resolution. cwd guard 仍保留作
+    // per-user store resolution. cwd guard 仍保留作
     // defense-in-depth — store 隔离已是 first line。
     const project = resolveStore(req.user).get(body.projectId);
     if (project && options.userStore !== undefined && req.user !== undefined) {
@@ -196,7 +196,7 @@ export async function registerSessionRoutes(
 
     const themeEnv = buildThemeEnv(body.webTheme);
     const userId = req.user?.id ?? 'legacy-no-user';
-    // m-user-shared-container C5+D9: host vs shared-container dispatch.
+    //  C5+D9: host vs shared-container dispatch.
     const overlay = await buildSessionRuntimeOverlay(
       req.user, options.perUserRuntime, options.containerDeps, themeEnv, project.cwd,
     );
@@ -225,7 +225,7 @@ export async function registerSessionRoutes(
     // 200 attach (idempotent resume of an already-active cc-X) vs 201
     // created (spawned a new cc process). Body schema is identical; only
     // the status code distinguishes "attached existing" from "newly created".
-    // See openspec/specs/sessions/spec.md "resume 唯一性".
+    // Attach kicks in when an active session already owns resumeSessionId.
     let session: Session;
     let responseStatus: 200 | 201;
     if (spawnResult.kind === 'attached') {
@@ -271,7 +271,7 @@ export async function registerSessionRoutes(
   });
 
   app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
-    // m-session-persistence: DELETE must work for both active sessions
+    // DELETE must work for both active sessions
     // and dead stubs (user purging a row left over from a prior restart).
     // findRow merges both maps; manager.markDeleted dispatches to the
     // right path (kill PTY for active, just-stamp + persist for dead).
@@ -283,7 +283,7 @@ export async function registerSessionRoutes(
         .send({ error: { code: 'not_found', message: 'session not found' } });
       return;
     }
-    // m-multi-user: only the owning user may DELETE.
+    // only the owning user may DELETE.
     if (req.user !== undefined && row.info.userId !== req.user.id) {
       await reply
         .code(404)

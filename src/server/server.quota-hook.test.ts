@@ -14,7 +14,7 @@ import {
 } from './server.test-helpers.js';
 
 /**
- * m-quota-inline reframe: hook is now pure state-machine (busy↔idle).
+ *  reframe: hook is now pure state-machine (busy↔idle).
  * Quota enforcement was moved to the inline ws input gate (see
  * `src/ws/server.ts`) and `setQuotaUsage` is refreshed by `QuotaWatcher`
  * (see `src/quota/watcher.ts`). This file therefore only verifies:

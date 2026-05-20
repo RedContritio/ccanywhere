@@ -10,7 +10,7 @@ interface Props {
 }
 
 /**
- * Single cell in the toolbar layout editor grid (m-user-prefs chunk C).
+ * Single cell in the toolbar layout editor grid ( chunk C).
  * Empty cells render a dashed-border `+` placeholder; filled cells show
  * the key label in mono. Selected (= currently being picked) cell gets
  * a focus ring.

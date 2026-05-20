@@ -13,7 +13,7 @@ import {
 } from './server.test-helpers.js';
 
 /**
- * Webauthn 5-route envelope + state-machine coverage (m-webauthn-routes-test).
+ * Webauthn 5-route envelope + state-machine coverage.
  *
  * What's covered: body validation, state-machine transitions, dangling
  * userId guard, downstream side-effects after a (mocked) verify pass —
@@ -46,7 +46,7 @@ import * as credential from '../devices/credential.js';
 const mockedVerifyRegistration = vi.mocked(credential.verifyRegistration);
 const mockedVerifyAuthentication = vi.mocked(credential.verifyAuthentication);
 
-describe('REST API: webauthn 5 routes (m-webauthn-routes-test)', () => {
+describe('REST API: webauthn 5 routes', () => {
   let mgr: SessionManager;
   let app: FastifyInstance;
   let env: TestProjectsEnv;
@@ -299,7 +299,7 @@ describe('REST API: webauthn 5 routes (m-webauthn-routes-test)', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('login-init: dangling userId (m-user-symmetric) → 403 forbidden', async () => {
+  it('login-init: dangling userId → 403 forbidden', async () => {
     const { device } = env.deviceStore.__seedActiveDevice('mac', 'cred-dangle');
     // Force device.userId to point at a non-existent user.
     (device as { userId: string }).userId = 'no-such-user';

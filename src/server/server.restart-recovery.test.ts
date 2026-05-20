@@ -34,7 +34,7 @@ async function listSessions(
 }
 
 /**
- * m-session-persistence end-to-end: simulates a ccanywhere restart.
+ *  end-to-end: simulates a ccanywhere restart.
  *
  *   1. boot server1 (fresh registry dir)
  *   2. POST /api/sessions → creates active session, manager1 spawns PTY
@@ -46,7 +46,7 @@ async function listSessions(
  *   6. POST /api/sessions/:id/resume → 201, same id, state=idle,
  *      mode=resume
  */
-describe('m-session-persistence: restart recovery (server-level)', () => {
+describe('restart recovery (server-level)', () => {
   let env: TestProjectsEnv;
   let regDir: string;
   let registry1: SessionRegistry;

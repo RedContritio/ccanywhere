@@ -25,7 +25,7 @@ const ResumeBodySchema = z.object({
 });
 
 /**
- * m-session-persistence C4: two endpoints to drive the dead-stub UX.
+ *  C4: two endpoints to drive the dead-stub UX.
  *   POST /api/sessions/:id/resume — spawn a new cc PTY reusing the
  *     original ccanywhere id (= cc jsonl filename) so the conversation
  *     continues from where it left off
@@ -82,7 +82,7 @@ export async function registerSessionResumeRoutes(
         return;
       }
 
-      // m-user-symmetric: resolveStore by req.user — stub.info.userId === req.user.id
+      // resolveStore by req.user — stub.info.userId === req.user.id
       // already verified above via the cross-user 404 mask.
       const project = resolveStore(req.user).get(stub.info.projectId);
       if (!project) {
@@ -94,7 +94,7 @@ export async function registerSessionResumeRoutes(
 
       const resumeInput = { webId: id, resumeSessionId: stub.info.resumeSessionId };
       const themeEnv = buildThemeEnv(parsed.data.webTheme);
-      // m-user-shared-container C5: host vs shared-container dispatch
+      //  C5: host vs shared-container dispatch
       // (looked up via stub.userId when req.user absent).
       const userForRuntime =
         req.user ?? options.userStore?.findById(stub.info.userId) ?? undefined;

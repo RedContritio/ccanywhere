@@ -68,7 +68,7 @@ describe('priceFor', () => {
   });
 });
 
-describe('maybePricingStaleWarn (m-pricing-staleness-sentinel / B7)', () => {
+describe('maybePricingStaleWarn (B7)', () => {
   const lastMs = Date.parse(LAST_VERIFIED);
 
   it('does not warn within 180 days of LAST_VERIFIED', () => {

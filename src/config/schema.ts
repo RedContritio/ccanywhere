@@ -29,7 +29,7 @@ export const ConfigSchema = z.object({
   outputFps: z.number().int().min(1).max(240).default(60),
   /**
    * Absolute path to the parent directory of every user's project root
-   * (m-user-symmetric). Each user's project root defaults to
+   * Each user's project root defaults to
    * `<workspace>/<username>/`; an optional `users.<name>.workspace`
    * override (absolute path) supersedes the default for that user. Created
    * (mode 0700) at startup if missing.
@@ -51,12 +51,12 @@ export const ConfigSchema = z.object({
       z.object({
         workspace: z.string().optional(),
         /**
-         * m-user-runtime-schema. user's runtime sandbox.
+         * user's runtime sandbox.
          * - `host`: spawn with owner identity on the mac (admin-
          *   trusted). owner MUST be 'host' (D3).
          * - `shared-container` (default): reflects Phase 2 direction;
          *   rejected in Phase 1.B with explicit error pointing at fix.
-         *   Phase 2 m-user-shared-container implements actual container
+         *   Phase 2 implements actual container
          *   spawn. Default reflects target architecture rather than
          *   既有 behavior — admin must explicitly opt to `host` to
          *   keep existing multi-user prod working (D2 amended; see
@@ -103,11 +103,11 @@ export const ConfigSchema = z.object({
    * applied in the route handler when unset; explicit body `ttlMs:
    * null` on POST /api/share bypasses both this default and the
    * per-share cap. Kept optional so existing prod config files don't
-   * need a schema-bump migration (m-share-static-export D3).
+   * need a schema-bump migration ( D3).
    */
   shareTtlMs: z.number().int().positive().optional(),
   /**
-   * m-anthropic-proxy. ccanywhere-anthropic-proxy listen address.
+   * ccanywhere-anthropic-proxy listen address.
    * Independent process (own LaunchAgent). user containers (Phase 2)
    * point `ANTHROPIC_BASE_URL` here; owner path 完全不经此代理 (D7).
    * Defaults let existing prod config files load without a bump.
@@ -119,7 +119,7 @@ export const ConfigSchema = z.object({
     })
     .default({ port: 62276, bindHost: '127.0.0.1' }),
   /**
-   * m-host-credentials-share D3: host root directory containing per-user
+   *  D3: host root directory containing per-user
    * `~/.claude` state (jsonl history under `<root>/<username>/projects/`,
    * settings.json + CLAUDE.md per-user). SharedContainerManager mounts
    * this single root into the container at
@@ -133,7 +133,7 @@ export const ConfigSchema = z.object({
    */
   userClaudeRoot: z.string().optional(),
   /**
-   * m-user-runtime-schema. Three-tier isolation policy:
+   * Three-tier isolation policy:
    * - `strict`: per-user `runtime` honored; any non-owner configured
    *   with container runtime causes startup fatal (Phase 2 not ready).
    *   Fail-safe default — owner must explicitly opt into degraded
@@ -149,7 +149,7 @@ export const ConfigSchema = z.object({
     .enum(['strict', 'fallback', 'host-only'])
     .default('strict'),
 }).superRefine((cfg, ctx) => {
-  // m-user-runtime-schema. Reject `runtime: 'isolated-container'` at
+  // Reject `runtime: 'isolated-container'` at
   // parse time — schema accepts the enum for forward-compat but no
   // phase implements it. Caller gets a clear message at config load
   // instead of a confused fatal at serve.ts.
@@ -168,7 +168,7 @@ export const ConfigSchema = z.object({
     }
   }
 
-  // Per-user `workspace` override checks (m-user-symmetric):
+  // Per-user `workspace` override checks:
   //   1. absolute path
   //   2. any two overrides MUST NOT nest
   //   3. an override MUST NOT collide with `<workspace>/<other-username>`

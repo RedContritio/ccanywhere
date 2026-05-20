@@ -1,6 +1,6 @@
-// m-resume-args-helper: cc spawn args for resume path. Pulled out of
+// cc spawn args for resume path. Pulled out of
 // sessions-resume.ts route so the args shape is unit-testable without a
-// real cc binary. Two prod bugs (P7 + P8 of m-session-persistence) slipped
+// real cc binary. Two prod bugs (P7 + P8 of ) slipped
 // past sh-fixture integration tests because sh-on-bad-flags happens to
 // exit similarly to cc-panic-then-exit — this helper exists so the
 // regression guards stay sharp.

@@ -1,5 +1,5 @@
 #!/bin/sh
-# m-host-credentials-share C5d: cc apiKeyHelper rotation script.
+# cc apiKeyHelper rotation script.
 #
 # cc invokes this script when its current ANTHROPIC_AUTH_TOKEN 401s
 # upstream. Reads CC_HELPER_TOKEN (long-lived 24h bearer injected at

@@ -49,8 +49,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
-        # m-e2e-multi-browser (B6): functional smoke runs on 3 browsers;
-        # visual screenshots stay chromium-only (playwright.config.ts).
+        # Functional smoke runs on 3 browsers; visual screenshots
+        # stay chromium-only (playwright.config.ts).
         run: pnpm -F ccanywhere-web exec playwright install --with-deps chromium webkit firefox
 
       - name: Build web (e2e hits the bundle served by ccanywhere)

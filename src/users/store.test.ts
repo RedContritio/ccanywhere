@@ -212,7 +212,7 @@ describe('UserStore', () => {
     });
   });
 
-  describe('preferences (m-user-prefs)', () => {
+  describe('preferences', () => {
     it('fresh user has empty preferences object', () => {
       const u = store.createUser({
         username: 'alice',
@@ -270,7 +270,7 @@ describe('UserStore', () => {
       expect(cleared.lastActiveSessionId).toBeNull();
     });
 
-    it("legacy users.json with kind='limited' migrates to 'user' on load + persists (m-user-symmetric)", () => {
+    it("legacy users.json with kind='limited' migrates to 'user' on load + persists", () => {
       const legacyPath = join(configDir, 'legacy-kind.json');
       const aliceId = '00000000-0000-4000-8000-000000000099';
       writeFileSync(

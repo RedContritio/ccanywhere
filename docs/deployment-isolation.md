@@ -1,8 +1,8 @@
-# Deployment — user runtime 隔离 (m-user-runtime-schema, Phase 1.B)
+# Deployment — user runtime 隔离 (, Phase 1.B)
 
 Phase 1.B 落了**配置层**：admin 声明意图 + 启动校验 + 运维信号
 (boot banner + `/healthz` field)。**不**实现容器本身——Phase 2
-m-user-shared-container 才落地真正的 user 容器化 spawn。
+ 才落地真正的 user 容器化 spawn。
 
 主部署文档见 [deployment.md](./deployment.md)；代理（独立进程）
 见 [deployment-proxy.md](./deployment-proxy.md)。
@@ -108,7 +108,7 @@ schema default 让 owner 自己跑 host，零运维负担。
 }
 ```
 
-`strict` 默认即可——alice / bob 跟 owner 同身份跑。等同 m-multi-
+`strict` 默认即可——alice / bob 跟 owner 同身份跑。等同 -
 user 当前行为。
 
 ### 5.3 windows / docker-unavailable 场景
@@ -132,16 +132,16 @@ user 当前行为。
 ```
 
 Phase 1.B 启动 fatal："Phase 2 not ready"。等
-m-user-shared-container ship 后才生效。
+ ship 后才生效。
 
-## 6. 从 m-multi-user 升级（Phase 1.B schema bump，必读）
+## 6. 从  升级（Phase 1.B schema bump，必读）
 
 Phase 1.B 引入 `users.<name>.runtime` 字段，默认 `shared-
 container`。**既有 multi-user prod 部署升级后启动 fatal**：
 
 ```
 fatal: users.alice.runtime: <unset, default shared-container> but
-container runtime is Phase 2 (m-user-shared-container) — not ready.
+container runtime is Phase 2 — not ready.
 Fix: set users.alice.runtime: 'host' OR top-level
 isolationPolicy: 'host-only' to override all.
 ```
@@ -152,7 +152,7 @@ isolationPolicy: 'host-only' to override all.
 
 **两种 migration**:
 
-**6.1 显式 host (跟既有 m-multi-user 行为一致)**
+**6.1 显式 host (跟既有  行为一致)**
 
 每个非 owner user 加 `runtime: 'host'`:
 
@@ -165,7 +165,7 @@ isolationPolicy: 'host-only' to override all.
 }
 ```
 
-效果：alice / bob 跟 owner 同身份跑（既有 m-multi-user 行为）。
+效果：alice / bob 跟 owner 同身份跑（既有  行为）。
 Phase 2 ship 后想容器化某个 user，再改对应 runtime 为
 `shared-container`。
 
@@ -190,9 +190,9 @@ runtime 配置被忽略（audit warn）。适合单 owner 部署 + 偶尔几个
    `{"ok":true,"isolation":{"mode":"strict","ready":true}}` 或
    `"host-only"` mode
 
-## 7. Phase 2 (m-user-shared-container) — 已 ship
+## 7. Phase 2 — 已 ship
 
-容器化 spawn 已 ship 在 m-user-shared-container archive (2026-05-18):
+容器化 spawn 已 ship 在  archive (2026-05-18):
 - shared container spawn (docker exec into long-running container,
   per-user CLAUDE_CONFIG_DIR + unix user 隔离 + iptables egress
   锁 api.anthropic.com)
@@ -205,9 +205,9 @@ runtime 配置被忽略（audit warn）。适合单 owner 部署 + 偶尔几个
 详细见 [deployment-container.md](./deployment-container.md).
 
 仍待 follow-up:
-- m-runtime-degraded-ui-banner: web 顶条提示 user 当前 runtime
+- : web 顶条提示 user 当前 runtime
   (Phase 1.B + 2 都跳过, 改 web 后单独 ship)
-- m-runtime-fallback-real-degrade: `fallback` 模式真正"docker
-  不可用时 silent override host" 而非 fatal (m-user-shared-container
+- : `fallback` 模式真正"docker
+  不可用时 silent override host" 而非 fatal (
   C6 中 fallback 行为仍同 strict; 改 serve-isolation 让 fallback
   + sharedContainerReady=false 时 sliently set perUserRuntime=host)

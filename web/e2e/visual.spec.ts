@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Visual screenshots for m-design-system-unify. Each test snaps a
+ * Visual screenshots. Each test snaps a
  * meaningful UI state to `test-results/visual-*.png`. Author Read()s the
  * PNGs and does visual inspection — replaces the legacy "user opens
  * browser and checks visually" loop (see feedback_e2e_visual_verify.md).
@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCREENSHOT_DIR = path.resolve(__dirname, '..', 'test-results');
 
-test.describe('m-design-system-unify visual', () => {
+test.describe('design-system visual', () => {
   // Force themeMode=dark so screenshots are deterministic regardless of
   // the clock — without this the `auto` mode flips to light at 07:00
   // local time and screenshot names disagree with what's painted.
@@ -257,7 +257,7 @@ test.describe('m-design-system-unify visual', () => {
     await expect(page.getByText('prompt > ls').first()).toBeVisible();
   });
 
-  // m-dead-pane-touch-select P5 regression: dead pane plain-text render
+  //  P5 regression: dead pane plain-text render
   // on mobile viewport. Verifies sidebar drawer ☰ stays reachable (was
   // broken by P4 overlay z-index+pointer-events) and the snapshot text
   // is selectable via Range API (proxy for native long-press selection
@@ -368,8 +368,7 @@ test.describe('m-design-system-unify visual', () => {
       // Tap the drawer button → confirms touch routing reaches header
       // (P4 overlay would have intercepted). Sheet portal content
       // mounts to document.body with `data-slot="sheet-content"`
-      // (m-workspace-sheet-drawer).
-      await hamburger.tap();
+      //       await hamburger.tap();
       await expect(
         page.locator('[data-slot="sheet-content"]'),
       ).toBeVisible({ timeout: 2000 });
@@ -377,7 +376,7 @@ test.describe('m-design-system-unify visual', () => {
 
     // Touch devices have no hover state, so session-list row delete
     // button cannot rely on group-hover to appear. Share moved to topbar
-    // in m-nav-restructure-globals; only × delete remains on rows.
+    // in ; only × delete remains on rows.
     test('session row delete button stays visible on mobile (no hover)', async ({
       page,
     }) => {
@@ -427,7 +426,7 @@ test.describe('m-design-system-unify visual', () => {
       });
     });
 
-    // m-nav-restructure-globals: sidebar bottom row holds the three
+    // sidebar bottom row holds the three
     // global config buttons (settings / quota / feedback). They must be
     // visible on mobile drawer (touch, no hover).
     test('sidebar global actions (settings / quota / feedback) visible on mobile', async ({

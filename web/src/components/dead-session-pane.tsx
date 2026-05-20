@@ -18,7 +18,7 @@ interface Props {
  * Readonly dead-session preview using xterm's default DOM renderer +
  * native mobile selection.
  *
- * History (m-dead-pane-touch-select):
+ * History:
  *   - P3 synthetic mouse events for long-press; xterm canvas pixels
  *     aren't native HTML text so mobile got no system handles.
  *   - P4 transparent <pre> overlay on canvas; sub-pixel alignment
@@ -100,7 +100,7 @@ export function DeadSessionSnapshot({ sessionId }: Props): JSX.Element {
       term = t;
     })();
 
-    // m-dead-pane-touch-select P7: xterm's SelectionService registers a
+    //  P7: xterm's SelectionService registers a
     // mousedown listener on `.xterm` that calls `event.preventDefault()`
     // (SelectionService.ts:467) to block "regular" browser selection in
     // favor of its own canvas-overlay selection. P6 enabled user-select

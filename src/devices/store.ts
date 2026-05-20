@@ -12,7 +12,7 @@ export class DeviceStoreError extends Error {
 
 export interface DeviceStoreOptions {
   readonly statePath: string;
-  /** m-multi-user: owner User.id, used to tag new devices + fallback legacy records. */
+  /** : owner User.id, used to tag new devices + fallback legacy records. */
   readonly ownerId: string;
   /** Default 30 min. */
   readonly pendingTtlMs?: number;

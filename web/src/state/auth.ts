@@ -245,7 +245,7 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'ccanywhere.auth',
       storage: createJSONStorage(() => localStorage),
-      // m-quota-inline B19: bump to v2 so existing localStorage runs the
+      //  B19: bump to v2 so existing localStorage runs the
       // dedupe-by-username migration once. Operators who deleted +
       // recreated a user (or had pre-dedup duplicates) collapse to one
       // entry on next page load.

@@ -8,7 +8,7 @@ const STALE_REDIRECT_MS = 5000;
 
 /**
  * URL ↔ store ↔ remote active-session three-way sync + stale-URL recovery
- * extracted from workspace.tsx (m-workspace-page-split).
+ * extracted from workspace.tsx.
  *
  * Behavior:
  *   - URL has :id → mirror to useUiStore.currentSessionId AND PUT to

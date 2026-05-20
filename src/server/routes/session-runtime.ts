@@ -18,7 +18,7 @@ export function buildThemeEnv(
 }
 
 /**
- * m-user-shared-container C5: deps required to spawn user sessions
+ *  C5: deps required to spawn user sessions
  * inside the shared container. Optional in BuildServerOptions — when
  * absent, ALL user.runtime overrides degrade to host (per-user runtime
  * map already enforces host via resolveIsolation).
@@ -48,7 +48,7 @@ export interface SessionContainerDeps {
    */
   readonly containerWorkspacePath: string;
   /**
-   * m-host-credentials-share D3: container-internal mount point of the
+   *  D3: container-internal mount point of the
    * host `userClaudeRoot` (typically `/var/lib/ccanywhere/user-claude`).
    * Per-spawn `CLAUDE_CONFIG_DIR` is set to `<root>/<username>` so cc
    * finds per-user jsonl history + settings.json + CLAUDE.md.
@@ -57,7 +57,7 @@ export interface SessionContainerDeps {
    */
   readonly userClaudeContainerRoot: string;
   /**
-   * m-host-credentials-share D10: owner's `CLAUDE_CODE_OAUTH_TOKEN`
+   *  D10: owner's `CLAUDE_CODE_OAUTH_TOKEN`
    * (sk-ant-oat-...) injected per-spawn so container cc binary connects
    * to anthropic directly (anthropic 2026-02 policy bans third-party
    * OAuth Bearer proxies). Required for shared-container path; absence
@@ -77,7 +77,7 @@ export interface SessionRuntimeOverlay {
   };
   readonly env?: Record<string, string>;
   /**
-   * m-host-credentials-share: spawn `command` override. container path
+   * spawn `command` override. container path
    * sets this to the container-internal claude binary (`claude` on PATH,
    * installed via `npm install -g @anthropic-ai/claude-code` in the
    * image) so spawn doesn't try to exec the host `config.claudeBin`
@@ -118,7 +118,7 @@ export async function buildSessionRuntimeOverlay(
   // shared-container path: ensure user account + inject env + translate
   // host project.cwd → container working dir (D9).
   //
-  // m-host-credentials-share D10: anthropic 2026-02 policy bans third-
+  //  D10: anthropic 2026-02 policy bans third-
   // party Bearer with OAuth subscription token (only cc binary itself
   // is first-party). proxy forward path is dead — container cc must
   // connect directly to anthropic. Inject owner's setup-token via

@@ -43,7 +43,7 @@ export class SessionManager {
   private readonly _activeResumeTargets = new Map<string, string>();
   private readonly deletedSessionTtlMs: number;
   private readonly registry: SessionRegistry | undefined;
-  /** m-quota-inline: late-wired by buildServer after building QuotaWatcher. */
+  /** : late-wired by buildServer after building QuotaWatcher. */
   private lifecycleObserver: SessionManagerOptions['lifecycleObserver'];
   private readonly pendingWrites = new Set<Promise<unknown>>();
 
@@ -56,7 +56,7 @@ export class SessionManager {
     this.lifecycleObserver = options.lifecycleObserver;
   }
 
-  /** m-quota-inline: late-wire observer after SessionManager construction. */
+  /** : late-wire observer after SessionManager construction. */
   setLifecycleObserver(observer: SessionManagerOptions['lifecycleObserver']): void {
     this.lifecycleObserver = observer;
   }
@@ -89,7 +89,7 @@ export class SessionManager {
     const cols = opts.cols ?? 100;
     const rows = opts.rows ?? 30;
 
-    // m-user-shared-container: host = identity spawn; shared-container
+    // host = identity spawn; shared-container
     // wraps in `docker exec -it -u <user> -e KEY=VAL ...` via helper.
     const { command, args, ptyEnv } = buildSpawnCommand(opts);
     const pty = ptySpawn(command, [...args], {
@@ -130,7 +130,7 @@ export class SessionManager {
       },
       'session spawned',
     );
-    // m-quota-inline: observer must swallow its own errors (QuotaWatcher does).
+    // observer must swallow its own errors (QuotaWatcher does).
     this.lifecycleObserver?.start(session);
     return { kind: 'created', session };
   }

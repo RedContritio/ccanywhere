@@ -13,7 +13,7 @@ interface Props {
 /**
  * Step 2 of NewSessionDialog: history-session picker for resume mode.
  * Pure controlled component — history fetch + resumeId state live in
- * NewSessionDialog (m-new-session-dialog-steps).
+ * NewSessionDialog.
  */
 export function Step2HistoryPicker({
   history,

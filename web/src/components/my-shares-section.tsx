@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { type Share, useSharesStore } from '../state/shares.js';
 
 /**
- * "我的分享" section for /settings (m-share-static-export D10).
+ * "我的分享" section for /settings ( D10).
  *
  * Lists the caller's shares newest-first with copy / delete actions.
  * Delete hits `DELETE /api/share/:code` — the snapshot 立即 404 from

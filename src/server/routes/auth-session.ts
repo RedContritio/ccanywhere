@@ -5,7 +5,7 @@ import type { CookieConfig } from './auth.js';
 
 export interface AuthSessionRoutesOptions {
   readonly store: DeviceStore;
-  /** m-multi-user: optional during step-3 rollout. */
+  /** : optional during step-3 rollout. */
   readonly userStore?: UserStore;
   readonly cookieName: string;
   readonly cookieOpts: CookieConfig;
@@ -24,7 +24,7 @@ export async function registerAuthSessionRoutes(
     await reply.code(204).send();
   });
 
-  // m-user-symmetric: label = user identity (username); both device and
+  // label = user identity (username); both device and
   // token branches resolve user via userStore so response stays accurate
   // when pairing extends beyond owner.
   app.get('/api/auth/me', async (req, reply) => {

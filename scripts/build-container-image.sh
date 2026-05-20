@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# m-user-shared-container: build the ccanywhere user runtime image.
+# Build the ccanywhere user runtime image.
 #
 # 用法:
 #   ./scripts/build-container-image.sh                # 默认 tag latest

@@ -45,7 +45,7 @@ interface SessionsStore {
   ) => Promise<Session>;
   deleteSession: (id: string) => Promise<void>;
   /**
-   * m-session-persistence: revive a dead-stub session. Server reuses the
+   * revive a dead-stub session. Server reuses the
    * original ccanywhere id (cc jsonl filename) so the conversation
    * continues from the prior `--resume` point.
    */

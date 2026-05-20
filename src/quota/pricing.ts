@@ -83,7 +83,7 @@ export function __resetWarnedForTest(): void {
 }
 
 /**
- * Boot-time staleness check (m-pricing-staleness-sentinel / B7). If
+ * Boot-time staleness check (B7). If
  * `LAST_VERIFIED` is more than 180 days old we log a single warn so the
  * dev knows to cross-check anthropic.com/pricing and bump the table.
  * Side-effect only — `priceFor` continues to return hardcoded rates.

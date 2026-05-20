@@ -31,7 +31,7 @@ import type { SessionContainerDeps } from './routes/session-runtime.js';
 export type { SessionContainerDeps } from './routes/session-runtime.js';
 
 /**
- * m-user-runtime-schema. /healthz isolation reporting payload.
+ * /healthz isolation reporting payload.
  * `ready: true` ⇔ every user.runtime in config is honored as-is
  * (host-only mode or strict mode with all host users). `ready: false`
  * + reason ⇔ at least one user requested container runtime but the
@@ -58,14 +58,14 @@ export interface BuildServerOptions {
   readonly projectStore: ProjectStore;
   readonly deviceStore: DeviceStore;
   /**
-   * m-multi-user (#44). Optional during the multi-step rollout — wired to
+   *  (#44). Optional during the multi-step rollout — wired to
    * routes in step 3 (auth改造). Once wired, fixtures will need to provide
    * a real instance.
    */
   readonly userStore?: UserStore;
   readonly tokenStore?: TokenStore;
   /**
-   * m-share-static-export. Optional in tests; production wires the real
+   * Optional in tests; production wires the real
    * instance from serve.ts. When undefined the share routes simply
    * aren't registered (cleaner than emitting 503s).
    */
@@ -73,7 +73,7 @@ export interface BuildServerOptions {
   readonly internalHookToken: string;
   readonly cliToken: string;
   /**
-   * m-user-runtime-schema. Isolation status snapshot computed by
+   * Isolation status snapshot computed by
    * serve.ts at startup, exposed via `/healthz` so admins / monitoring
    * can verify the running mode without parsing logs. Optional for
    * backwards compat — tests that build server without isolation
@@ -81,19 +81,19 @@ export interface BuildServerOptions {
    */
   readonly isolation?: IsolationStatus;
   /**
-   * m-user-shared-container C5: effective per-user runtime map from
+   *  C5: effective per-user runtime map from
    * resolveIsolation. Lookup by username; missing = host. sessions.ts
    * + sessions-resume.ts use this to decide host vs container dispatch.
    */
   readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
   /**
-   * m-user-shared-container C5: deps for shared-container session
+   *  C5: deps for shared-container session
    * spawn. undefined = no container path available (sessions degrade
    * to host even if perUserRuntime says shared). C6 wires via serve.ts
    * after docker-detect + SharedContainerManager.ensureRunning.
    */
   readonly containerDeps?: SessionContainerDeps;
-  /** m-host-credentials-share D5: host root mapped to per-user ~/.claude in containers; forwarded to QuotaWatcher. */
+  /**  D5: host root mapped to per-user ~/.claude in containers; forwarded to QuotaWatcher. */
   readonly userClaudeRoot?: string;
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
@@ -176,7 +176,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
       : { ok: true },
   );
 
-  // m-user-symmetric: per-user ProjectStore lazy 构造。owner 复用注入的单例
+  // per-user ProjectStore lazy 构造。owner 复用注入的单例
   // (caller 用 owner override 或默认 <workspace>/owner 构造)；其他 user 在
   // 首次访问时 mkdir + 构造 ProjectStore 落到自己的 root（hidden state
   // 在 <root>/.projects-state.json，root 自包含与 owner state 路径互不嵌套）。
@@ -235,9 +235,9 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
       resolveProjectStore,
     );
   }
-  // m-quota-inline: hook routes only carry state-machine transitions now.
+  // hook routes only carry state-machine transitions now.
   await registerHookRoutes(app, opts.manager);
-  // m-quota-inline: per-instance QuotaWatcher as SessionManager lifecycle observer.
+  // per-instance QuotaWatcher as SessionManager lifecycle observer.
   let quotaWatcher: QuotaWatcher | undefined;
   if (opts.userStore !== undefined) {
     type QWMut = { -readonly [K in keyof QuotaWatcherOptions]: QuotaWatcherOptions[K] };

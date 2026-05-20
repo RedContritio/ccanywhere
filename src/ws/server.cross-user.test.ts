@@ -45,7 +45,7 @@ function waitOpen(ws: WebSocket, timeoutMs = 4000): Promise<void> {
 }
 
 /**
- * #44 m-multi-user: when a limited user holds a valid token-session cookie
+ * #44 : when a limited user holds a valid token-session cookie
  * and tries to upgrade against an owner-owned session id, the WS server
  * MUST close with 1008 — uniform with not-found, so the response does not
  * leak that the id exists but belongs to another user.

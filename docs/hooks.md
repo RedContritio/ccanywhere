@@ -77,7 +77,7 @@ curl -fsS -m 2 \
 | `>/dev/null 2>&1` | 静默——cc 的 hook 阶段是 fire-and-forget |
 | `\|\| true` | 即使 curl 因网络问题失败也让 cc 继续 |
 
-**m-quota-inline 后**：所有事件统一 fire-and-forget，stdout 与 stderr
+** 后**：所有事件统一 fire-and-forget，stdout 与 stderr
 都可丢弃。reframe 之前 UserPromptSubmit 命令用 `2>/dev/null`（保留 stdout
 让 cc 读 quota block JSON）；reframe 后 quota enforcement 已搬到 ws input
 gate，UserPromptSubmit hook 不再返 block JSON。两种写法都兼容（旧粘贴
