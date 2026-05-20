@@ -118,6 +118,19 @@ export function resolveIsolation(
         );
         process.exit(2);
       }
+      // D9 amendment: workspace override + shared-container 不支持
+      // (override path 不在 container workspace mount 内, project
+      // cwd 无法 translate). 留 BACKLOG m-shared-container-workspace
+      // -override.
+      if (userCfg.workspace !== undefined) {
+        logger.fatal(
+          { username, workspace: userCfg.workspace },
+          `users.${username}: workspace override + runtime: ` +
+            `'shared-container' not supported yet (D9). Remove the ` +
+            `workspace override OR switch runtime to 'host'.`,
+        );
+        process.exit(2);
+      }
       perUserRuntime.set(username, 'shared-container');
     } else {
       perUserRuntime.set(username, 'host');

@@ -130,6 +130,49 @@ describe('POST /v1/messages — SSE streaming', () => {
   });
 });
 
+describe('copyForwardHeaders (content-encoding stripping)', () => {
+  it('strips content-encoding so cc does not double-decompress', async () => {
+    // Reproduce real anthropic behavior: upstream returns gzip header
+    // but undici's fetch presents decompressed body. If proxy forwards
+    // the header verbatim, cc tries to decompress plaintext → ZlibError.
+    const issuer = mkIssuer();
+    const { token } = issuer.issue('alice');
+    const app = await buildProxyServer({
+      credentials,
+      forward: {
+        tokenIssuer: issuer,
+        usageStore: mkUsageStore({
+          alice: { used: 0, limit: 100, resetAt: Date.now() + 60_000 },
+        }),
+        addUsage: async () => {},
+        fetchImpl: mockFetch({
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            'content-encoding': 'gzip',
+            'content-length': '999',
+          },
+          body: '{"id":"x","content":[{"type":"text","text":"hi"}]}',
+        }),
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/messages',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { model: 'claude-opus-4-7', messages: [] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-encoding']).toBeUndefined();
+    // fastify recomputes content-length from actual body bytes — don't
+    // assert undefined (it'll be the plaintext length, not upstream's
+    // gzipped length).
+    // body is plaintext, cc would JSON-parse it directly
+    expect(res.body).toContain('"text":"hi"');
+    await app.close();
+  });
+});
+
 describe('SSE parser helpers', () => {
   it('splitSseChunks: events on \\n\\n + trailing remainder', () => {
     const { events, remainder } = splitSseChunks(

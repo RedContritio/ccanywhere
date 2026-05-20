@@ -188,7 +188,13 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       captureViewportMetrics,
     });
 
+    // React StrictMode dev 故意双调 cleanup. xterm.js 5.x term.dispose()
+    // 不 idempotent — 第二次抛 `_isDisposed` undefined. flag guard
+    // 整个 cleanup 让它真 idempotent.
+    let cleanedUp = false;
     return () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
       dims.cleanup();
       cleanupKeyboardOverlay();
       touch.cleanup();

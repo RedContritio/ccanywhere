@@ -123,10 +123,7 @@ export function LoginPage(): JSX.Element {
   // preserve it (transient).
   //
   // On `ok: true`, also updates the store via probeSession → setLimitedSession.
-  const tryToken = async (
-    t: string,
-    fallbackUsername: string,
-  ): Promise<TokenLoginResult> => {
+  const tryToken = async (t: string): Promise<TokenLoginResult> => {
     // 500ms, 1s, 2s, 4s — give up after 4 attempts (~7.5s total).
     const BACKOFF_MS = [500, 1000, 2000, 4000];
     let result: TokenLoginResult = {
@@ -141,7 +138,11 @@ export function LoginPage(): JSX.Element {
         if (me !== null && me.kind === 'limited') {
           setLimitedSession(me.id, me.label, t);
         } else {
-          setLimitedSession(result.user.username, fallbackUsername, t);
+          // probeSession failed (e.g. cookie domain mismatch) but the
+          // server accepted the token — use the username it echoed as
+          // both userId and label. Never use the token plaintext as
+          // the visible label (sidebar bug).
+          setLimitedSession(result.user.username, result.user.username, t);
         }
         return result;
       }
@@ -159,7 +160,7 @@ export function LoginPage(): JSX.Element {
     if (t.length < 32) return;
     setMode({ kind: 'token-submitting' });
     void (async () => {
-      const r = await tryToken(t, t);
+      const r = await tryToken(t);
       if (r.ok) {
         navigate('/workspace', { replace: true });
         return;
@@ -195,7 +196,7 @@ export function LoginPage(): JSX.Element {
         (a, b) => b.expiresAt - a.expiresAt,
       );
       for (const t of sorted) {
-        const r = await tryToken(t.token, user.username);
+        const r = await tryToken(t.token);
         if (r.ok) {
           navigate('/workspace', { replace: true });
           return;

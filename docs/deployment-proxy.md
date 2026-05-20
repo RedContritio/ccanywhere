@@ -10,68 +10,111 @@ user 容器化做的基础设施。Phase 1 ship 后没真实流量经过；靠
 
 ## 1. owner 真凭据
 
+两种 auth 二选一 (D8 amendment 支持两路径):
+
+**a. Console API key (按 token 计费)**
+
 ```bash
-cat > ~/.config/ccanywhere/anthropic-credentials.json <<EOF
-{ "apiKey": "sk-ant-..." }
-EOF
+read -s ANT_KEY  # paste sk-ant-...
+printf '{"apiKey":"%s"}\n' "$ANT_KEY" > ~/.config/ccanywhere/anthropic-credentials.json
 chmod 600 ~/.config/ccanywhere/anthropic-credentials.json
+unset ANT_KEY
 ```
+
+proxy 转发用 `X-Api-Key` header. 走 Console billing.
+
+**b. Claude Code subscription OAuth (复用 Pro/Max plan, 推荐)**
+
+先在 owner mac 本机 (跟 claude 已登录的 user) 跑:
+
+```bash
+claude setup-token   # 走 browser OAuth, 1 年期 token 打印到 terminal
+```
+
+然后:
+
+```bash
+read -s OAUTH        # paste sk-ant-oat-...
+printf '{"oauthToken":"%s"}\n' "$OAUTH" > ~/.config/ccanywhere/anthropic-credentials.json
+chmod 600 ~/.config/ccanywhere/anthropic-credentials.json
+unset OAUTH
+```
+
+proxy 转发用 `Authorization: Bearer`. 走 owner Claude Pro/Max
+subscription quota, **不**消耗 Console credit。Token 1 年期, 到期
+重跑 `claude setup-token`。
+
+**两个都配** 时 proxy 优先用 oauthToken (subscription) → 适合
+admin 偶尔切回 apiKey 调试时.
 
 - 文件不存在 → 代理以 **503 模式**启动 (admin 可以晚配，不
   crash-loop)，所有 forward 路由返 503
 - mode 不是 0600 → 启动 fatal (拒绝读其他 user 可读的 key 文件)
-- malformed JSON / 缺 `apiKey` 字段 → 启动 fatal
+- malformed JSON / `apiKey` + `oauthToken` 都缺 → 启动 fatal
 
 **任何 commit 进 git 前**检查这个文件没被加进，避免泄漏。
 
-## 2. 代理 LaunchAgent
+## 2. 启动方式：由 ccanywhere main 自动 spawn (D7 amendment)
 
-写 `~/Library/LaunchAgents/com.<you>.ccanywhere-proxy.plist`，跟主
-ccanywhere LaunchAgent 平行：
+**早期 ship (m-anthropic-proxy 原 D1) 用独立 LaunchAgent**，但 owner
+实际部署时容易忘装（实际 evidence: prod 第一次部署就漏了，proxy 全程
+没跑过）。m-host-credentials-share D7 amendment 改为 **ccanywhere main
+process 启动时通过 `child_process.spawn` 起 proxy 子进程**：
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>com.&lt;you&gt;.ccanywhere-proxy</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/path/to/node</string>
-    <string>/path/to/ccanywhere/dist/cli.js</string>
-    <string>proxy</string>
-    <string>serve</string>
-  </array>
-  <key>WorkingDirectory</key>
-  <string>/path/to/ccanywhere</string>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key>
-  <string>/Users/&lt;you&gt;/.config/ccanywhere/proxy.log</string>
-  <key>StandardErrorPath</key>
-  <string>/Users/&lt;you&gt;/.config/ccanywhere/proxy.log</string>
-</dict>
-</plist>
-```
+- **独立 OS process** — credentials 文件 read 仅在 proxy 子进程，main
+  process RCE 不直接拿到 owner key（D1 blast radius 保留）
+- **lifecycle 绑定** — 装 `~/Library/LaunchAgents/com.<you>.ccanywhere
+  .plist` 一个就够；main 起 = proxy 起，main 停 = proxy 停
+- **mini supervisor** — proxy 子进程 crash 时按退避序列重启
+  (1s/2s/5s/10s/30s)；60s 窗口内连续 5 次 crash 触发 give-up，main 继续
+  跑（owner host 路径仍能用）
+- **log 独立** — stdio 重定向到 `<configDir>/proxy.log` (mode 0600)
+- **shutdown 顺序** — main 收 SIGTERM → 先 stop containers → SIGTERM
+  proxy 子进程 → 5s grace → SIGKILL → main exit
 
-启动：
+**用户无需任何 LaunchAgent 安装步骤**。第一节配好 credentials 文件 +
+`launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere` 后 proxy
+自动跑起来：
 
 ```bash
-launchctl bootstrap gui/$(id -u) \
-  ~/Library/LaunchAgents/com.<you>.ccanywhere-proxy.plist
-launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere-proxy
 curl -sf http://127.0.0.1:62276/healthz
 # 应返 {"ok":true,"mode":"ready"} (有 credentials)
 # 或   {"ok":true,"mode":"degraded"} (credentials 缺失，仍接 HEAD/healthz
 # 但 forward 路由都返 503/404)
 ```
 
-## 3. D7 边界提醒
+debug proxy 子进程：
+
+```bash
+pgrep -fa 'proxy serve'           # 找 PID
+tail -f ~/.config/ccanywhere/proxy.log
+```
+
+## 3. D10 反转 (2026-05-20): proxy 当前不在 user 流量路径上
+
+**重要**: m-host-credentials-share D10 amendment 反转 proxy 在 user
+spawn 路径的 wire — 经验上 Anthropic 2026-02 起明确禁止第三方应用
+通过 Authorization: Bearer 转发 OAuth subscription token (cc binary
+自身仍可走 first-party). proxy 仍 listen `127.0.0.1:62276` (main
+process cohost spawn, D7) 作 **future fallback**:
+
+- anthropic 改回允许第三方 proxy → 反向 wire 即可
+- owner 切 Console API key (`sk-ant-api03-...` 烧 credit) → proxy
+  forward X-Api-Key 走 Console billing, 此路径 anthropic 仍允许
+
+当前 user 流量 (m-user-shared-container shared-container path) **不
+经 proxy**: 容器内 cc 用 `CLAUDE_CODE_OAUTH_TOKEN` env (容器内 issued
+via `claude setup-token`, 容器内 use, 同 device fingerprint) 直连
+`api.anthropic.com`. session-runtime D10 inject env, entrypoint 撤
+hosts override + iptables 允许直连.
+
+详见 `openspec/archive/<date>-m-host-credentials-share/proposal.md`
+D10 amendment 段.
+
+## 3a. D7 边界提醒 (原 §3, 仍生效)
 
 owner 在主 ccanywhere session 内跑的 cc **不**经代理 — owner 直接
 用 mac Keychain / `~/.claude/.credentials.json` 走 api.anthropic.com。
-代理仅服务 Phase 2 user 容器内的 cc (Phase 2 ship 时 user 容器内
-`ANTHROPIC_BASE_URL` 指向本代理)。
 
 ### 3.1 quota 共享警示
 
@@ -126,15 +169,18 @@ proxy 改 schema (configDir 新字段) 时按主 server 同样规则：先
 docs 同步 + user 显式同步 prod config + kickstart 验证。Phase 1
 不动 schema，proxy 字段已带 zod default。
 
-## 6. Phase 2 预告
+## 6. Phase 2 实际 ship 行为 (D10 反转后)
 
-`m-user-shared-container` (Phase 2) ship 时：
-- user 容器内 cc 的环境变量自动注入
-  `ANTHROPIC_BASE_URL=http://host.docker.internal:62276` +
-  `ANTHROPIC_AUTH_TOKEN=<5min bearer>` (经 ccanywhere CLI 颁发)
-- user 容器内 cc 走代理 → 代理转 owner key → upstream Anthropic
-- 代理 inline quota check 在转发前查 `~/.config/ccanywhere/users.
-  json` 的 `quota.cost.limitUsd` (Phase 1 已就位)
-- 代理记账写 `proxy-usage.json` (Phase 1 已就位)
-- Phase 2 follow-up: m-proxy-quota-sync 协调 proxy 账本与
-  UserStore.quota.usedUsd
+m-user-shared-container Phase 2 + m-host-credentials-share D10 后,
+user 容器内 cc **不**走 proxy:
+
+- session-runtime inject `CLAUDE_CODE_OAUTH_TOKEN=<owner sk-ant-oat>`
+  (owner credentials 容器内 setup-token 拿到, 同 device fingerprint)
+- 容器内 cc 直连 `api.anthropic.com`, anthropic first-party 接 OAuth
+- quota 跟 owner Pro/Max plan 共享 — ccanywhere 不在中间, 看不到
+  upstream usage. QuotaWatcher 仅基于 cc 写的 jsonl 算本地账本
+  (m-quota-inline D5)
+
+proxy `inline quota check` + `proxy-usage.json` 记账路径**当前未
+wire**. 仅当 anthropic 政策回退 / owner 切 Console key 时, 反 wire
+proxy 让 user 流量经过, inline quota 重新生效.

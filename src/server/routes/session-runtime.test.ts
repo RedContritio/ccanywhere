@@ -40,6 +40,10 @@ function mkDeps(over: Partial<SessionContainerDeps> = {}): SessionContainerDeps 
     }),
     tokenIssuer: new TokenIssuer({ secret: randomBytes(32) }),
     proxyBaseUrl: 'http://127.0.0.1:62276',
+    hostWorkspace: '/Users/test/workspace',
+    containerWorkspacePath: '/workspace',
+    userClaudeContainerRoot: '/var/lib/ccanywhere/user-claude',
+    ownerOauthToken: 'sk-ant-oat-test-fake',
     ...over,
   };
 }
@@ -117,9 +121,19 @@ describe('buildSessionRuntimeOverlay — shared-container path', () => {
     expect(r.runtime).toBe('shared-container');
     expect(r.container).toEqual({ name: 'cca-shared', unixUser: 'alice' });
     expect(r.env?.['COLORFGBG']).toBe('15;0');
-    expect(r.env?.['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:62276');
-    expect(r.env?.['ANTHROPIC_AUTH_TOKEN']).toMatch(/^cca\./);
-    expect(r.env?.['CLAUDE_CONFIG_DIR']).toBe('/home/alice/.claude');
+    // m-host-credentials-share D10: anthropic 2026-02 政策禁第三方
+    // OAuth Bearer → container cc 直连 anthropic, env 不再含 proxy
+    // wire (ANTHROPIC_BASE_URL / CC_HELPER_TOKEN / ANTHROPIC_AUTH_TOKEN),
+    // 而是 CLAUDE_CODE_OAUTH_TOKEN 直接走 cc OAuth env path.
+    expect(r.env?.['ANTHROPIC_BASE_URL']).toBeUndefined();
+    expect(r.env?.['ANTHROPIC_AUTH_TOKEN']).toBeUndefined();
+    expect(r.env?.['CC_HELPER_TOKEN']).toBeUndefined();
+    expect(r.env?.['CLAUDE_CODE_OAUTH_TOKEN']).toBe('sk-ant-oat-test-fake');
+    expect(r.env?.['CLAUDE_CONFIG_DIR']).toBe(
+      '/var/lib/ccanywhere/user-claude/alice',
+    );
+    // m-host-credentials-share: command override to container-internal claude
+    expect(r.command).toBe('claude');
     expect(r.env?.['DISABLE_AUTOUPDATER']).toBe('1');
     expect(r.env?.['DISABLE_TELEMETRY']).toBe('1');
   });
@@ -136,6 +150,55 @@ describe('buildSessionRuntimeOverlay — shared-container path', () => {
     );
     expect(r.runtime).toBeUndefined();
     expect(r.env).toEqual({ COLORFGBG: '15;0' });
+  });
+
+  it('D9: translates projectCwd → containerCwd via hostWorkspace prefix', async () => {
+    const map = new Map<string, 'shared-container'>([
+      ['alice', 'shared-container'],
+    ]);
+    const deps = mkDeps({
+      hostWorkspace: '/Users/test/workspace',
+      containerWorkspacePath: '/workspace',
+    });
+    const r = await buildSessionRuntimeOverlay(
+      mkUser(),
+      map,
+      deps,
+      {},
+      '/Users/test/workspace/alice/myproject',
+    );
+    expect(r.container?.workingDir).toBe('/workspace/alice/myproject');
+  });
+
+  it('D9: projectCwd outside hostWorkspace → no workingDir (defensive)', async () => {
+    const map = new Map<string, 'shared-container'>([
+      ['alice', 'shared-container'],
+    ]);
+    const deps = mkDeps({
+      hostWorkspace: '/Users/test/workspace',
+      containerWorkspacePath: '/workspace',
+    });
+    const r = await buildSessionRuntimeOverlay(
+      mkUser(),
+      map,
+      deps,
+      {},
+      '/some/other/location/project',
+    );
+    expect(r.container?.workingDir).toBeUndefined();
+  });
+
+  it('D9: projectCwd undefined → no workingDir (backward compat)', async () => {
+    const map = new Map<string, 'shared-container'>([
+      ['alice', 'shared-container'],
+    ]);
+    const r = await buildSessionRuntimeOverlay(
+      mkUser(),
+      map,
+      mkDeps(),
+      {},
+    );
+    expect(r.container?.workingDir).toBeUndefined();
   });
 
   it('triggers ensureUser on container path', async () => {

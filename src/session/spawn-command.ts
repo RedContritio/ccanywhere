@@ -27,6 +27,9 @@ export function buildSpawnCommand(opts: SpawnOptions): {
       '-u',
       opts.container.unixUser,
     ];
+    if (opts.container.workingDir !== undefined) {
+      dockerArgs.push('-w', opts.container.workingDir);
+    }
     if (opts.env !== undefined) {
       for (const [k, v] of Object.entries(opts.env)) {
         dockerArgs.push('-e', `${k}=${v}`);

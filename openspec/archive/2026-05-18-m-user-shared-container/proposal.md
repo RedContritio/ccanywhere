@@ -203,6 +203,38 @@ mitigation: ccanywhere 自动 respawn shared container; user session
 crash 后 ccanywhere 通知 user "session terminated, please reload"
 (WS 4002 close)。
 
+### D9 (post-ship amendment, m-shared-container-workspace-fix branch)
+
+**Ship gap**: C5/C6 wire 时漏了两件事:
+1. `SharedContainerManager.ensureRunning` 没加 `-v <hostWorkspace>:
+   /workspace` mount, container 内看不到 host workspace
+2. `spawn-command` shared-container 路径没设 `-w <containerCwd>`,
+   `docker exec` 默认 cwd 是 container WORKDIR (`/`), claude 跑
+   在 `/` 找不到 project file
+
+**修复** (D9):
+1. `initContainerStack` 给 `SharedContainerManager` 加 `extraRunArgs:
+   ['-v', '${config.workspace}:/workspace:rw']`
+2. `SessionContainerDeps` 加 `hostWorkspace` + `containerWorkspace
+   Path` 字段
+3. `buildSessionRuntimeOverlay` 接 `projectCwd`, 算 `containerCwd =
+   <containerWorkspacePath>/<rel-from-hostWorkspace>`, 注入
+   `overlay.container.workingDir`
+4. `spawn-command` 看 `container.workingDir` 加 `-w` docker exec arg
+5. `serve-isolation` D5 防御: non-owner + shared-container + 有
+   workspace override → startup fatal "not supported yet" (留
+   BACKLOG m-shared-container-workspace-override)
+
+**为何 ship 时漏**: spike P3/P4 验证了 cold start / pty / 双 tty,
+但没 spike workspace mount + cwd translate. C5 wire 时假设 manager
+.spawn opts.cwd 会传到 container (实际只传到 docker CLI 自身), 没
+catch. 直到 prod manual e2e 准备时才发现 docker exec without -w
+跑在 / dir.
+
+mitigation: D9 commit 加 unit tests (session-runtime + spawn-command)
++ workspace override fatal check. e2e 跟着 D9 验证 alice user
+shared-container session 真在 project dir 跑.
+
 ## 落地点
 
 | 文件 | 改动 |

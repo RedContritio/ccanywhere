@@ -29,8 +29,10 @@ export interface ForwardDeps {
  *
  * Auth: bearer (verified by TokenIssuer) → userId
  * Quota: inline checkQuota → 429 on exceed, 401 on unknown user
- * Forward: rewrite Authorization to owner x-api-key, preserve all
- *   stainless-* headers (spike F4), forward query string (spike F1)
+ * Forward: rewrite auth to owner credentials (Bearer oauthToken
+ *   when present — Claude subscription path; else X-Api-Key for
+ *   Console billing), preserve all stainless-* headers (spike F4),
+ *   forward query string (spike F1)
  * Meter: 2xx upstream only (D3: SDK retry safe), parse usage from
  *   response body, addUsage(costUsd) async
  */
@@ -80,16 +82,30 @@ async function handleForward(
   deps: ForwardDeps,
   route: RouteOpts,
 ): Promise<void> {
-  // 1. Bearer auth
-  const auth = req.headers.authorization;
-  if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) {
+  // 1. Auth: accept Authorization: Bearer OR X-Api-Key.
+  // cc decides which header to use based on token prefix —
+  // sk-ant-oat-... → Bearer, sk-ant-... → X-Api-Key. Our refreshed
+  // bearer carries the `cca.` prefix (m-anthropic-proxy D2 token
+  // format), so cc treats it as a Console-style API key and sends it
+  // via X-Api-Key. Accept both shapes and run the same TokenIssuer
+  // verify either way — the HMAC validates regardless of header.
+  const authHeader = req.headers.authorization;
+  const apiKeyHeader = req.headers['x-api-key'];
+  let presented: string | undefined;
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    presented = authHeader.slice('Bearer '.length).trim();
+  } else if (typeof apiKeyHeader === 'string') {
+    presented = apiKeyHeader.trim();
+  } else if (Array.isArray(apiKeyHeader) && typeof apiKeyHeader[0] === 'string') {
+    presented = apiKeyHeader[0].trim();
+  }
+  if (presented === undefined || presented.length === 0) {
     await reply.code(401).send({
       error: { code: 'unauthorized', message: 'missing bearer token' },
     });
     return;
   }
-  const token = auth.slice('Bearer '.length).trim();
-  const verified = deps.tokenIssuer.verify(token);
+  const verified = deps.tokenIssuer.verify(presented);
   if (verified === null) {
     await reply.code(401).send({
       error: { code: 'unauthorized', message: 'invalid token' },
@@ -149,27 +165,47 @@ async function handleForward(
     }
     upstreamHeaders[k] = value;
   }
-  upstreamHeaders['x-api-key'] = deps.credentials.apiKey;
+  // Owner auth: oauthToken (subscription, Bearer) wins over apiKey
+  // (Console, X-Api-Key) when both present.
+  if (deps.credentials.oauthToken !== undefined) {
+    upstreamHeaders['authorization'] = `Bearer ${deps.credentials.oauthToken}`;
+  } else if (deps.credentials.apiKey !== undefined) {
+    upstreamHeaders['x-api-key'] = deps.credentials.apiKey;
+  }
 
   const body =
     req.body !== undefined && req.body !== null
       ? JSON.stringify(req.body)
       : undefined;
 
-  // 4. Upstream call
+  // 4. Upstream call. Retry on transient network failures — observed
+  // intermittent "Client network socket disconnected before secure TLS
+  // connection was established" on macOS → cloudflare, particularly on
+  // the first request after the proxy starts. Two retries with short
+  // backoff cover the common transient cases; persistent failures still
+  // surface 502 to cc, which then displays its own retry UI.
   const fetchImpl = deps.fetchImpl ?? fetch;
-  let upstreamResp: Response;
   const requestInit: RequestInit = {
     method: 'POST',
     headers: upstreamHeaders,
   };
   if (body !== undefined) requestInit.body = body;
-  try {
-    upstreamResp = await fetchImpl(upstreamUrl.toString(), requestInit);
-  } catch (err) {
+  const RETRY_DELAYS_MS = [0, 200, 600];
+  let upstreamResp: Response | undefined;
+  let lastErr: unknown = null;
+  for (const delay of RETRY_DELAYS_MS) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      upstreamResp = await fetchImpl(upstreamUrl.toString(), requestInit);
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (upstreamResp === undefined) {
     logger.error(
-      { err, url: upstreamUrl.toString() },
-      'upstream fetch failed',
+      { err: lastErr, url: upstreamUrl.toString(), attempts: RETRY_DELAYS_MS.length },
+      'upstream fetch failed after retries',
     );
     await reply.code(502).send({
       error: { code: 'upstream_error', message: 'upstream request failed' },

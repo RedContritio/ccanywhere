@@ -1,5 +1,5 @@
 import { existsSync, watch, type FSWatcher } from 'node:fs';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { logger } from '../log.js';
 import type { Session } from '../session/manager.js';
 import type { UserStore } from '../users/store.js';
@@ -29,6 +29,31 @@ export interface QuotaWatcherOptions {
   readonly userStore: UserStore;
   /** Debounce window in ms; defaults to 500. */
   readonly debounceMs?: number;
+  /**
+   * m-host-credentials-share D5: per-user effective runtime map (from
+   * resolveIsolation). When set, `start(session)` looks up the user's
+   * runtime and points the watcher at `<userClaudeRoot>/<username>/
+   * projects/...` for `shared-container` users instead of the owner's
+   * `~/.claude/projects/...`. host runtime users + missing map → legacy
+   * homedir behavior (owner spawn lands jsonl in owner home).
+   */
+  readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
+  /**
+   * m-host-credentials-share D5: host root that maps to per-user
+   * `~/.claude` for container users. Required when perUserRuntime maps
+   * any user to 'shared-container'; ignored otherwise.
+   */
+  readonly userClaudeRoot?: string;
+  /**
+   * m-host-credentials-share B24 fix: container-internal mount point
+   * of hostWorkspace. cc inside container sees cwd at
+   * `<containerWorkspacePath>/<rel>` and encodes that path into its
+   * jsonl directory name. Watcher must translate `session.info.cwd`
+   * (host) → container cwd before calling ccJsonlPathOf, otherwise it
+   * watches a non-existent dir while cc writes to the real one.
+   */
+  readonly hostWorkspace?: string;
+  readonly containerWorkspacePath?: string;
 }
 
 /**
@@ -45,11 +70,21 @@ export interface QuotaWatcherOptions {
 export class QuotaWatcher {
   private readonly userStore: UserStore;
   private readonly debounceMs: number;
+  private readonly perUserRuntime:
+    | ReadonlyMap<string, 'host' | 'shared-container'>
+    | undefined;
+  private readonly userClaudeRoot: string | undefined;
+  private readonly hostWorkspace: string | undefined;
+  private readonly containerWorkspacePath: string | undefined;
   private readonly entries = new Map<string, WatchEntry>();
 
   constructor(opts: QuotaWatcherOptions) {
     this.userStore = opts.userStore;
     this.debounceMs = opts.debounceMs ?? DEFAULT_DEBOUNCE_MS;
+    this.perUserRuntime = opts.perUserRuntime;
+    this.userClaudeRoot = opts.userClaudeRoot;
+    this.hostWorkspace = opts.hostWorkspace;
+    this.containerWorkspacePath = opts.containerWorkspacePath;
   }
 
   /**
@@ -65,7 +100,32 @@ export class QuotaWatcher {
     if (user === null) return; // legacy / no-user session
     if (user.kind === 'owner') return; // owner has null limits — no enforcement
 
-    const jsonlPath = ccJsonlPathOf(session.info.cwd, ccSessionIdOf(session));
+    const effectiveRuntime = this.perUserRuntime?.get(user.username) ?? 'host';
+    const isShared = effectiveRuntime === 'shared-container';
+    const claudeRoot =
+      isShared && this.userClaudeRoot !== undefined
+        ? join(this.userClaudeRoot, user.username)
+        : undefined;
+    // m-host-credentials-share B24 fix: shared-container cc writes
+    // jsonl under encoded container cwd, not host cwd. Translate
+    // session.info.cwd → container path via D9 amendment workspace
+    // mount mapping.
+    let effectiveCwd = session.info.cwd;
+    if (
+      isShared &&
+      this.hostWorkspace !== undefined &&
+      this.containerWorkspacePath !== undefined
+    ) {
+      const rel = relative(this.hostWorkspace, session.info.cwd);
+      if (!rel.startsWith('..')) {
+        effectiveCwd = join(this.containerWorkspacePath, rel);
+      }
+    }
+    const jsonlPath = ccJsonlPathOf(
+      effectiveCwd,
+      ccSessionIdOf(session),
+      claudeRoot,
+    );
     const dir = dirname(jsonlPath);
     const name = basename(jsonlPath);
 

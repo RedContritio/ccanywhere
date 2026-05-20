@@ -48,6 +48,13 @@ export interface SpawnOptions {
   readonly container?: {
     readonly name: string;
     readonly unixUser: string;
+    /**
+     * D9 amendment: container-internal cwd for `docker exec -w <path>`.
+     * caller (session-runtime) computes by translating host project.cwd
+     * via SessionContainerDeps.hostWorkspace mount path. Without this,
+     * claude lands in container WORKDIR (/) and can't see project files.
+     */
+    readonly workingDir?: string;
   };
 }
 

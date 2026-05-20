@@ -8,7 +8,7 @@ import type { Config } from '../config/schema.js';
 import type { DeviceStore } from '../devices/store.js';
 import { logger } from '../log.js';
 import { ensureProjectsRoot, ProjectStore } from '../projects/store.js';
-import { QuotaWatcher } from '../quota/watcher.js';
+import { QuotaWatcher, type QuotaWatcherOptions } from '../quota/watcher.js';
 import type { SessionManager } from '../session/manager.js';
 import type { TokenStore } from '../tokens/store.js';
 import type { UserStore } from '../users/store.js';
@@ -20,7 +20,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerInternalRoutes } from './routes/internal.js';
 import { registerInternalMultiUserRoutes } from './routes/internal-multi-user.js';
-import { registerProjectRoutes } from './routes/projects.js';
+import { registerProjectRoutes, type ProjectRoutesOptions } from './routes/projects.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerSessionResumeRoutes } from './routes/sessions-resume.js';
 import { registerShareRoutes } from './routes/share.js';
@@ -93,6 +93,8 @@ export interface BuildServerOptions {
    * after docker-detect + SharedContainerManager.ensureRunning.
    */
   readonly containerDeps?: SessionContainerDeps;
+  /** m-host-credentials-share D5: host root mapped to per-user ~/.claude in containers; forwarded to QuotaWatcher. */
+  readonly userClaudeRoot?: string;
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
   /**
@@ -195,29 +197,25 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
     return store;
   };
 
-  if (opts.historyRoot === undefined) {
-    await registerProjectRoutes(app, resolveProjectStore);
-  } else {
-    await registerProjectRoutes(app, resolveProjectStore, opts.historyRoot);
-  }
+  const prOpts: { -readonly [K in keyof ProjectRoutesOptions]: ProjectRoutesOptions[K] } = {};
+  if (opts.historyRoot !== undefined) prOpts.historyRoot = opts.historyRoot;
+  if (opts.perUserRuntime !== undefined) prOpts.perUserRuntime = opts.perUserRuntime;
+  if (opts.userClaudeRoot !== undefined) prOpts.userClaudeRoot = opts.userClaudeRoot;
+  if (opts.containerDeps !== undefined) Object.assign(prOpts, { hostWorkspace: opts.containerDeps.hostWorkspace, containerWorkspacePath: opts.containerDeps.containerWorkspacePath });
+  await registerProjectRoutes(app, resolveProjectStore, prOpts);
   const idempotencyStore = new IdempotencyStore(opts.idempotencyTtlMs ?? 60 * 60 * 1000);
   app.addHook('onClose', () => {
     idempotencyStore.close();
   });
 
-  const sessionOpts: {
-    historyRoot?: string;
-    idempotencyStore: IdempotencyStore;
-    userStore?: UserStore;
-    injectCcSessionId?: boolean;
-    perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
-    containerDeps?: SessionContainerDeps;
-  } = { idempotencyStore };
+  type SOpts = { historyRoot?: string; idempotencyStore: IdempotencyStore; userStore?: UserStore; injectCcSessionId?: boolean; perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>; containerDeps?: SessionContainerDeps; userClaudeRoot?: string; };
+  const sessionOpts: SOpts = { idempotencyStore };
   if (opts.historyRoot !== undefined) sessionOpts.historyRoot = opts.historyRoot;
   if (opts.userStore !== undefined) sessionOpts.userStore = opts.userStore;
   if (opts.injectCcSessionId !== undefined) sessionOpts.injectCcSessionId = opts.injectCcSessionId;
   if (opts.perUserRuntime !== undefined) sessionOpts.perUserRuntime = opts.perUserRuntime;
   if (opts.containerDeps !== undefined) sessionOpts.containerDeps = opts.containerDeps;
+  if (opts.userClaudeRoot !== undefined) sessionOpts.userClaudeRoot = opts.userClaudeRoot;
   await registerSessionRoutes(app, opts.config, opts.manager, resolveProjectStore, sessionOpts);
   const resumeOpts: {
     perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
@@ -237,22 +235,19 @@ export async function buildServer(opts: BuildServerOptions): Promise<FastifyInst
       resolveProjectStore,
     );
   }
-  // m-quota-inline: hook routes no longer carry quota responsibility
-  // (only state machine transitions). registerHookRoutes signature
-  // accepts options-less mode as the new default.
+  // m-quota-inline: hook routes only carry state-machine transitions now.
   await registerHookRoutes(app, opts.manager);
-
-  // m-quota-inline: build per-instance QuotaWatcher (jsonl fs.watch +
-  // debounce + setQuotaUsage) and wire it as the SessionManager's
-  // lifecycle observer + share the gate userStore reference with the
-  // WS input handler. Skip when there is no UserStore (legacy fixture).
+  // m-quota-inline: per-instance QuotaWatcher as SessionManager lifecycle observer.
   let quotaWatcher: QuotaWatcher | undefined;
   if (opts.userStore !== undefined) {
-    quotaWatcher = new QuotaWatcher({ userStore: opts.userStore });
+    type QWMut = { -readonly [K in keyof QuotaWatcherOptions]: QuotaWatcherOptions[K] };
+    const qwOpts: QWMut = { userStore: opts.userStore };
+    if (opts.perUserRuntime !== undefined) qwOpts.perUserRuntime = opts.perUserRuntime;
+    if (opts.userClaudeRoot !== undefined) qwOpts.userClaudeRoot = opts.userClaudeRoot;
+    if (opts.containerDeps !== undefined) Object.assign(qwOpts, { hostWorkspace: opts.containerDeps.hostWorkspace, containerWorkspacePath: opts.containerDeps.containerWorkspacePath });
+    quotaWatcher = new QuotaWatcher(qwOpts);
     opts.manager.setLifecycleObserver(quotaWatcher);
-    app.addHook('onClose', () => {
-      quotaWatcher?.closeAll();
-    });
+    app.addHook('onClose', () => quotaWatcher?.closeAll());
   }
 
   await registerWebSocketRoutes(app, opts.manager, {

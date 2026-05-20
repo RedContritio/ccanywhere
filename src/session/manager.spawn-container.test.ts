@@ -95,6 +95,32 @@ describe('buildSpawnCommand — shared-container', () => {
     expect(r.args).not.toContain('-e');
   });
 
+  it('D9: workingDir produces -w docker exec arg', () => {
+    const r = buildSpawnCommand(
+      baseOpts({
+        runtime: 'shared-container',
+        container: {
+          name: 'cca',
+          unixUser: 'alice',
+          workingDir: '/workspace/alice/myproject',
+        },
+      }),
+    );
+    const wIdx = r.args.indexOf('-w');
+    expect(wIdx).toBeGreaterThan(0);
+    expect(r.args[wIdx + 1]).toBe('/workspace/alice/myproject');
+  });
+
+  it('D9: no workingDir → no -w arg', () => {
+    const r = buildSpawnCommand(
+      baseOpts({
+        runtime: 'shared-container',
+        container: { name: 'cca', unixUser: 'alice' },
+      }),
+    );
+    expect(r.args).not.toContain('-w');
+  });
+
   it('preserves args order after container name', () => {
     const r = buildSpawnCommand(
       baseOpts({

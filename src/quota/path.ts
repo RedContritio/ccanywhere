@@ -18,9 +18,19 @@ import { join } from 'node:path';
  * can change this encoding; `runStartupSanityCheck` below catches drift before
  * the first hook fires.
  */
-export function ccJsonlPathOf(cwd: string, sessionId: string): string {
+/**
+ * `claudeRoot` overrides the parent of `projects/` for non-owner / container
+ * users (m-host-credentials-share D5). Defaults to `<homedir>/.claude` so
+ * owner host path continues to land in `~/.claude/projects/...` unchanged.
+ */
+export function ccJsonlPathOf(
+  cwd: string,
+  sessionId: string,
+  claudeRoot?: string,
+): string {
   const encoded = cwd.replace(/\//g, '-');
-  return join(homedir(), '.claude', 'projects', encoded, `${sessionId}.jsonl`);
+  const root = claudeRoot ?? join(homedir(), '.claude');
+  return join(root, 'projects', encoded, `${sessionId}.jsonl`);
 }
 
 export class QuotaPathError extends Error {

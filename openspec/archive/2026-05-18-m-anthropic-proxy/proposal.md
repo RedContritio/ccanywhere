@@ -1,5 +1,18 @@
 ---
 status: archived
+deprecated_by: m-host-credentials-share D10 (2026-05-20)
+deprecation_reason: |
+  Anthropic 2026-02-20 起明确禁止第三方应用通过 Authorization Bearer
+  转发 OAuth subscription token (sk-ant-oat-...). cc binary 自身仍可
+  走 first-party OAuth path 是因为 anthropic 通过 TLS fingerprint +
+  cc-specific beta header combo 识别。proxy 作为第三方转发 = 401.
+
+  m-host-credentials-share D10 amendment 反转 proxy 在 user-spawn
+  路径的 wire。proxy 模块代码 + cohost spawn (D7) + bearer-refresh
+  endpoint (C5c) 全保留作 future fallback:
+    - anthropic 改回允许第三方 proxy → 反向 wire 即可
+    - owner 切 Console API key (sk-ant-api03-) → proxy X-Api-Key
+      转发走 Console billing path, anthropic 仍允许
 ---
 
 # Proposal: m-anthropic-proxy — 自建 Anthropic API 代理
@@ -128,6 +141,32 @@ owner 在 host 直接 spawn claude（沿用现有路径），不经代理，不�
 mitigation：proxy 在 upstream 返回 429 时 verbatim forward，触发
 后 owner 自己去 Anthropic dashboard 排查使用比例。不做自动告警
 （避免代理依赖 Anthropic dashboard API）。
+
+### D8 (post-ship amendment, m-shared-container-workspace-fix branch)
+
+**改动**: anthropic-credentials.json schema 扩展, 支持两种 owner auth:
+- `{"apiKey": "sk-ant-..."}` — Console API key, proxy 转发用
+  `X-Api-Key` header (原 D5 行为)
+- `{"oauthToken": "sk-ant-oat-..."}` — Claude Code subscription
+  OAuth token (`claude setup-token` 生成, 1 年期), proxy 转发用
+  `Authorization: Bearer` header
+
+两个都配 → proxy 优先 oauthToken (subscription).
+
+**为何 amendment**: m-anthropic-proxy 原 ship 假设 owner 用
+Console API key 走 sk-ant- 路径. e2e 准备时 owner 表达"不想烧
+Console credit, 复用 Claude Pro/Max plan" — 这是合理 use-case
+(personal repo owner 多半已 subscribe). 加 OAuth subscription
+path 让 proxy 复用 owner 已有的 Pro/Max quota.
+
+**为何 ship 时漏**: ship 时 spike P2 只测了 ANTHROPIC_AUTH_TOKEN
+(inbound from user container) 和 ANTHROPIC_API_KEY (outbound), 没
+测 OAuth subscription path. owner 实际意图是 subscription, 但
+没在 owner 部署 proxy 前暴露偏好.
+
+**安全 implication**: OAuth token 跟 sk-ant- 同敏感等级 (拿到任一
+都能调 anthropic 计费). 文件 mode 0600 + D1 独立进程 + D4 日志
+脱敏 兜底不变.
 
 ## 落地点
 

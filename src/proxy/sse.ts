@@ -5,6 +5,13 @@ import { meterResponse, type UpstreamUsage } from './metering.js';
 /**
  * Strip hop-by-hop + length headers when copying upstream → reply.
  * Shared by both JSON and SSE forward paths (forward.ts + sse.ts).
+ *
+ * `content-encoding` is stripped because undici's fetch implementation
+ * transparently decompresses gzip/br/deflate response bodies — by the
+ * time we read `await arrayBuffer()` / `body.getReader()`, the bytes
+ * are already plaintext. Forwarding the upstream `content-encoding:
+ * gzip` header would tell cc to decompress what is already plain text
+ * (ZlibError on cc side, surfaced as "Unable to connect to API").
  */
 export function copyForwardHeaders(reply: FastifyReply, src: Headers): void {
   src.forEach((value, key) => {
@@ -12,7 +19,8 @@ export function copyForwardHeaders(reply: FastifyReply, src: Headers): void {
     if (
       lc === 'content-length' ||
       lc === 'connection' ||
-      lc === 'transfer-encoding'
+      lc === 'transfer-encoding' ||
+      lc === 'content-encoding'
     ) {
       return;
     }

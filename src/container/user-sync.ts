@@ -12,6 +12,17 @@ export interface ContainerUserSyncOpts {
   readonly containerName: string;
   /** Inject for tests; default real docker CLI. */
   readonly execImpl?: ExecImpl;
+  /**
+   * m-host-credentials-share D3: container-side path that the host
+   * `userClaudeRoot` is mounted at (`-v <userClaudeRoot>:<root>:rw`,
+   * wired in container-init.ts). ensureUser mkdirs `<root>/<username>`
+   * + chowns to the user's uid + chmods 0700 so cc finds its jsonl
+   * history + settings.json + CLAUDE.md under
+   * `CLAUDE_CONFIG_DIR=<root>/<username>` (set per-spawn by
+   * session-runtime). When omitted, ensureUser only does useradd +
+   * chmod /home (legacy behavior).
+   */
+  readonly userClaudeContainerRoot?: string;
 }
 
 /**
@@ -31,16 +42,25 @@ export interface ContainerUserSyncOpts {
 export class ContainerUserSync {
   private readonly containerName: string;
   private readonly exec: ExecImpl;
+  private readonly userClaudeContainerRoot: string | undefined;
   private readonly cache = new Set<string>();
 
   constructor(opts: ContainerUserSyncOpts) {
     this.containerName = opts.containerName;
     this.exec = opts.execImpl ?? defaultExec;
+    this.userClaudeContainerRoot = opts.userClaudeContainerRoot;
   }
 
   async ensureUser(username: string): Promise<{ uid: number }> {
     const uid = ContainerUserSync.uidOf(username);
-    if (this.cache.has(username)) return { uid };
+    // m-host-credentials-share Managed (2026-05-20): cc Managed scope
+    // (/etc/claude-code/managed-settings.json) contains both deny rules
+    // AND CLAUDE.md soft-norm text via `claudeMd` field. cc binary
+    // reads /etc/claude-code/ directly — no per-user cp needed. cache
+    // hit just returns; no per-user baked-file refresh.
+    if (this.cache.has(username)) {
+      return { uid };
+    }
 
     // Check if user exists in container (id -u <user>)
     const check = await this.exec('docker', [
@@ -88,6 +108,75 @@ export class ContainerUserSync {
       throw new ContainerUserSyncError(
         `chmod /home/${username} failed: ${chmod.stderr}`,
       );
+    }
+
+    // m-host-credentials-share D3: per-user `~/.claude` state dir under
+    // the mounted userClaudeRoot. mkdir + chown + chmod 0700. macOS
+    // docker desktop bind mount doesn't enforce inode perms (D4 +
+    // P9 Step A spike-results), so chmod is best-effort / cosmetic on
+    // macOS; linux deployments truly enforce.
+    if (this.userClaudeContainerRoot !== undefined) {
+      const claudeDir = `${this.userClaudeContainerRoot}/${username}`;
+      const mkdir = await this.exec('docker', [
+        'exec',
+        this.containerName,
+        'mkdir',
+        '-p',
+        claudeDir,
+      ]);
+      if (mkdir.exitCode !== 0) {
+        throw new ContainerUserSyncError(
+          `mkdir ${claudeDir} failed: ${mkdir.stderr}`,
+        );
+      }
+      const chown = await this.exec('docker', [
+        'exec',
+        this.containerName,
+        'chown',
+        `${uid}:${uid}`,
+        claudeDir,
+      ]);
+      if (chown.exitCode !== 0) {
+        throw new ContainerUserSyncError(
+          `chown ${claudeDir} failed: ${chown.stderr}`,
+        );
+      }
+      const chmodClaude = await this.exec('docker', [
+        'exec',
+        this.containerName,
+        'chmod',
+        '0700',
+        claudeDir,
+      ]);
+      if (chmodClaude.exitCode !== 0) {
+        throw new ContainerUserSyncError(
+          `chmod ${claudeDir} failed: ${chmodClaude.stderr}`,
+        );
+      }
+      // m-host-credentials-share D6 + Managed (2026-05-20): all policy
+      // (deny rules + LLM soft-norm CLAUDE.md text) ships in cc Managed
+      // scope `/etc/claude-code/managed-settings.json`. cc binary reads
+      // it directly — no per-user cp needed. Per-user `.claude` dir
+      // remains for cc's own state (jsonl history, .claude.json, etc).
+      //
+      // Ensure user-scope settings.json exists (empty `{}`) so cc /theme
+      // and per-user preferences persist across spawns. cc auto-creates
+      // this file on first write, but seeding it explicitly keeps the
+      // ownership chain consistent (chown user before cc binary touches
+      // it) and avoids races where cc tries to chmod a missing file.
+      const userSettingsFile = `${claudeDir}/settings.json`;
+      const seedSettings = await this.exec('docker', [
+        'exec',
+        this.containerName,
+        'sh',
+        '-c',
+        `[ -f ${userSettingsFile} ] || (echo '{}' > ${userSettingsFile} && chown ${uid}:${uid} ${userSettingsFile} && chmod 0644 ${userSettingsFile})`,
+      ]);
+      if (seedSettings.exitCode !== 0) {
+        throw new ContainerUserSyncError(
+          `seed ${userSettingsFile} failed: ${seedSettings.stderr}`,
+        );
+      }
     }
 
     this.cache.add(username);

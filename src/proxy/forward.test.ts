@@ -34,6 +34,23 @@ function mockFetch(
 const credentials = { apiKey: 'sk-ant-owner-secret' };
 
 describe('POST /v1/messages — auth', () => {
+  it('accepts token via X-Api-Key header (cc uses this for cca. prefix)', async () => {
+    const issuer = mkIssuer();
+    const { token } = issuer.issue('alice');
+    const app = await buildProxyServer({
+      credentials,
+      forward: {
+        tokenIssuer: issuer,
+        usageStore: mkUsageStore({ alice: { used: 0, limit: 100, resetAt: Date.now() + 60_000 } }),
+        addUsage: async () => {},
+        fetchImpl: mockFetch({ status: 200, headers: { 'content-type': 'application/json' }, body: '{}' }),
+      },
+    });
+    const res = await app.inject({ method: 'POST', url: '/v1/messages', headers: { 'x-api-key': token }, payload: { model: 'claude-opus-4-7', messages: [] } });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
   it('401 when no Authorization header', async () => {
     const app = await buildProxyServer({
       credentials,
@@ -124,6 +141,38 @@ describe('POST /v1/messages — quota', () => {
 });
 
 describe('POST /v1/messages — forward', () => {
+  it('oauthToken (subscription) → Authorization: Bearer upstream', async () => {
+    const issuer = mkIssuer();
+    const { token } = issuer.issue('alice');
+    const captured: { url?: string; init?: RequestInit } = {};
+    const app = await buildProxyServer({
+      credentials: { oauthToken: 'sk-ant-oat-subscription' },
+      forward: {
+        tokenIssuer: issuer,
+        usageStore: mkUsageStore({
+          alice: { used: 0, limit: 100, resetAt: Date.now() + 60_000 },
+        }),
+        addUsage: async () => {},
+        fetchImpl: mockFetch(
+          { status: 200, headers: {}, body: '{}' },
+          captured,
+        ),
+      },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/v1/messages',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { model: 'claude-opus-4-7', messages: [] },
+    });
+    const sentHeaders = captured.init?.headers as Record<string, string>;
+    expect(sentHeaders['authorization']).toBe(
+      'Bearer sk-ant-oat-subscription',
+    );
+    expect(sentHeaders['x-api-key']).toBeUndefined();
+    await app.close();
+  });
+
   it('forwards body + replaces auth header with owner x-api-key', async () => {
     const issuer = mkIssuer();
     const { token } = issuer.issue('alice');
@@ -200,9 +249,46 @@ describe('POST /v1/messages — forward', () => {
     await app.close();
   });
 
-  it('502 when upstream throws', async () => {
+  it('recovers when first attempt throws but second succeeds', async () => {
     const issuer = mkIssuer();
     const { token } = issuer.issue('alice');
+    let attempts = 0;
+    const fetchImpl = (() => {
+      attempts++;
+      if (attempts === 1) throw new Error('first attempt fails');
+      return Promise.resolve(
+        new Response('{"ok":true}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    }) as unknown as typeof fetch;
+    const app = await buildProxyServer({
+      credentials,
+      forward: {
+        tokenIssuer: issuer,
+        usageStore: mkUsageStore({
+          alice: { used: 0, limit: 100, resetAt: Date.now() + 60_000 },
+        }),
+        addUsage: async () => {},
+        fetchImpl,
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/messages',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { model: 'claude-opus-4-7', messages: [] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(attempts).toBe(2);
+    await app.close();
+  });
+
+  it('502 when upstream throws on all 3 retry attempts', async () => {
+    const issuer = mkIssuer();
+    const { token } = issuer.issue('alice');
+    let attempts = 0;
     const app = await buildProxyServer({
       credentials,
       forward: {
@@ -212,6 +298,7 @@ describe('POST /v1/messages — forward', () => {
         }),
         addUsage: async () => {},
         fetchImpl: (() => {
+          attempts++;
           throw new Error('network down');
         }) as unknown as typeof fetch,
       },
@@ -223,6 +310,7 @@ describe('POST /v1/messages — forward', () => {
       payload: { model: 'claude-opus-4-7', messages: [] },
     });
     expect(res.statusCode).toBe(502);
+    expect(attempts).toBe(3);
     await app.close();
   });
 

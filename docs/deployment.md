@@ -266,15 +266,15 @@ hook quota enforcement 见 [`openspec/specs/hooks/spec.md`](../openspec/specs/ho
 
 config 不动，前端构建产出会被 fastify-static 即时服务。
 
-## 8. anthropic 代理（m-anthropic-proxy，Phase 1）
+## 8. anthropic 代理（m-anthropic-proxy + m-host-credentials-share D7/D10）
 
-独立 LaunchAgent 进程 (`ccanywhere proxy serve`)，listen
-`config.proxy.port` (default 62276) on `config.proxy.bindHost`
-(default 127.0.0.1)。**owner 路径不经此代理** (D7)，仅为 Phase 2
-user 容器化做的基础设施。Phase 1 ship 后没真实流量经过；靠
-`scripts/proxy-manual-verify.sh` + 单元测试验证。
-
-详细见 [deployment-proxy.md](./deployment-proxy.md)。
+由 ccanywhere main 启动时自动 spawn 的子进程 (`ccanywhere proxy serve`)，
+listen `config.proxy.port` (default 62276)。**D10 反转 (2026-05-20)
+后 proxy 不在 user 流量路径上** — Anthropic 2026-02 禁第三方 Bearer
+转发 OAuth subscription token, user 容器内 cc 改用 `CLAUDE_CODE_OAUTH_
+TOKEN` env 直连 anthropic. proxy 仍 listen 作 future fallback
+(anthropic 改回允许 / owner 切 Console API key 时 re-enable). 详
+[deployment-proxy.md](./deployment-proxy.md) §3.
 
 ## 9. user runtime 隔离策略（m-user-runtime-schema，Phase 1.B）
 
@@ -284,12 +284,13 @@ Phase 1.B 落了配置层：admin 在 `config.isolationPolicy` 声明全局
 
 详细见 [deployment-isolation.md](./deployment-isolation.md)。
 
-## 10. user 容器化（m-user-shared-container，Phase 2）
+## 10. user 容器化（m-user-shared-container + m-host-credentials-share）
 
-Phase 2 落了 shared container spawn：admin 配
-`runtime: 'shared-container'` 时 user session 通过 `docker exec`
-进入 ccanywhere-shared-<port> 容器内跑 claude，anthropic 流量经
-proxy（Phase 1.A）。owner 路径 0 改动。
-
-详细见 [deployment-container.md](./deployment-container.md)。
+shared container spawn: admin 配 `runtime: 'shared-container'` 时 user
+session 通过 `docker exec` 进入 ccanywhere-shared-<port> 容器内跑
+claude. D10 反转后 anthropic 流量**不经 proxy**, 直接 owner OAuth
+subscription (容器内 setup-token + env inject). 容器内 per-user
+`~/.claude` mount 出 host (`~/.config/ccanywhere/user-claude/<user>/`,
+含 jsonl history + settings + baked CLAUDE.md/permission-deny).
+owner 路径 0 改动. 详 [deployment-container.md](./deployment-container.md).
 

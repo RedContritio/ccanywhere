@@ -30,4 +30,18 @@ RUN npm install -g @anthropic-ai/claude-code
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 0755 /usr/local/bin/entrypoint.sh
 
+# m-host-credentials-share D6 + Managed Light (2026-05-20): all policy
+# (deny rules + LLM soft norm CLAUDE.md text via `claudeMd` field) lives
+# in cc anthropic-spec managed scope path. user-level settings.json /
+# CLAUDE.md cannot override (allowManagedPermissionRulesOnly + managed
+# precedence). ContainerUserSync no longer cp's per-user CLAUDE.md.
+COPY managed-settings.json /etc/claude-code/managed-settings.json
+RUN chmod 0644 /etc/claude-code/managed-settings.json
+
+# m-host-credentials-share C5c/C5d: cc apiKeyHelper rotation script.
+# settings.json's `apiKeyHelper` field points to this; cc calls it on
+# 401 to swap stale ANTHROPIC_AUTH_TOKEN for a fresh 5-min bearer.
+COPY cc-helper.sh /usr/local/bin/cc-helper.sh
+RUN chmod 0755 /usr/local/bin/cc-helper.sh
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

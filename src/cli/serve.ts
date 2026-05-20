@@ -16,6 +16,7 @@ import { ShareStore } from '../share/store.js';
 import { TokenStore } from '../tokens/store.js';
 import { UserStore } from '../users/store.js';
 import { initContainerStack } from './container-init.js';
+import { startProxyCohost } from './proxy-cohost.js';
 import { resolveIsolation } from './serve-isolation.js';
 
 /**
@@ -61,6 +62,16 @@ export async function runServe(configPathArg?: string): Promise<void> {
   // 合法 username（首次 ensureOwner 默认 'owner'，但允许手动改）。
   const workspace = resolve(config.workspace);
   mkdirSync(workspace, { recursive: true, mode: 0o700 });
+
+  // m-host-credentials-share D3: per-user `~/.claude` state root.
+  // Single bind mount into shared container (`/var/lib/ccanywhere/
+  // user-claude:rw`); per-user sub-dirs created on-demand by
+  // ContainerUserSync.ensureUser. Default falls under configDir so an
+  // unconfigured deployment Just Works (no schema bump required).
+  const userClaudeRoot = resolve(
+    config.userClaudeRoot ?? join(configDir, 'user-claude'),
+  );
+  mkdirSync(userClaudeRoot, { recursive: true, mode: 0o755 });
 
   // UserStore 要先构造以拿到 owner.username（ensureOwner 触发后），再
   // 算 owner 项目根。后续 DeviceStore 依赖 owner.id 也由这一步提供。
@@ -154,11 +165,31 @@ export async function runServe(configPathArg?: string): Promise<void> {
 
   const internalHookToken = randomBytes(32).toString('hex');
 
+  // m-host-credentials-share D7: ccanywhere main spawns the anthropic
+  // proxy as a sub-process so deployment of `ccanywhere` LaunchAgent
+  // covers proxy too. Independent OS process (m-anthropic-proxy D1
+  // blast radius保留: credentials file read happens only in the proxy
+  // child, never in main). Supervisor handles crash respawn with
+  // backoff + give-up after consecutive failures so a broken proxy
+  // doesn't death-loop.
+  const cliBinPath = process.argv[1];
+  if (cliBinPath === undefined) {
+    logger.fatal('cannot resolve cli entry path (process.argv[1]) for proxy cohost');
+    process.exit(2);
+  }
+  const proxyLogPath = join(configDir, 'proxy.log');
+  const proxyCohost = startProxyCohost({
+    cliBinPath,
+    configPath,
+    logPath: proxyLogPath,
+  });
+  logger.info({ proxyLogPath }, 'proxy cohost spawned');
+
   // m-user-shared-container C6: docker detect + shared container
   // ensureRunning + ContainerUserSync + TokenIssuer init. Returns
   // sharedContainerReady flag for resolveIsolation D5 decision +
   // containerDeps for buildServer + shutdown hook for SIGTERM.
-  const containerInit = await initContainerStack(config, configDir);
+  const containerInit = await initContainerStack(config, configDir, userClaudeRoot);
 
   // m-user-runtime-schema. Resolve isolation policy + per-user runtime
   // BEFORE building the server (fatal on bad config; ready snapshot
@@ -184,6 +215,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
     cliToken,
     isolation,
     perUserRuntime,
+    userClaudeRoot,
     ...(containerInit.containerDeps !== undefined
       ? { containerDeps: containerInit.containerDeps }
       : {}),
@@ -203,6 +235,10 @@ export async function runServe(configPathArg?: string): Promise<void> {
     await manager.detach();
     // m-user-shared-container C6: stop shared container (idempotent).
     await containerInit.shutdown();
+    // m-host-credentials-share D7: stop proxy cohost (SIGTERM →
+    // grace → SIGKILL). Final step so proxy serves any in-flight
+    // bearer/forward requests until container/users are torn down.
+    await proxyCohost.shutdown();
     process.exit(0);
   };
   process.on('SIGINT', (s) => void shutdown(s));

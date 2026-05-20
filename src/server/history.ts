@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 export interface SessionSummary {
   readonly sessionId: string;
@@ -14,6 +14,32 @@ export function defaultHistoryRoot(): string {
 
 export function encodeProjectCwd(cwd: string): string {
   return resolve(cwd).replace(/\//g, '-');
+}
+
+/**
+ * m-host-credentials-share B26 helper: resolve effective (cwd, historyRoot)
+ * pair for listHistory call. host runtime → caller args unchanged.
+ * shared-container runtime → translate host cwd to container cwd (D9
+ * workspace mount inverse) + use per-user `<userClaudeRoot>/<user>/
+ * projects/` instead of homedir/.claude. Pure function, no fs access.
+ */
+export function resolveHistoryScope(opts: {
+  username: string | undefined;
+  hostCwd: string;
+  runtime: 'host' | 'shared-container';
+  userClaudeRoot: string | undefined;
+  hostWorkspace: string | undefined;
+  containerWorkspacePath: string | undefined;
+  defaultHistoryRoot: string | undefined;
+}): { cwd: string; historyRoot: string | undefined } {
+  const isShared = opts.runtime === 'shared-container';
+  if (isShared && opts.username !== undefined && opts.userClaudeRoot !== undefined && opts.hostWorkspace !== undefined && opts.containerWorkspacePath !== undefined) {
+    const r = relative(opts.hostWorkspace, opts.hostCwd);
+    if (!r.startsWith('..')) {
+      return { cwd: join(opts.containerWorkspacePath, r), historyRoot: join(opts.userClaudeRoot, opts.username, 'projects') };
+    }
+  }
+  return { cwd: opts.hostCwd, historyRoot: opts.defaultHistoryRoot };
 }
 
 export async function listHistory(

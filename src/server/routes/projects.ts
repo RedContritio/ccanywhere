@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ProjectStore} from '../../projects/store.js';
 import { ProjectStoreError } from '../../projects/store.js';
 import type { User } from '../../users/types.js';
-import { listHistory } from '../history.js';
+import { listHistory, resolveHistoryScope } from '../history.js';
 
 const CreateBodySchema = z.object({
   name: z.string().min(1).max(255),
@@ -20,10 +20,23 @@ const CreateBodySchema = z.object({
  */
 export type ResolveProjectStore = (user: User | undefined) => ProjectStore;
 
+export interface ProjectRoutesOptions {
+  readonly historyRoot?: string;
+  readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
+  readonly userClaudeRoot?: string;
+  readonly hostWorkspace?: string;
+  readonly containerWorkspacePath?: string;
+}
+
+function effectiveHistoryArgs(user: User | undefined, hostCwd: string, opts: ProjectRoutesOptions): { cwd: string; historyRoot: string | undefined } {
+  const u = user?.username;
+  return resolveHistoryScope({ username: u, hostCwd, runtime: u !== undefined ? opts.perUserRuntime?.get(u) ?? 'host' : 'host', userClaudeRoot: opts.userClaudeRoot, hostWorkspace: opts.hostWorkspace, containerWorkspacePath: opts.containerWorkspacePath, defaultHistoryRoot: opts.historyRoot });
+}
+
 export async function registerProjectRoutes(
   app: FastifyInstance,
   resolveStore: ResolveProjectStore,
-  historyRoot?: string,
+  options: ProjectRoutesOptions = {},
 ): Promise<void> {
   app.get('/api/projects', (req) => ({
     projects: resolveStore(req.user).list().map((p) => ({
@@ -96,10 +109,9 @@ export async function registerProjectRoutes(
         .send({ error: { code: 'not_found', message: 'project not found' } });
       return;
     }
+    const { cwd, historyRoot } = effectiveHistoryArgs(req.user, proj.cwd, options);
     const history =
-      historyRoot === undefined
-        ? await listHistory(proj.cwd)
-        : await listHistory(proj.cwd, historyRoot);
+      historyRoot === undefined ? await listHistory(cwd) : await listHistory(cwd, historyRoot);
     return { history };
   });
 }

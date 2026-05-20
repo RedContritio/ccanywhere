@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import { registerBearerRefreshRoute } from './bearer-refresh.js';
 import type { OwnerCredentials } from './credentials.js';
 import { type ForwardDeps, registerForwardRoutes } from './forward.js';
 
@@ -53,6 +54,13 @@ export async function buildProxyServer(
     registerForwardRoutes(app, {
       ...opts.forward,
       credentials: opts.credentials,
+    });
+    // m-host-credentials-share C5c: bearer rotation endpoint for cc's
+    // apiKeyHelper. Same TokenIssuer as forward routes; verifies the
+    // caller's long-lived helper bearer and returns a fresh short
+    // bearer scoped to the same user.
+    registerBearerRefreshRoute(app, {
+      tokenIssuer: opts.forward.tokenIssuer,
     });
   }
 

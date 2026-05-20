@@ -103,10 +103,11 @@ export async function registerSessionResumeRoutes(
         options.perUserRuntime,
         options.containerDeps,
         themeEnv,
+        project.cwd,
       );
       try {
         const result = manager.resumeDeadStub(id, {
-          command: config.claudeBin,
+          command: overlay.command ?? config.claudeBin,
           args: buildResumeArgs(resumeInput),
           scrollbackBytes: config.scrollbackBytes,
           ...(parsed.data.cols !== undefined ? { cols: parsed.data.cols } : {}),

@@ -5,6 +5,10 @@ import { SharedContainerManager } from '../container/shared-manager.js';
 import { ContainerUserSync } from '../container/user-sync.js';
 import { logger } from '../log.js';
 import type { SessionContainerDeps } from '../server/server.js';
+import {
+  defaultCredentialsPath,
+  loadOwnerCredentials,
+} from '../proxy/credentials.js';
 import { TokenIssuer } from '../proxy/tokens.js';
 import { ensureProxyTokenSecret } from './proxy-serve.js';
 
@@ -35,6 +39,7 @@ export interface ContainerInitResult {
 export async function initContainerStack(
   config: Config,
   configDir: string,
+  userClaudeRoot: string,
 ): Promise<ContainerInitResult> {
   const noop = async (): Promise<void> => {};
 
@@ -55,9 +60,23 @@ export async function initContainerStack(
   }
 
   const containerName = `ccanywhere-shared-${config.port}`;
+  // D9 amendment: mount host workspace into container 1:1 so per-user
+  // project cwds resolve via session-runtime's relative-path translate.
+  const containerWorkspacePath = '/workspace';
+  // m-host-credentials-share D3: mount per-user `~/.claude` state root.
+  // Per-user sub-dirs are created on demand by ContainerUserSync.ensureUser
+  // (C3 commit). session-runtime sets CLAUDE_CONFIG_DIR per spawn so cc
+  // finds the right per-user dir.
+  const containerUserClaudePath = '/var/lib/ccanywhere/user-claude';
   const sharedManager = new SharedContainerManager({
     image: IMAGE_NAME,
     name: containerName,
+    extraRunArgs: [
+      '-v',
+      `${config.workspace}:${containerWorkspacePath}:rw`,
+      '-v',
+      `${userClaudeRoot}:${containerUserClaudePath}:rw`,
+    ],
   });
   try {
     await sharedManager.ensureRunning();
@@ -75,13 +94,39 @@ export async function initContainerStack(
     join(configDir, 'proxy-token-secret'),
   );
   const tokenIssuer = new TokenIssuer({ secret: tokenSecret });
-  const userSync = new ContainerUserSync({ containerName });
+  const userSync = new ContainerUserSync({
+    containerName,
+    userClaudeContainerRoot: containerUserClaudePath,
+  });
+
+  // m-host-credentials-share D10: load owner OAuth subscription token
+  // for direct injection into shared-container cc processes. Optional
+  // here — when missing the container path 401s upstream (anthropic
+  // rejects unauthenticated /v1/messages), which surfaces to cc UI as
+  // "Please run /login". We still construct deps to keep the spawn
+  // path operational; admin sees the boot warn and fixes credentials.
+  const credsPath = defaultCredentialsPath();
+  const credsResult = loadOwnerCredentials(credsPath);
+  let ownerOauthToken: string | undefined;
+  if (credsResult.kind === 'loaded' && credsResult.credentials.oauthToken !== undefined) {
+    ownerOauthToken = credsResult.credentials.oauthToken;
+    logger.info({ credsPath }, 'owner OAuth token loaded for container spawn');
+  } else {
+    logger.warn(
+      { credsPath, kind: credsResult.kind },
+      'owner OAuth token missing — shared-container sessions will 401 upstream',
+    );
+  }
 
   const containerDeps: SessionContainerDeps = {
     containerName,
     userSync,
     tokenIssuer,
     proxyBaseUrl: `http://host.docker.internal:${config.proxy.port}`,
+    hostWorkspace: config.workspace,
+    containerWorkspacePath,
+    userClaudeContainerRoot: containerUserClaudePath,
+    ownerOauthToken,
   };
 
   return {

@@ -99,6 +99,65 @@ describe('ContainerUserSync.ensureUser', () => {
     expect(chmodCall).toContain('/home/alice');
   });
 
+  it('creates per-user claude state dir under userClaudeContainerRoot with 0700 chown', async () => {
+    const { exec, calls } = mkExec((c) => {
+      const a = c.args;
+      if (a[2] === 'id') return fail('absent');
+      if (a[2] === 'useradd') return ok('');
+      if (a[2] === 'chmod') return ok('');
+      if (a[2] === 'mkdir') return ok('');
+      if (a[2] === 'chown') return ok('');
+      if (a[2] === 'cp') return ok('');
+      if (a[2] === 'sh') return ok('');
+      throw new Error(`unexpected: ${a.join(' ')}`);
+    });
+    const sync = new ContainerUserSync({
+      containerName: 'cca-shared',
+      execImpl: exec,
+      userClaudeContainerRoot: '/var/lib/ccanywhere/user-claude',
+    });
+    await sync.ensureUser('alice');
+    const expectedDir = '/var/lib/ccanywhere/user-claude/alice';
+    const expectedUid = String(ContainerUserSync.uidOf('alice'));
+    const mkdirCall = calls.find((c) => c.args[2] === 'mkdir');
+    const chownCall = calls.find(
+      (c) => c.args[2] === 'chown' && !c.args.some((a) => a.includes('CLAUDE.md') || a.includes('settings.json')),
+    );
+    const claudeChmodCall = calls.find(
+      (c) => c.args[2] === 'chmod' && c.args.includes(expectedDir),
+    );
+    expect(mkdirCall?.args).toContain(expectedDir);
+    expect(chownCall?.args).toContain(`${expectedUid}:${expectedUid}`);
+    expect(chownCall?.args).toContain(expectedDir);
+    expect(claudeChmodCall?.args).toContain('0700');
+  });
+
+  it('Managed scope: no per-user CLAUDE.md or settings.json cp, but seeds empty user-scope settings.json', async () => {
+    // Policy ships via /etc/claude-code/managed-settings.json (cc reads
+    // it directly). ContainerUserSync useradd + chmod + mkdir per-user
+    // dir + seed `<dir>/settings.json` as empty `{}` so cc /theme and
+    // user preferences persist across spawns (cc reads/writes this
+    // file; we don't bake content).
+    const { exec, calls } = mkExec((c) => {
+      const a = c.args;
+      if (a[2] === 'id') return fail('absent');
+      if (['useradd', 'chmod', 'mkdir', 'chown', 'sh'].includes(a[2] ?? '')) return ok('');
+      throw new Error(`unexpected: ${a.join(' ')}`);
+    });
+    const sync = new ContainerUserSync({
+      containerName: 'cca-shared',
+      execImpl: exec,
+      userClaudeContainerRoot: '/var/lib/ccanywhere/user-claude',
+    });
+    await sync.ensureUser('alice');
+    const cpCalls = calls.filter((c) => c.args[2] === 'cp');
+    expect(cpCalls).toHaveLength(0);
+    // seed step: sh -c '[ -f ... ] || ...settings.json'
+    const seedCall = calls.find((c) => c.args[2] === 'sh');
+    expect(seedCall?.args.join(' ')).toContain('settings.json');
+    expect(seedCall?.args.join(' ')).toContain("echo '{}'");
+  });
+
   it('cache: second call no docker invocation', async () => {
     const { exec, calls } = mkExec(() => ok('1234\n'));
     const sync = new ContainerUserSync({

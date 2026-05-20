@@ -6,7 +6,7 @@ import type { Config } from '../../config/schema.js';
 import { logger } from '../../log.js';
 import type { Session, SessionManager, SpawnOptions } from '../../session/manager.js';
 import type { UserStore } from '../../users/store.js';
-import { listHistory } from '../history.js';
+import { listHistory, resolveHistoryScope } from '../history.js';
 import type { IdempotencyStore} from '../idempotency.js';
 import { hashBody, isValidIdempotencyKey } from '../idempotency.js';
 import type { ResolveProjectStore } from './projects.js';
@@ -38,6 +38,8 @@ export interface SessionRoutesOptions {
    * even when perUserRuntime says container.
    */
   readonly containerDeps?: SessionContainerDeps;
+  /** m-host-credentials-share B26: per-user claudeRoot for resume listHistory. */
+  readonly userClaudeRoot?: string;
 }
 
 function isWithinSubtree(child: string, parent: string): boolean {
@@ -45,6 +47,7 @@ function isWithinSubtree(child: string, parent: string): boolean {
   const parentWithSep = parent.endsWith(sep) ? parent : parent + sep;
   return child.startsWith(parentWithSep);
 }
+
 
 const CreateBodySchema = z.discriminatedUnion('mode', [
   z.object({
@@ -172,10 +175,10 @@ export async function registerSessionRoutes(
     const args: string[] = [];
     let forcedSessionId: string | undefined;
     if (body.mode === 'resume') {
-      const history =
-        options.historyRoot === undefined
-          ? await listHistory(project.cwd)
-          : await listHistory(project.cwd, options.historyRoot);
+      // B26: shared-container cc writes jsonl under encoded CONTAINER cwd; translate.
+      const u = req.user?.username;
+      const ha = resolveHistoryScope({ username: u, hostCwd: project.cwd, runtime: u !== undefined ? options.perUserRuntime?.get(u) ?? 'host' : 'host', userClaudeRoot: options.userClaudeRoot, hostWorkspace: options.containerDeps?.hostWorkspace, containerWorkspacePath: options.containerDeps?.containerWorkspacePath, defaultHistoryRoot: options.historyRoot });
+      const history = ha.historyRoot === undefined ? await listHistory(ha.cwd) : await listHistory(ha.cwd, ha.historyRoot);
       const known = history.some((h) => h.sessionId === body.sessionId);
       if (!known) {
         await sendErr(
@@ -193,17 +196,14 @@ export async function registerSessionRoutes(
 
     const themeEnv = buildThemeEnv(body.webTheme);
     const userId = req.user?.id ?? 'legacy-no-user';
-    // m-user-shared-container C5: host vs shared-container dispatch.
+    // m-user-shared-container C5+D9: host vs shared-container dispatch.
     const overlay = await buildSessionRuntimeOverlay(
-      req.user,
-      options.perUserRuntime,
-      options.containerDeps,
-      themeEnv,
+      req.user, options.perUserRuntime, options.containerDeps, themeEnv, project.cwd,
     );
     const baseSpawn = {
       projectId: project.id,
       cwd: project.cwd,
-      command: config.claudeBin,
+      command: overlay.command ?? config.claudeBin,
       args,
       scrollbackBytes: config.scrollbackBytes,
       mode: body.mode,

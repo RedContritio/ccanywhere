@@ -52,18 +52,35 @@ describe('loadOwnerCredentials', () => {
     expect(() => loadOwnerCredentials(p)).toThrow(/not valid JSON/);
   });
 
-  it('rejects missing apiKey field', () => {
+  it('rejects when both apiKey and oauthToken missing', () => {
     const p = writeCredsFile(JSON.stringify({ other: 'val' }));
-    expect(() => loadOwnerCredentials(p)).toThrow(/missing required field/);
+    expect(() => loadOwnerCredentials(p)).toThrow(/requires.*apiKey.*oauthToken/);
   });
 
-  it('rejects empty apiKey', () => {
+  it('rejects empty apiKey + no oauthToken', () => {
     const p = writeCredsFile(JSON.stringify({ apiKey: '' }));
-    expect(() => loadOwnerCredentials(p)).toThrow(/non-empty/);
+    expect(() => loadOwnerCredentials(p)).toThrow(/requires.*apiKey.*oauthToken/);
   });
 
-  it('rejects non-string apiKey', () => {
-    const p = writeCredsFile(JSON.stringify({ apiKey: 12345 }));
-    expect(() => loadOwnerCredentials(p)).toThrow(/non-empty string/);
+  it('loads oauthToken-only (subscription path)', () => {
+    const p = writeCredsFile(JSON.stringify({ oauthToken: 'sk-ant-oat-xyz' }));
+    const r = loadOwnerCredentials(p);
+    expect(r.kind).toBe('loaded');
+    if (r.kind === 'loaded') {
+      expect(r.credentials.oauthToken).toBe('sk-ant-oat-xyz');
+      expect(r.credentials.apiKey).toBeUndefined();
+    }
+  });
+
+  it('loads both when both present (forward 优先 oauthToken)', () => {
+    const p = writeCredsFile(
+      JSON.stringify({ apiKey: 'sk-ant-x', oauthToken: 'sk-ant-oat-y' }),
+    );
+    const r = loadOwnerCredentials(p);
+    expect(r.kind).toBe('loaded');
+    if (r.kind === 'loaded') {
+      expect(r.credentials.apiKey).toBe('sk-ant-x');
+      expect(r.credentials.oauthToken).toBe('sk-ant-oat-y');
+    }
   });
 });

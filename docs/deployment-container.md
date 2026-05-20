@@ -70,21 +70,31 @@ sleep 3 && curl -sf http://127.0.0.1:62275/healthz
 [server] shared container running: ccanywhere-shared-62275
 ```
 
-## 5. session 行为
+## 5. session 行为 (m-host-credentials-share D10 反转后)
 
-alice/bob 通过 web 起 session：
-- ccanywhere 在 shared container 内 `useradd alice`（lazy，per
-  user 首 session 触发）+ chmod 0700 /home/alice
-- spawn `docker exec -it -u alice -e ANTHROPIC_BASE_URL=
-  http://host.docker.internal:62276 -e ANTHROPIC_AUTH_TOKEN=cca.<5min>
-  -e CLAUDE_CONFIG_DIR=/home/alice/.claude -e DISABLE_AUTOUPDATER=1
-  -e DISABLE_TELEMETRY=1 ccanywhere-shared-<port> claude --session-id
+alice/bob 通过 web 起 session:
+- ccanywhere ContainerUserSync.ensureUser 在 shared container 内
+  `useradd alice` (lazy, per user 首 session 触发) + chmod 0700
+  `/home/alice` + mkdir `/var/lib/ccanywhere/user-claude/alice`
+  chown 0700 + cp baked `CLAUDE.md` + `settings.json` 进去 (D6
+  defense in depth: LLM soft norm + cc permission deny rules)
+- spawn `docker exec -it -u alice -e CLAUDE_CONFIG_DIR=/var/lib/
+  ccanywhere/user-claude/alice -e DISABLE_AUTOUPDATER=1 -e
+  DISABLE_TELEMETRY=1 -e CLAUDE_CODE_OAUTH_TOKEN=<owner sk-ant-oat>
+  -w <translated cwd> ccanywhere-shared-<port> claude --session-id
   <uuid>`
-- claude 在容器内跑，anthropic 流量经代理（iptables REJECT
-  api.anthropic.com 兜底）
+- claude 在容器内跑, **直连** `api.anthropic.com` (entrypoint 不
+  再 hosts override / iptables REJECT — D10 撤回 anthropic 拦截).
+  anthropic 看到的请求是 cc binary first-party + 容器内 setup-token
+  匹配 device fingerprint → 接受 OAuth subscription path, 计费走
+  owner Pro/Max plan.
 
-owner 路径 0 改动：owner session 仍直接本机 spawn claude 走
-mac Keychain → api.anthropic.com（D7 D8 决策）。
+**owner OAuth token 一次性容器内 setup** (在 container 内跑 `claude
+setup-token`, token 必须容器内 issued 才能容器内 use; host 跑出来
+的 token 跨设备给容器用 anthropic 会 invalidate). 详 D10 amendment.
+
+owner 路径 0 改动: owner session 仍直接本机 spawn claude 走 mac
+Keychain → api.anthropic.com (D7 D8 决策).
 
 ## 6. CLI 子命令
 
@@ -105,13 +115,21 @@ mitigation: docker `--restart unless-stopped` 自动 respawn。
 看 bob 的 claude 命令行。真正不可信场景需 `isolated-container`
 runtime（schema 接受 enum 但 reserved，未实现）。
 
-**iptables 仅 best-effort**：需 `--cap-add NET_ADMIN`。如不可用，
-`/etc/hosts` override 仍保 anthropic 直连走 127.0.0.1 阻断
-(D5 双层防护)。
+**~~iptables + /etc/hosts 双层防护~~ (D10 撤回)**: 早期 entrypoint
+强制 anthropic 流量经 proxy 用 iptables REJECT + /etc/hosts override
+两层. D10 反转后 anthropic 政策禁第三方 proxy 转 OAuth Bearer,
+proxy 离开 user 流量路径, 容器直连 anthropic, 两层防护一起撤.
 
 **claude binary 版本由 image 决定**：rebuild image 时 npm 拉
 latest，跟 host 可能漂移。想 pin 改 Dockerfile：
 `@anthropic-ai/claude-code@<version>`。
+
+**workspace override + shared-container 不支持** (D9): non-owner
+user 在 config 里加 `workspace` override + `runtime:
+'shared-container'` → 启动 fatal。原因: override path 不在 host
+workspace mount 内, container 看不到; cwd 翻译失败。fix 或者删
+workspace override 或者改 runtime 为 host。完整支持留
+BACKLOG `m-shared-container-workspace-override` follow-up。
 
 ## 8. 排错
 

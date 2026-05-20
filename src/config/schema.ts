@@ -119,6 +119,20 @@ export const ConfigSchema = z.object({
     })
     .default({ port: 62276, bindHost: '127.0.0.1' }),
   /**
+   * m-host-credentials-share D3: host root directory containing per-user
+   * `~/.claude` state (jsonl history under `<root>/<username>/projects/`,
+   * settings.json + CLAUDE.md per-user). SharedContainerManager mounts
+   * this single root into the container at
+   * `/var/lib/ccanywhere/user-claude` (rw); ContainerUserSync.ensureUser
+   * mkdirs per-user sub-dirs (chmod 0700 chown <uid>:<gid>) on demand.
+   * Defaulted so existing prod configs load without a bump; absolute
+   * paths are recommended (relative paths resolve against process cwd).
+   * macOS docker desktop note: bind mount inode perms are not enforced
+   * (see proposal D4 / spike-results P9 Step A) — inter-user fs
+   * isolation under macOS depends on the D2 trust model, not chmod.
+   */
+  userClaudeRoot: z.string().optional(),
+  /**
    * m-user-runtime-schema. Three-tier isolation policy:
    * - `strict`: per-user `runtime` honored; any non-owner configured
    *   with container runtime causes startup fatal (Phase 2 not ready).
