@@ -18,3 +18,7 @@ playwright-report/
 # OpenSpec 工作流). 不进公开仓库. 本地副本 user 自己管理 (可放
 # ~/.claude/projects/<encoded-cwd>/CLAUDE.md 让 claude code 自动加载).
 CLAUDE.md
+
+# Claude Code per-project state (settings.local.json / worktrees / 等).
+# Tooling state, not source.
+.claude/

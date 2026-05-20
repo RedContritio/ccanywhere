@@ -13,7 +13,7 @@ Phase 2 user runtime isolation：admin 配 `users.<name>.runtime:
 
 - macOS Docker Desktop 运行中
 - 已 ship Phase 1.A （`ccanywhere proxy serve`
-  独立 LaunchAgent listen :62276）
+  独立 LaunchAgent listen :8082）
 - 已 ship Phase 1.B （schema 含
   `isolationPolicy` + `users.<name>.runtime`）
 
@@ -59,7 +59,7 @@ restart ccanywhere main server：
 
 ```bash
 launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
-sleep 3 && curl -sf http://127.0.0.1:62275/healthz
+sleep 3 && curl -sf http://127.0.0.1:8081/healthz
 # {"ok":true,"isolation":{"mode":"strict","ready":true}}
 ```
 
@@ -67,7 +67,7 @@ sleep 3 && curl -sf http://127.0.0.1:62275/healthz
 
 ```
 [server] isolation: strict mode, 1 user(s) on host
-[server] shared container running: ccanywhere-shared-62275
+[server] shared container running: ccanywhere-shared-8081
 ```
 
 ## 5. session 行为 ( D10 反转后)
@@ -136,19 +136,19 @@ BACKLOG `` follow-up。
 container 起不来：
 ```bash
 ccanywhere container status   # docker available? container running?
-docker logs ccanywhere-shared-62275   # entrypoint stderr
+docker logs ccanywhere-shared-8081   # entrypoint stderr
 ```
 
 healthz 显示 isolation 但 user session fail：
 ```bash
-docker exec ccanywhere-shared-62275 ps aux   # 容器内 alice 进程?
-docker exec -u alice ccanywhere-shared-62275 claude --version  # claude
+docker exec ccanywhere-shared-8081 ps aux   # 容器内 alice 进程?
+docker exec -u alice ccanywhere-shared-8081 claude --version  # claude
 ```
 
 代理 fail 但 anthropic 流量没被阻：
 ```bash
-docker exec ccanywhere-shared-62275 grep api.anthropic /etc/hosts
-docker exec ccanywhere-shared-62275 iptables -L OUTPUT
+docker exec ccanywhere-shared-8081 grep api.anthropic /etc/hosts
+docker exec ccanywhere-shared-8081 iptables -L OUTPUT
 ```
 
 ## 9. follow-up (reserved, 见 archive proposal)

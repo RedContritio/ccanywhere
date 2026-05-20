@@ -39,7 +39,7 @@ function mkDeps(over: Partial<SessionContainerDeps> = {}): SessionContainerDeps 
       execImpl: mkExec(() => ({ exitCode: 0, stdout: '1234\n', stderr: '' })),
     }),
     tokenIssuer: new TokenIssuer({ secret: randomBytes(32) }),
-    proxyBaseUrl: 'http://127.0.0.1:62276',
+    proxyBaseUrl: 'http://127.0.0.1:8082',
     hostWorkspace: '/Users/test/workspace',
     containerWorkspacePath: '/workspace',
     userClaudeContainerRoot: '/var/lib/ccanywhere/user-claude',

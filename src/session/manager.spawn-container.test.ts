@@ -64,7 +64,7 @@ describe('buildSpawnCommand — shared-container', () => {
         runtime: 'shared-container',
         container: { name: 'cca', unixUser: 'alice' },
         env: {
-          ANTHROPIC_BASE_URL: 'http://127.0.0.1:62276',
+          ANTHROPIC_BASE_URL: 'http://127.0.0.1:8082',
           ANTHROPIC_AUTH_TOKEN: 'cca.test.token',
         },
       }),
@@ -76,7 +76,7 @@ describe('buildSpawnCommand — shared-container', () => {
         eArgs.push(r.args[i + 1] as string);
       }
     }
-    expect(eArgs).toContain('ANTHROPIC_BASE_URL=http://127.0.0.1:62276');
+    expect(eArgs).toContain('ANTHROPIC_BASE_URL=http://127.0.0.1:8082');
     expect(eArgs).toContain('ANTHROPIC_AUTH_TOKEN=cca.test.token');
     // pty env is parent-only (no user env leaked into docker CLI proc)
     expect(r.ptyEnv['ANTHROPIC_BASE_URL']).toBeUndefined();

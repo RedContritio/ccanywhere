@@ -9,7 +9,7 @@
 # api.anthropic.com directly with the owner's CLAUDE_CODE_OAUTH_TOKEN
 # env (session-runtime overlay D10 inject).
 #
-# proxy module + its 62276 endpoint remain inside ccanywhere main as
+# proxy module + its 8082 endpoint remain inside ccanywhere main as
 # a backup path (re-enable when anthropic policy changes or owner
 # switches to Console API key). user spawn wiring no longer points
 # at it.

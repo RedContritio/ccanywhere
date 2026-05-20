@@ -13,7 +13,7 @@ export const WsHeartbeatSchema = z
 export type WsHeartbeat = z.infer<typeof WsHeartbeatSchema>;
 
 export const ConfigSchema = z.object({
-  port: z.number().int().min(1).max(65535).default(62275),
+  port: z.number().int().min(1).max(65535).default(8081),
   bindHost: z.string().default('127.0.0.1'),
   claudeBin: z.string().default('claude'),
   scrollbackBytes: z.number().int().min(64 * 1024).default(1024 * 1024),
@@ -114,10 +114,10 @@ export const ConfigSchema = z.object({
    */
   proxy: z
     .object({
-      port: z.number().int().min(1).max(65535).default(62276),
+      port: z.number().int().min(1).max(65535).default(8082),
       bindHost: z.string().default('127.0.0.1'),
     })
-    .default({ port: 62276, bindHost: '127.0.0.1' }),
+    .default({ port: 8082, bindHost: '127.0.0.1' }),
   /**
    *  D3: host root directory containing per-user
    * `~/.claude` state (jsonl history under `<root>/<username>/projects/`,

@@ -80,7 +80,7 @@ usage:
   ccanywhere feedback forget <id-prefix>  remove from seen set (re-appears in default list)
   ccanywhere proxy serve [--config <path>]
                                           start the anthropic API proxy (independent process,
-                                          listens on config.proxy.port, default 62276)
+                                          listens on config.proxy.port, default 8082)
   ccanywhere container <sub> [--config]   admin tool: build (hint) | ensure | stop | status
   ccanywhere help                         show this help
 

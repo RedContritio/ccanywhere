@@ -30,7 +30,7 @@ export interface SessionContainerDeps {
   readonly tokenIssuer: TokenIssuer;
   /**
    * URL the user container's claude reaches the anthropic proxy at;
-   * typically `http://host.docker.internal:62276`. Container's
+   * typically `http://host.docker.internal:8082`. Container's
    * `ANTHROPIC_BASE_URL` env points here.
    */
   readonly proxyBaseUrl: string;

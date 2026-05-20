@@ -28,7 +28,7 @@ ccanywhere 是 user 本机 LaunchAgent。web 改动 + cli 改动都要走完整�
 pnpm typecheck:all && pnpm lint && pnpm lint:md && pnpm test
 pnpm build:all                                                    # web/dist + dist/cli.js
 launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere   # respawn LaunchAgent
-sleep 3 && curl -sf http://127.0.0.1:62275/healthz                # 必须返 200 {"ok":true}
+sleep 3 && curl -sf http://127.0.0.1:8081/healthz                # 必须返 200 {"ok":true}
 ```
 
 healthz 200 之后才算"部署可用"。如果 200 但还有 UI 改动，要么自己抓

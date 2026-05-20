@@ -20,7 +20,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG_DIR="${CCANYWHERE_CONFIG_DIR:-$HOME/.config/ccanywhere}"
-PROXY_PORT="${CCANYWHERE_PROXY_PORT:-62276}"
+PROXY_PORT="${CCANYWHERE_PROXY_PORT:-8082}"
 KEEP_RUNNING="no"
 
 for arg in "$@"; do

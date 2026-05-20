@@ -1,5 +1,5 @@
 {
-  "port": 62275,
+  "port": 8081,
   "bindHost": "127.0.0.1",
   "claudeBin": "claude",
 

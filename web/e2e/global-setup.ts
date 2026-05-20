@@ -72,7 +72,7 @@ function loadCliToken(configPath: string, config: CcanywhereConfig): string {
 }
 
 function internalBaseUrl(config: CcanywhereConfig): string {
-  return `http://${config.bindHost ?? '127.0.0.1'}:${config.port ?? 62275}`;
+  return `http://${config.bindHost ?? '127.0.0.1'}:${config.port ?? 8081}`;
 }
 
 async function findUser(

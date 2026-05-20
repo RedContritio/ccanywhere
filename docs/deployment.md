@@ -37,7 +37,7 @@ chmod 600 ~/.config/ccanywhere/config.json
 
 | 字段 | 说明 |
 |------|------|
-| `port` | 默认 `62275`（一次性随机选定）。多机部署改成别的 |
+| `port` | 默认 `8081`（一次性随机选定）。多机部署改成别的 |
 | `claudeBin` | 写**绝对路径**。LaunchAgent 的 PATH 不含 `~/.local/bin`，相对名 `claude` 会找不到导致 spawn 立即 dead |
 | `webOrigin` | web SPA 实际服务的 origin（如 `https://cc.example.com`）。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；改这一项会让所有已配对设备失效 |
 | `projectsRoot` | 项目集合根目录（绝对路径），其直接子目录被自动列为可选项目；启动时不存在会自动 mkdir，不可读直接 fatal，不可写则只能列/选不能新建 |
@@ -130,17 +130,17 @@ launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.<you>.ccanywhere.plist
 
 ```bash
 # 本地
-curl http://127.0.0.1:62275/healthz
+curl http://127.0.0.1:8081/healthz
 # {"ok":true}
 
 # 公网
-curl http://<frps>:62275/healthz
+curl http://<frps>:8081/healthz
 # {"ok":true}
 
 # 列项目（需要先 pair + login，浏览器里完成）
 # 命令行调试 API 时用 mac CLI 的 internal 路由（cliToken 在 ~/.config/ccanywhere/cli-token）
 CLI_TOKEN=$(cat ~/.config/ccanywhere/cli-token)
-curl -H "Authorization: Bearer $CLI_TOKEN" http://127.0.0.1:62275/api/internal/devices
+curl -H "Authorization: Bearer $CLI_TOKEN" http://127.0.0.1:8081/api/internal/devices
 ```
 
 浏览器配对：`https://<webOrigin host>/login` → 输入设备名 → 申请配对 →
@@ -162,7 +162,7 @@ mac 终端跑 `ccanywhere approve` 选择该 pending → 浏览器自动跳到 w
 | 浏览器 `ERR_SSL_PROTOCOL_ERROR` / 连不上 443 | frps `vhostHTTPSPort` 没配，或公网 443 被防火墙挡 | `frps.toml` 加 `vhostHTTPSPort = 443` 重启 frps；云厂商安全组放行 443 |
 | `acme.sh --issue` 卡在 "Verifying" | DNS 没生效或 TXT 记录写错 | `dig +short TXT _acme-challenge.cc.<domain>` 验证；DNS-01 凭证（Tencent_SecretId/Key）有没有 export |
 | 续签 timer 跑了但 frpc 没拿到新证书 | sudoers NOPASSWD 没配，reloadcmd 静默失败 | `tail ~/.config/ccanywhere/cert-renew.log` 看错误；按 [deployment-frpc.md](./deployment-frpc.md) §2.B.4 配 sudoers |
-| 浏览器证书 valid 但 `502 Bad Gateway` | frpc 拿到流量后回源 `127.0.0.1:62275` 不通 | `curl http://127.0.0.1:62275/healthz` 确认 ccanywhere 在跑 |
+| 浏览器证书 valid 但 `502 Bad Gateway` | frpc 拿到流量后回源 `127.0.0.1:8081` 不通 | `curl http://127.0.0.1:8081/healthz` 确认 ccanywhere 在跑 |
 
 ## 6. 升级流程
 
@@ -268,7 +268,7 @@ config 不动，前端构建产出会被 fastify-static 即时服务。
 ## 8. anthropic 代理（ +  D7/D10）
 
 由 ccanywhere main 启动时自动 spawn 的子进程 (`ccanywhere proxy serve`)，
-listen `config.proxy.port` (default 62276)。**D10 反转 (2026-05-20)
+listen `config.proxy.port` (default 8082)。**D10 反转 (2026-05-20)
 后 proxy 不在 user 流量路径上** — Anthropic 2026-02 禁第三方 Bearer
 转发 OAuth subscription token, user 容器内 cc 改用 `CLAUDE_CODE_OAUTH_
 TOKEN` env 直连 anthropic. proxy 仍 listen 作 future fallback

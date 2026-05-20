@@ -1,7 +1,7 @@
 # Deployment — anthropic 代理
 
 独立 LaunchAgent 进程 `ccanywhere proxy serve`，listen
-`config.proxy.port` (default 62276) on `config.proxy.bindHost`
+`config.proxy.port` (default 8082) on `config.proxy.bindHost`
 (default 127.0.0.1)。**owner 路径不经此代理** (D7)，仅为 Phase 2
 user 容器化做的基础设施。Phase 1 ship 后没真实流量经过；靠
 `scripts/proxy-manual-verify.sh` + 单元测试验证。
@@ -77,7 +77,7 @@ process 启动时通过 `child_process.spawn` 起 proxy 子进程**：
 自动跑起来：
 
 ```bash
-curl -sf http://127.0.0.1:62276/healthz
+curl -sf http://127.0.0.1:8082/healthz
 # 应返 {"ok":true,"mode":"ready"} (有 credentials)
 # 或   {"ok":true,"mode":"degraded"} (credentials 缺失，仍接 HEAD/healthz
 # 但 forward 路由都返 503/404)
@@ -95,7 +95,7 @@ tail -f ~/.config/ccanywhere/proxy.log
 **重要**: D10 amendment 反转 proxy 在 user
 spawn 路径的 wire — 经验上 Anthropic 2026-02 起明确禁止第三方应用
 通过 Authorization: Bearer 转发 OAuth subscription token (cc binary
-自身仍可走 first-party). proxy 仍 listen `127.0.0.1:62276` (main
+自身仍可走 first-party). proxy 仍 listen `127.0.0.1:8082` (main
 process cohost spawn, D7) 作 **future fallback**:
 
 - anthropic 改回允许第三方 proxy → 反向 wire 即可
@@ -148,7 +148,7 @@ mode 0600 启动校验 (D5)。
 2. 起 proxy in background + `curl /healthz` 验证存活
 3. 读 `~/.config/ccanywhere/proxy-token-secret` (代理 issue 用)，
    颁发 owner id 的 5 分钟 bearer
-4. `ANTHROPIC_BASE_URL=http://127.0.0.1:62276 ANTHROPIC_AUTH_TOKEN=<bearer>
+4. `ANTHROPIC_BASE_URL=http://127.0.0.1:8082 ANTHROPIC_AUTH_TOKEN=<bearer>
    claude --print "OK"` 跑通
 5. grep proxy log 验证 bearer 没漏 (D4 redact 兜底验证)
 
@@ -159,7 +159,7 @@ mode 0600 启动校验 (D5)。
 ```bash
 git pull && pnpm install && pnpm build:all
 launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere-proxy
-sleep 2 && curl -sf http://127.0.0.1:62276/healthz
+sleep 2 && curl -sf http://127.0.0.1:8082/healthz
 ```
 
 proxy 改 schema (configDir 新字段) 时按主 server 同样规则：先

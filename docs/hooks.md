@@ -39,15 +39,15 @@ grep internalHookToken ~/.config/ccanywhere/server.log | tail -1
         "hooks": [
           {
             "type": "command",
-            "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/SessionStart\" >/dev/null 2>&1 || true"
+            "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:8081/api/hook/$CLAUDE_SESSION_ID/SessionStart\" >/dev/null 2>&1 || true"
           }
         ]
       }
     ],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/UserPromptSubmit\" 2>/dev/null || true" }] }],
-    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/PreToolUse\" >/dev/null 2>&1 || true" }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/Stop\" >/dev/null 2>&1 || true" }] }],
-    "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:62275/api/hook/$CLAUDE_SESSION_ID/SubagentStop\" >/dev/null 2>&1 || true" }] }]
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:8081/api/hook/$CLAUDE_SESSION_ID/UserPromptSubmit\" 2>/dev/null || true" }] }],
+    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:8081/api/hook/$CLAUDE_SESSION_ID/PreToolUse\" >/dev/null 2>&1 || true" }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:8081/api/hook/$CLAUDE_SESSION_ID/Stop\" >/dev/null 2>&1 || true" }] }],
+    "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "curl -fsS -m 2 -X POST -H \"Authorization: Bearer INTERNAL_HOOK_TOKEN\" \"http://127.0.0.1:8081/api/hook/$CLAUDE_SESSION_ID/SubagentStop\" >/dev/null 2>&1 || true" }] }]
   }
 }
 ```
@@ -66,7 +66,7 @@ session id，不是 ccanywhere 的）。**注意**：当前 ccanywhere hook 路�
 curl -fsS -m 2 \
   -X POST \
   -H "Authorization: Bearer INTERNAL_HOOK_TOKEN" \
-  "http://127.0.0.1:62275/api/hook/<sessionId>/<event>" \
+  "http://127.0.0.1:8081/api/hook/<sessionId>/<event>" \
   >/dev/null 2>&1 || true
 ```
 
@@ -98,8 +98,8 @@ hook 仍然是 session state machine（busy↔idle 标识）的唯一信号源�
 
 如果状态不动：
 
-- `curl http://127.0.0.1:62275/healthz` 看 ccanywhere 是否在跑
-- 直接 `curl -X POST -H "Authorization: Bearer <token>" http://127.0.0.1:62275/api/hook/test/PreToolUse`
+- `curl http://127.0.0.1:8081/healthz` 看 ccanywhere 是否在跑
+- 直接 `curl -X POST -H "Authorization: Bearer <token>" http://127.0.0.1:8081/api/hook/test/PreToolUse`
   应该返回 404（`session not found`）—— 说明 hook receiver 在工作
 - 如果返回 401，说明 token 不对，重新从 server.log 取
 

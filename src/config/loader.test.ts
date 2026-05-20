@@ -24,17 +24,17 @@ describe('loadConfig', () => {
   // workspace replaces projectsRoot + guestProjectsRoot.
   const validBase = {
     workspace: '/tmp/ccanywhere-workspace',
-    webOrigin: 'http://localhost:62275',
+    webOrigin: 'http://localhost:8081',
   };
 
   it('loads a valid config and applies defaults', () => {
     write(validBase);
     const cfg = loadConfig(path);
-    expect(cfg.port).toBe(62275);
+    expect(cfg.port).toBe(8081);
     expect(cfg.bindHost).toBe('127.0.0.1');
     expect(cfg.claudeBin).toBe('claude');
     expect(cfg.workspace).toBe('/tmp/ccanywhere-workspace');
-    expect(cfg.webOrigin).toBe('http://localhost:62275');
+    expect(cfg.webOrigin).toBe('http://localhost:8081');
     expect(cfg.deletedSessionTtlMs).toBe(600_000);
     expect(cfg.wsHeartbeat.intervalMs).toBe(30_000);
     expect(cfg.wsHeartbeat.timeoutMs).toBe(60_000);

@@ -82,7 +82,7 @@ WARNING: isolationPolicy: host-only — per-user runtime overrides ignored:
 ## 4. /healthz isolation field
 
 ```bash
-$ curl -s http://127.0.0.1:62275/healthz
+$ curl -s http://127.0.0.1:8081/healthz
 { "ok": true, "isolation": { "mode": "strict", "ready": true } }
 ```
 
@@ -186,7 +186,7 @@ runtime 配置被忽略（audit warn）。适合单 owner 部署 + 偶尔几个
    - 为每个 user 加 `runtime: 'host'`，**或**
    - 加全局 `isolationPolicy: 'host-only'`
 3. `launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere`
-4. `curl -sf http://127.0.0.1:62275/healthz` → 必须返
+4. `curl -sf http://127.0.0.1:8081/healthz` → 必须返
    `{"ok":true,"isolation":{"mode":"strict","ready":true}}` 或
    `"host-only"` mode
 

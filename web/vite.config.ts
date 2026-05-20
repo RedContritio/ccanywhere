@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-const SERVER_URL = process.env['CCANYWHERE_DEV_SERVER'] ?? 'http://127.0.0.1:62275';
+const SERVER_URL = process.env['CCANYWHERE_DEV_SERVER'] ?? 'http://127.0.0.1:8081';
 
 function readGitSha(): string {
   try {

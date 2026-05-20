@@ -27,7 +27,7 @@ export const baseConfig: Config = {
   workspace: '/tmp/ccanywhere-test-placeholder',
   webOrigin: 'http://localhost:7878',
   cookieName: 'ccanywhere_session',
-  proxy: { port: 62276, bindHost: '127.0.0.1' },
+  proxy: { port: 8082, bindHost: '127.0.0.1' },
   isolationPolicy: 'strict',
 };
 

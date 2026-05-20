@@ -3,7 +3,7 @@
 #
 # 拓扑（推荐 https + https2http plugin）:
 #   browser ──https──▶ frps :443 ──tunnel──▶ frpc on host
-#                                        └─ TLS 终结于 frpc 本机 ──HTTP──▶ ccanywhere :62275
+#                                        └─ TLS 终结于 frpc 本机 ──HTTP──▶ ccanywhere :8081
 #
 # 远端 frps.toml 必需:
 #   bindPort = 7000              # frpc 控制连接口
@@ -12,7 +12,7 @@
 #   auth.token  = "..."          # 跟下面 auth.token 一致
 #
 # 本机必需:
-#   ccanywhere 已跑在 :62275
+#   ccanywhere 已跑在 :8081
 #   acme.sh 已申到 cc.<your-domain> 的证书（见 scripts/cert-issue.sh）
 
 serverAddr = "<frps host or IP>"
@@ -32,7 +32,7 @@ customDomains = ["cc.<your-domain>"]
 
 [proxies.plugin]
 type = "https2http"
-localAddr = "127.0.0.1:62275"
+localAddr = "127.0.0.1:8081"
 crtPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.crt"
 keyPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.key"
 hostHeaderRewrite = "cc.<your-domain>"
@@ -45,7 +45,7 @@ hostHeaderRewrite = "cc.<your-domain>"
 # name = "ccanywhere"
 # type = "tcp"
 # localIP = "127.0.0.1"
-# localPort = 62275
-# remotePort = 62275
+# localPort = 8081
+# remotePort = 8081
 #
-# 公网入口变成 http://<frps host>:62275/ — 仅在你完全信任公网链路时合适。
+# 公网入口变成 http://<frps host>:8081/ — 仅在你完全信任公网链路时合适。

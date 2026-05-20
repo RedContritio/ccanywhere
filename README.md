@@ -10,7 +10,7 @@ TUI 通过 web 暴露成可远程访问的入口。手机浏览器登录后能�
 
 ```
 browser  ──https──▶  frps  ──tunnel──▶  frpc on host  ──HTTP──▶  ccanywhere
-              cc.example.com (DNS)      TLS 终结 + cert     127.0.0.1:62275
+              cc.example.com (DNS)      TLS 终结 + cert     127.0.0.1:8081
                                         (acme.sh on mac)         │
                                                                  └─ spawns claude (PTY)
                                                                     继承 ~/.claude 的登录态

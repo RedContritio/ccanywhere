@@ -53,11 +53,11 @@ sudo launchctl kickstart -k system/com.fatedier.frpc
 name = "ccanywhere"
 type = "tcp"
 localIP = "127.0.0.1"
-localPort = 62275
-remotePort = 62275
+localPort = 8081
+remotePort = 8081
 ```
 
-公网入口：`http://<frps host>:62275/`。**没有 TLS**——只在你信任公网链路或
+公网入口：`http://<frps host>:8081/`。**没有 TLS**——只在你信任公网链路或
 仅 LAN 用时合适。
 
 ### B. https + frpc 端持证书（推荐生产）
@@ -161,7 +161,7 @@ customDomains = ["cc.<your-domain>"]
 
 [proxies.plugin]
 type = "https2http"
-localAddr = "127.0.0.1:62275"
+localAddr = "127.0.0.1:8081"
 crtPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.crt"
 keyPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.key"
 hostHeaderRewrite = "cc.<your-domain>"
