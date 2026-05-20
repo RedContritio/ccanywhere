@@ -1,0 +1,9 @@
+{
+  "port": 62275,
+  "bindHost": "127.0.0.1",
+  "claudeBin": "claude",
+
+  "projectsRoot": "/Users/<you>/Projects",
+  "guestProjectsRoot": "/Users/<you>/.ccanywhere-guests",
+  "webOrigin": "https://cc.example.com"
+}
