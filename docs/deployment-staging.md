@@ -14,7 +14,7 @@ prod    https://cc.<your-domain>:443  ──frpc tunnel A──▶ 127.0.0.1:808
 staging https://cc.<your-domain>:7443 ──frpc tunnel B──▶ 127.0.0.1:8082
 ```
 
-同 HTTPS frontend,同证书。**关键的隔离点**：
+同 HTTPS frontend,同证书。**关键的隔离点见 §1 表格**。
 
 ccanywhere 主部署见 [deployment.md](./deployment.md)。
 
@@ -74,7 +74,7 @@ plist，改三处：
 ProgramArguments 里加 `--config` 指向 staging config.json**——不需要 env
 var，每份 config 文件 self-contained 描述一个完整实例。
 
-mac CLI 操作 staging（罕见，e2e 通常用 fetch+cliToken 不走 mac CLI）：
+mac CLI 操作 staging（罕见，e2e 通常用 fetch+cliToken 不经 mac CLI）：
 
 ```bash
 ccanywhere --config ~/.config/ccanywhere-staging/config.json approve
@@ -101,8 +101,8 @@ keyPath = "/Users/<you>/.config/ccanywhere/certs/cc.<your-domain>.key"
 hostHeaderRewrite = "cc.<your-domain>"
 ```
 
-frps 端确保 `vhostHTTPSPort` 没限制并放行 7443，或单独配 `vhostHTTPSPort2`
-之类（看 frps 版本支持）。
+frps 端确保 `vhostHTTPSPort` 无限制并放行 7443，或单独配置 `vhostHTTPSPort2`
+之类（视 frps 版本而定）。
 
 重启 frpc 应用配置（按你 frpc 的装法,macOS launchd 装法是
 `sudo launchctl kickstart -k system/com.fatedier.frpc`,Linux systemd

@@ -13,7 +13,7 @@ Main deployment docs: [deployment.md](./deployment.md); proxy:
 
 - docker daemon 运行中 (macOS Docker Desktop / Linux native)
 - ccanywhere proxy 已配置并运行 (由 main service 自动 spawn,listen :8082)
-- `isolationPolicy` + `users.<name>.runtime` 已在 config 配好
+- `isolationPolicy` + `users.<name>.runtime` 已在 config 配置好
 
 ## 2. build user runtime image
 
@@ -36,7 +36,7 @@ ccanywhere container ensure
 
 ```bash
 ./scripts/container-manual-verify.sh
-# 启 container 跑 NET_ADMIN + iptables + claude --version
+# 启动 container 运行 NET_ADMIN + iptables + claude --version
 # PASS 表示 image 健康
 ```
 
@@ -70,64 +70,64 @@ sleep 3 && curl -sf http://127.0.0.1:8081/healthz
 
 ## 5. session 行为
 
-alice/bob 通过 web 起 session:
+alice/bob 通过 web 启动 session:
 - ccanywhere ContainerUserSync.ensureUser 在 shared container 内
-  `useradd alice` (lazy, per user 首 session 触发) + chmod 0700
+  `useradd alice` (lazy, per user 首次 session 触发) + chmod 0700
   `/home/alice` + mkdir `/var/lib/ccanywhere/user-claude/alice`
-  chown 0700 + cp baked `CLAUDE.md` + `settings.json` 进去
+  chown 0700 + 复制 baked `CLAUDE.md` + `settings.json` 进去
   (defense in depth: LLM soft norm + cc permission deny rules)
 - spawn `docker exec -it -u alice -e CLAUDE_CONFIG_DIR=/var/lib/
   ccanywhere/user-claude/alice -e DISABLE_AUTOUPDATER=1 -e
   DISABLE_TELEMETRY=1 -e CLAUDE_CODE_OAUTH_TOKEN=<owner sk-ant-oat>
   -w <translated cwd> ccanywhere-shared-<port> claude --session-id
   <uuid>`
-- claude 在容器内跑, **直连** `api.anthropic.com`。anthropic 看到的
+- claude 在容器内运行, **直连** `api.anthropic.com`。anthropic 看到的
   请求是 cc binary first-party + 容器内 setup-token 匹配 device
-  fingerprint → 接受 OAuth subscription path, 计费走 owner Pro/Max plan.
+  fingerprint → 接受 OAuth subscription path, 计费通过 owner Pro/Max plan。
 
-**owner OAuth token 一次性容器内 setup** (在 container 内跑 `claude
-setup-token`, token 必须容器内 issued 才能容器内 use; host 跑出来
-的 token 跨设备给容器用 anthropic 会 invalidate).
+**owner OAuth token 一次性在容器内 setup** (在 container 内运行 `claude
+setup-token`,token 必须在容器内签发才能在容器内使用;在 host 签发
+的 token 跨设备给容器使用时 anthropic 会 invalidate)。
 
-owner 路径 0 改动: owner session 仍直接本机 spawn claude 走 mac
-Keychain → api.anthropic.com.
+owner 路径零改动: owner session 仍直接在本机 spawn claude 经由 mac
+Keychain → api.anthropic.com。
 
 ## 6. CLI 子命令
 
 ```bash
-ccanywhere container ensure    # 手动起 shared container (admin debug)
-ccanywhere container stop      # 停 + 删
-ccanywhere container status    # docker + 容器健康一行
+ccanywhere container ensure    # 手动启动 shared container (admin debug)
+ccanywhere container stop      # 停止 + 删除
+ccanywhere container status    # docker + 容器健康状态 (一行)
 ccanywhere container build     # hint → 用 scripts/build-container-image.sh
 ```
 
 ## 7. 限制 + 已知 trade-off
 
-**单 shared container 故障域**: 一 user crash → 全容器 die。
+**单 shared container 故障域**: 一个 user crash → 整个容器 die。
 mitigation: docker `--restart unless-stopped` 自动 respawn。
 
 **不可信 user 不要用 shared-container**: shared 模型 fs/process
 隔离靠 unix perm 0700 + UID 分隔 (best-effort)，alice 仍能 `ps`
-看 bob 的 claude 命令行。真正不可信场景需 `isolated-container`
+查看 bob 的 claude 命令行。真正不可信场景需 `isolated-container`
 runtime（schema 接受 enum 但 reserved，未实现）。
 
 **anthropic 流量不经 proxy**: Anthropic 2026-02 起禁止第三方应用
 转发 OAuth subscription token。容器内 cc 直连 anthropic，两层早期
 iptables/hosts 防护已随之撤回。
 
-**claude binary 版本由 image 决定**：rebuild image 时 npm 拉
-latest，跟 host 可能漂移。想 pin 改 Dockerfile：
+**claude binary 版本由 image 决定**：rebuild image 时 npm 拉取
+latest，与 host 可能漂移。若需 pin 版本，修改 Dockerfile：
 `@anthropic-ai/claude-code@<version>`。
 
 **workspace override + shared-container 不支持**: non-owner
 user 在 config 里加 `workspace` override + `runtime:
 'shared-container'` → 启动 fatal。原因: override path 不在 host
-workspace mount 内, container 看不到; cwd 翻译失败。fix 或者删
-workspace override 或者改 runtime 为 host。
+workspace mount 内, container 看不到; cwd 翻译失败。修复方式:
+删除 workspace override，或将 runtime 改为 host。
 
 ## 8. 排错
 
-container 起不来：
+container 启动不起来：
 ```bash
 ccanywhere container status   # docker available? container running?
 docker logs ccanywhere-shared-8081   # entrypoint stderr
@@ -139,7 +139,7 @@ docker exec ccanywhere-shared-8081 ps aux   # 容器内 alice 进程?
 docker exec -u alice ccanywhere-shared-8081 claude --version  # claude
 ```
 
-代理 fail 但 anthropic 流量没被阻：
+代理 fail 但 anthropic 流量未被拦截：
 ```bash
 docker exec ccanywhere-shared-8081 grep api.anthropic /etc/hosts
 docker exec ccanywhere-shared-8081 iptables -L OUTPUT

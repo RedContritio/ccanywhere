@@ -26,24 +26,24 @@ container 跑。本文档描述 config schema 跟运维行为。
 |---|---|
 | `strict` (默认) | per-user runtime 严格按 config;container runtime 不可用 → 启动 fatal |
 | `fallback` | docker 不可用时降级 user runtime 为 host(TODO:当前实现仍同 strict) |
-| `host-only` | 全 non-owner runtime 内存 override `host`,被忽略的 runtime 配置走 audit warn |
+| `host-only` | 所有 non-owner runtime 在内存中被 override 为 `host`,被忽略的 runtime 配置进入 audit warn |
 
-默认 `strict` 是 fail-safe — admin 改这个字段会被强迫思考"我在改安
-全级别",命名是 forcing function。
+默认 `strict` 是 fail-safe — admin 修改这个字段会被强迫思考"我在改
+安全级别",命名是 forcing function。
 
 ### 1.2 `users.<name>.runtime` (per-user)
 
 | 值 | 行为 |
 |---|---|
-| `host` | 跟 owner 同身份跑(admin-trusted) |
+| `host` | 与 owner 同身份运行 (admin-trusted) |
 | `shared-container` (默认) | 跑在共享 docker container 内(per-user CLAUDE_CONFIG_DIR + unix user 隔离) |
 | `isolated-container` | reserved,schema parse 阶段直接拒(未实现) |
 
 **Default = `shared-container`** 反映 multi-user 场景默认 isolate user 流量。
 不想要 docker 依赖的话:
-- 单 owner 部署:不配 `users.<name>` 即可,schema 不会强制添加 runtime
-- 多个信任的小号:每个 user 显式配 `runtime: 'host'`,或 top-level 配
-  `isolationPolicy: 'host-only'`(§5.3)统一 override
+- 单 owner 部署:不配置 `users.<name>` 即可,schema 不会强制添加 runtime
+- 多个信任的小号:每个 user 显式配置 `runtime: 'host'`,或在 top-level 配置
+  `isolationPolicy: 'host-only'` (§5.3) 统一 override
 
 容器化细节见 [deployment-container.md](./deployment-container.md)。
 
@@ -93,10 +93,10 @@ $ curl -s http://127.0.0.1:8081/healthz
 
 ## 5. 常用配置示例
 
-### 5.1 单 owner 部署(绝大多数场景)
+### 5.1 单 owner 部署 (绝大多数场景)
 
-不配 `isolationPolicy`,不配 `users`(或仅配 workspace overrides)。
-schema default 让 owner 自己跑 host,零运维负担。
+不配置 `isolationPolicy`,不配置 `users` (或仅配置 workspace overrides)。
+schema default 让 owner 自己运行在 host 上,零运维负担。
 
 ### 5.2 admin 信任的"小号"(共享 host)
 
@@ -109,7 +109,7 @@ schema default 让 owner 自己跑 host,零运维负担。
 }
 ```
 
-`strict` 默认即可 — alice / bob 跟 owner 同身份跑。
+`strict` 默认即可 — alice / bob 与 owner 同身份运行。
 
 ### 5.3 windows / docker-unavailable 场景
 
@@ -117,8 +117,8 @@ schema default 让 owner 自己跑 host,零运维负担。
 { "isolationPolicy": "host-only" }
 ```
 
-强制全 user host 跑(即便配了 `shared-container` 也无效)。启动 banner
-显著喊出 "host-only override active" 让 admin 心智清楚。
+强制所有 user 都在 host 上运行 (即便配置了 `shared-container` 也无效)。
+启动 banner 显著输出 "host-only override active" 让 admin 心里有数。
 
 ### 5.4 容器化 alice
 
@@ -145,12 +145,12 @@ Fix: set users.alice.runtime: 'host' OR top-level
 isolationPolicy: 'host-only' to override all.
 ```
 
-这是 deliberate fail-safe — 让 admin 主动决策每个 user 走哪个 runtime,
+这是 deliberate fail-safe — 让 admin 主动决策每个 user 使用哪个 runtime,
 避免 isolation 机制被 default 偷偷绕过。
 
 **两种 migration**:
 
-### 6.1 显式 host(跟 existing 行为一致)
+### 6.1 显式 host (与 existing 行为一致)
 
 每个非 owner user 加 `runtime: 'host'`:
 
@@ -163,18 +163,18 @@ isolationPolicy: 'host-only' to override all.
 }
 ```
 
-### 6.2 全局 host-only(单租户 / windows / 不想 per-user 配)
+### 6.2 全局 host-only (单租户 / windows / 不想 per-user 配置)
 
 ```json
 { "isolationPolicy": "host-only" }
 ```
 
-所有非 owner user runtime 内存 override `host`,per-user runtime 配置
-被忽略(audit warn)。适合单 owner 部署 + 偶尔几个信任的小号场景。
+所有非 owner user runtime 在内存中被 override 为 `host`,per-user runtime
+配置被忽略 (audit warn)。适合单 owner 部署 + 外加几个信任的小号场景。
 
 ### 升级 checklist
 
-1. `pnpm build:all` 拉新版
+1. `pnpm build:all` 拉取新版
 2. 编辑 `~/.config/ccanywhere/config.json`:
    - 为每个 user 加 `runtime: 'host'`,**或**
    - 加全局 `isolationPolicy: 'host-only'`

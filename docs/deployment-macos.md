@@ -50,8 +50,8 @@ service install 步骤。Linux 等价路径见
 
 **注意**：
 
-- `node` 路径用 `which node` 拿绝对值(nvm `~/.nvm/.../bin/node` 随版本
-  变;brew Apple Silicon `/opt/homebrew/bin/node` / Intel `/usr/local/bin/node`)
+- `node` 路径用 `which node` 取绝对路径 (nvm `~/.nvm/.../bin/node` 随版本
+  变化;brew Apple Silicon `/opt/homebrew/bin/node` / Intel `/usr/local/bin/node`)
 - `WorkingDirectory` 设到 repo 根（让 server 的 `web/dist` 自动解析）
 - `claudeBin` 在 config.json 里也写绝对路径 — LaunchAgent PATH 默认是
   `/usr/bin:/bin:/usr/sbin:/sbin`，**不含** `~/.local/bin`
@@ -82,10 +82,10 @@ launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.<you>.ccanywhere.plist
 
 | 现象 | 可能原因 | 解决 |
 |------|---------|------|
-| 服务起不来,`launchctl print` 显示 last exit code 非 0 | node 路径错（nvm 切版本后 plist 没更新） | 改 plist `ProgramArguments[0]` 用 `which node` 当前绝对路径 |
-| 服务跑但 spawn cc 立即 dead | `claudeBin` 相对路径,LaunchAgent PATH 不含 `~/.local/bin` | config.json `claudeBin` 改绝对路径,kickstart 重启 |
-| `acme.sh --issue` 卡在 "Verifying" | DNS 没生效或 TXT 记录写错 | `dig +short TXT _acme-challenge.cc.<domain>` 验证;DNS-01 凭证有没 export |
-| 续签 timer 跑了但 reverse proxy 没拿到新证书 | `reloadcmd` 静默失败(sudoers NOPASSWD 没配,或 reload 命令路径不对) | `tail ~/.config/ccanywhere/cert-renew.log` 看错误;按 reverse proxy 实际 reload 命令调 `--reloadcmd` |
-| frpc 重启后 proxy already exists 一直在 retry | frps 旧 connection 还没超时清理 | 等 60 秒,或在 frps 端踢旧 client |
+| 服务启动不起来,`launchctl print` 显示 last exit code 非 0 | node 路径错 (nvm 切换版本后 plist 未更新) | 修改 plist `ProgramArguments[0]` 用 `which node` 的当前绝对路径 |
+| 服务能跑但 spawn cc 立即 dead | `claudeBin` 相对路径,LaunchAgent PATH 不含 `~/.local/bin` | config.json `claudeBin` 改成绝对路径,kickstart 重启 |
+| `acme.sh --issue` 卡在 "Verifying" | DNS 未生效或 TXT 记录写错 | `dig +short TXT _acme-challenge.cc.<domain>` 验证;确认 DNS-01 凭证是否已 export |
+| 续签 timer 运行了但 reverse proxy 未拿到新证书 | `reloadcmd` 静默失败 (sudoers NOPASSWD 未配,或 reload 命令路径不对) | `tail ~/.config/ccanywhere/cert-renew.log` 查看错误;`--reloadcmd` 填写 reverse proxy 实际 reload 命令 |
+| frpc 重启后 proxy already exists 一直在 retry | frps 旧 connection 还未超时清理 | 等 60 秒,或在 frps 端踢出旧 client |
 
 证书自动续签 timer 模板见 `examples/launchd/com.example.cc-cert-renew.plist`。
