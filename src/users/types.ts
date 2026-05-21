@@ -14,7 +14,7 @@ export type ToolbarKeyAction = 'plain' | 'ctrl-letter' | 'toggle-sticky-ctrl';
 export interface ToolbarKey {
   readonly id: string;
   readonly label: string;
-  // `| undefined` is explicit so zod's optional() parse output assigns
+  // `| undefined` is explicit so zod's optional parse output assigns
   // cleanly under exactOptionalPropertyTypes.
   readonly ariaLabel?: string | undefined;
   readonly title?: string | undefined;
@@ -41,8 +41,7 @@ export interface User {
   readonly createdAt: number;
   readonly lastLoginAt: number | null;
   readonly quota: UserQuota;
-  /** Per-user UI customization. Defaults to `{}` for legacy records
-   *  / fresh users. */
+  /** Per-user UI customization. Defaults to `{}` for legacy and fresh users. */
   readonly preferences: UserPreferences;
   /**
    * Cross-device-synced "last selected session". Server stores the id

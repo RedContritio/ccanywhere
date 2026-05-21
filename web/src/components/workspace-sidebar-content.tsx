@@ -23,7 +23,7 @@ interface Props {
  * notification banner + session list + global actions footer. Extracted
  * so the same content can mount inside the persistent desktop `<aside>`
  * AND the mobile `<Sheet>` drawer without duplication
- *  */
+ * */
 export function WorkspaceSidebarContent({
   label,
   sessions,

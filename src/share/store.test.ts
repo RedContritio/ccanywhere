@@ -45,11 +45,11 @@ describe('ShareStore', () => {
     expect(store.loadHtml(generateShareCode())).toBeUndefined();
   });
 
-  it('load drops + unlinks expired record (lazy GC per D6)', async () => {
+  it('load drops + unlinks expired record (lazy GC)', async () => {
     const r = record({ expiresAt: Date.now() - 1000 });
     await store.save(r, '<html/>');
     expect(store.load(r.code)).toBeUndefined();
-    // Lazy delete is fire-and-forget (load() voids the promise); idle()
+    // Lazy delete is fire-and-forget (load voids the promise); idle
     // waits for the queued unlink to settle deterministically.
     await store.idle(r.code);
     expect(existsSync(join(dir, `${r.code}.json`))).toBe(false);

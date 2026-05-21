@@ -28,17 +28,16 @@ export interface SessionRoutesOptions {
    */
   readonly injectCcSessionId?: boolean;
   /**
-   *  C5: effective per-user runtime (from
-   * resolveIsolation). Lookup by username; missing = host.
+   * Effective per-user runtime (from resolveIsolation). Lookup by
+   * username; missing = host.
    */
   readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
   /**
-   *  C5: shared container + token issuer +
-   * user-sync deps for shared-container path. undefined ⇒ host-only
-   * even when perUserRuntime says container.
+   * Shared container + token issuer + user-sync deps for shared-container
+   * path. undefined ⇒ host-only even when perUserRuntime says container.
    */
   readonly containerDeps?: SessionContainerDeps;
-  /**  B26: per-user claudeRoot for resume listHistory. */
+  /** Per-user claudeRoot for resume listHistory. */
   readonly userClaudeRoot?: string;
 }
 
@@ -175,7 +174,7 @@ export async function registerSessionRoutes(
     const args: string[] = [];
     let forcedSessionId: string | undefined;
     if (body.mode === 'resume') {
-      // B26: shared-container cc writes jsonl under encoded CONTAINER cwd; translate.
+      // Shared-container cc writes jsonl under encoded CONTAINER cwd; translate.
       const u = req.user?.username;
       const ha = resolveHistoryScope({ username: u, hostCwd: project.cwd, runtime: u !== undefined ? options.perUserRuntime?.get(u) ?? 'host' : 'host', userClaudeRoot: options.userClaudeRoot, hostWorkspace: options.containerDeps?.hostWorkspace, containerWorkspacePath: options.containerDeps?.containerWorkspacePath, defaultHistoryRoot: options.historyRoot });
       const history = ha.historyRoot === undefined ? await listHistory(ha.cwd) : await listHistory(ha.cwd, ha.historyRoot);
@@ -196,7 +195,7 @@ export async function registerSessionRoutes(
 
     const themeEnv = buildThemeEnv(body.webTheme);
     const userId = req.user?.id ?? 'legacy-no-user';
-    //  C5+D9: host vs shared-container dispatch.
+    // Host vs shared-container dispatch.
     const overlay = await buildSessionRuntimeOverlay(
       req.user, options.perUserRuntime, options.containerDeps, themeEnv, project.cwd,
     );

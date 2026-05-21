@@ -17,10 +17,10 @@ export function encodeProjectCwd(cwd: string): string {
 }
 
 /**
- *  B26 helper: resolve effective (cwd, historyRoot)
+ * helper: resolve effective (cwd, historyRoot)
  * pair for listHistory call. host runtime → caller args unchanged.
- * shared-container runtime → translate host cwd to container cwd (D9
- * workspace mount inverse) + use per-user `<userClaudeRoot>/<user>/
+ * shared-container runtime → translate host cwd to container cwd
+ * (workspace mount inverse) + use per-user `<userClaudeRoot>/<user>/
  * projects/` instead of homedir/.claude. Pure function, no fs access.
  */
 export function resolveHistoryScope(opts: {
@@ -80,14 +80,14 @@ const PREVIEW_MAX = 200;
  * cc CLI emits `type: user` messages whose `content` carries its own
  * system tags. Two flavors:
  *
- *   - Unwrap (keep inner text): `<command-name>` only — preserves the
- *     slash command itself (`/clear` `/init` etc.) as user-driven
- *     intent worth surfacing in the preview.
+ * - Unwrap (keep inner text): `<command-name>` only — preserves the
+ * slash command itself (`/clear` `/init` etc.) as user-driven
+ * intent worth surfacing in the preview.
  *
- *   - Strip (remove block entirely): the rest — `command-message` and
- *     `command-args` are redundant with command-name; caveat / reminder
- *     / stdout / stderr / hook / bash tool I/O are model-facing system
- *     noise with no preview value.
+ * - Strip (remove block entirely): the rest — `command-message` and
+ * `command-args` are redundant with command-name; caveat / reminder
+ * / stdout / stderr / hook / bash tool I/O are model-facing system
+ * noise with no preview value.
  *
  * Whitespace collapse after both passes so unwrap doesn't leave gaping
  * blank runs. If post-processing leaves an empty string, caller skips

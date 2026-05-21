@@ -21,18 +21,18 @@ export interface OpRecord {
 // dominant source's peak rate. Don't tweak the constant directly —
 // adjust the inputs:
 //
-//   - `RETENTION_WINDOW_S` — how far back we want a feedback submission
-//     to retain context. 60s = "user notices a glitch, drags, taps
-//     drawer, taps 反馈, types a title, submits" still has the original
-//     trigger trail.
+// - `RETENTION_WINDOW_S` — how far back we want a feedback submission
+// to retain context. 60s = "user notices a glitch, drags, taps
+// drawer, taps 反馈, types a title, submits" still has the original
+// trigger trail.
 //
-//   - `PEAK_EV_PER_S` — server's `outputFps` (60) caps `term.write`
-//     emission, so that's the dominant frame-rate-bound source.
-//     Throttled touch / mouse / selection events contribute ~30 ev/s
-//     under heavy interaction. Worst-case combined ≈ 90 ev/s.
+// - `PEAK_EV_PER_S` — server's `outputFps` (60) caps `term.write`
+// emission, so that's the dominant frame-rate-bound source.
+// Throttled touch / mouse / selection events contribute ~30 ev/s
+// under heavy interaction. Worst-case combined ≈ 90 ev/s.
 //
-//   - `HEADROOM` — short bursts can momentarily exceed PEAK_EV_PER_S
-//     during a TUI repaint storm; 1.2× absorbs them without truncation.
+// - `HEADROOM` — short bursts can momentarily exceed PEAK_EV_PER_S
+// during a TUI repaint storm; 1.2× absorbs them without truncation.
 //
 // Body size impact: ~120 B per op JSON × MAX_OPS ≈ 780 KB worst-case
 // POST body, comfortably under fastify's default 1 MB limit and within

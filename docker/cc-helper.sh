@@ -9,9 +9,9 @@
 # cc reads the trimmed stdout and uses it as the new bearer.
 #
 # Failure modes:
-#   - missing env  → exit 2 (cc sees empty stdout, will retry)
-#   - curl fail    → propagated exit code (cc retries; might surface UI msg)
-#   - JSON parse   → empty stdout (cc retries)
+# - missing env → exit 2 (cc sees empty stdout, will retry)
+# - curl fail → propagated exit code (cc retries; might surface UI msg)
+# - JSON parse → empty stdout (cc retries)
 set -eu
 
 if [ -z "${CC_HELPER_TOKEN:-}" ] || [ -z "${ANTHROPIC_BASE_URL:-}" ]; then

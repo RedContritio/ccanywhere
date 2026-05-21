@@ -181,8 +181,8 @@ export interface PairResult {
 
 /**
  * Drives the full register flow:
- *   register-init → navigator.credentials.create → register-complete →
- *   poll register-status until 'approved' or 'rejected' or timeout.
+ * register-init → navigator.credentials.create → register-complete →
+ * poll register-status until 'approved' or 'rejected' or timeout.
  */
 export async function runPair(input: {
   label: string;

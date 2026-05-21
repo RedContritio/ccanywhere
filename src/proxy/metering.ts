@@ -26,7 +26,7 @@ export interface MeterResult {
  * Compute USD cost + total tokens for one upstream response. Unknown
  * model → ZERO_RATE (cost 0 but tokens still counted); missing usage
  * or model → returns zeros. Caller (forward route) decides whether to
- * persist (D3: only 2xx upstream responses are metered; 4xx/5xx skip
+ * persist (: only 2xx upstream responses are metered; 4xx/5xx skip
  * to avoid double-counting under SDK retry).
  */
 export function meterResponse(response: ResponseShape): MeterResult {

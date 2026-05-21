@@ -97,7 +97,7 @@ export async function runProxyServe(configPathArg?: string): Promise<void> {
     throw err;
   }
 
-  // 2. redact self-test (D4). Boot-time safety net — refuse to bind any
+  // 2. redact self-test. Boot-time safety net — refuse to bind any
   // listener if a known secret could leak in logs.
   try {
     await runRedactSelfTest();
@@ -110,7 +110,7 @@ export async function runProxyServe(configPathArg?: string): Promise<void> {
     throw err;
   }
 
-  // 3. credentials (D5). Missing → 503 mode; bad perm / malformed → fatal.
+  // 3. credentials. Missing → 503 mode; bad perm / malformed → fatal.
   const credsPath = defaultCredentialsPath();
   let credentials: OwnerCredentials | null = null;
   try {

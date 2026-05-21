@@ -14,14 +14,14 @@ import {
 } from './server.test-helpers.js';
 
 /**
- *  reframe: hook is now pure state-machine (busy↔idle).
+ * reframe: hook is now pure state-machine (busy↔idle).
  * Quota enforcement was moved to the inline ws input gate (see
  * `src/ws/server.ts`) and `setQuotaUsage` is refreshed by `QuotaWatcher`
  * (see `src/quota/watcher.ts`). This file therefore only verifies:
- *   - state transitions for known events
- *   - 400 / 404 on bad input
- *   - hook works without UserStore (legacy fixture)
- *   - non-UserPromptSubmit events run the state machine without throwing
+ * - state transitions for known events
+ * - 400 / 404 on bad input
+ * - hook works without UserStore (legacy fixture)
+ * - non-UserPromptSubmit events run the state machine without throwing
  *
  * Quota path is exercised by `src/quota/watcher.test.ts` (unit) and
  * `src/server/server.multi-user.test.ts` (input gate integration).

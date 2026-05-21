@@ -5,7 +5,7 @@ import { type ForwardDeps, registerForwardRoutes } from './forward.js';
 
 /**
  * Forward route dependencies sans credentials — buildProxyServer
- * injects credentials from its own opts (single source). C3+ omitted
+ * injects credentials from its own opts (single source). + omitted
  * ⇒ /v1/messages stays unregistered (404).
  */
 export type ForwardOptions = Omit<ForwardDeps, 'credentials'>;
@@ -13,7 +13,7 @@ export type ForwardOptions = Omit<ForwardDeps, 'credentials'>;
 export interface BuildProxyOptions {
   /**
    * Owner's upstream API credentials. `null` ⇒ start in 503 mode
-   * (D5: missing credentials file is non-fatal; admin can configure
+   * (: missing credentials file is non-fatal; admin can configure
    * later without proxy crash-loop, but all forward routes return 503
    * until credentials arrive).
    */
@@ -31,7 +31,7 @@ export async function buildProxyServer(
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
-    bodyLimit: 10 * 1024 * 1024, // spike F2: claude requests can hit ~150KB+
+    bodyLimit: 10 * 1024 * 1024, // claude requests can hit ~150KB+
     disableRequestLogging: true,
     forceCloseConnections: true,
     trustProxy: 'loopback',
@@ -40,7 +40,7 @@ export async function buildProxyServer(
   const mode: 'ready' | 'degraded' =
     opts.credentials === null ? 'degraded' : 'ready';
 
-  // spike F5: claude startup hits `HEAD /` as endpoint reachability probe.
+  // claude startup hits `HEAD /` as endpoint reachability probe.
   // Always return 200 regardless of mode (probe predates auth).
   app.head('/', (_req, reply) => {
     void reply.code(200).send();
@@ -48,14 +48,14 @@ export async function buildProxyServer(
 
   app.get('/healthz', () => ({ ok: true, mode }));
 
-  // C3+: register forward routes only when credentials AND forward deps
+  // Register forward routes only when credentials AND forward deps
   // are both present. Either missing ⇒ degraded mode (404 on /v1/*).
   if (opts.credentials !== null && opts.forward !== undefined) {
     registerForwardRoutes(app, {
       ...opts.forward,
       credentials: opts.credentials,
     });
-    //  C5c: bearer rotation endpoint for cc's
+    // bearer rotation endpoint for cc's
     // apiKeyHelper. Same TokenIssuer as forward routes; verifies the
     // caller's long-lived helper bearer and returns a fresh short
     // bearer scoped to the same user.

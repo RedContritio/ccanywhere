@@ -13,7 +13,7 @@ export interface ContainerUserSyncOpts {
   /** Inject for tests; default real docker CLI. */
   readonly execImpl?: ExecImpl;
   /**
-   *  D3: container-side path that the host
+   * container-side path that the host
    * `userClaudeRoot` is mounted at (`-v <userClaudeRoot>:<root>:rw`,
    * wired in container-init.ts). ensureUser mkdirs `<root>/<username>`
    * + chowns to the user's uid + chmods 0700 so cc finds its jsonl
@@ -28,7 +28,7 @@ export interface ContainerUserSyncOpts {
 /**
  * Lazy useradd for per-user unix accounts inside the shared container.
  *
- * Strategy (D4): no eager sync between ccanywhere UserStore and container
+ * Strategy: no eager sync between ccanywhere UserStore and container
  * /etc/passwd. Each session spawn calls `ensureUser(username)` before
  * `docker exec -u <username>` — idempotent useradd creates the account
  * on first need, noop on subsequent calls. Removed ccanywhere users
@@ -53,7 +53,7 @@ export class ContainerUserSync {
 
   async ensureUser(username: string): Promise<{ uid: number }> {
     const uid = ContainerUserSync.uidOf(username);
-    //  Managed (2026-05-20): cc Managed scope
+    // cc Managed scope
     // (/etc/claude-code/managed-settings.json) contains both deny rules
     // AND CLAUDE.md soft-norm text via `claudeMd` field. cc binary
     // reads /etc/claude-code/ directly — no per-user cp needed. cache
@@ -95,8 +95,7 @@ export class ContainerUserSync {
       );
     }
 
-    // Tighten /home/<user> perms to 0700 (fs isolation, -
-    // schema D1 best-effort).
+    // Tighten /home/<user> perms to 0700 (fs isolation; best-effort).
     const chmod = await this.exec('docker', [
       'exec',
       this.containerName,
@@ -110,11 +109,10 @@ export class ContainerUserSync {
       );
     }
 
-    //  D3: per-user `~/.claude` state dir under
-    // the mounted userClaudeRoot. mkdir + chown + chmod 0700. macOS
-    // docker desktop bind mount doesn't enforce inode perms (D4 +
-    // P9 Step A spike-results), so chmod is best-effort / cosmetic on
-    // macOS; linux deployments truly enforce.
+    // Per-user `~/.claude` state dir under the mounted userClaudeRoot.
+    // mkdir + chown + chmod 0700. macOS docker desktop bind mount doesn't
+    // enforce inode perms, so chmod is best-effort / cosmetic on macOS;
+    // linux deployments truly enforce.
     if (this.userClaudeContainerRoot !== undefined) {
       const claudeDir = `${this.userClaudeContainerRoot}/${username}`;
       const mkdir = await this.exec('docker', [
@@ -153,10 +151,9 @@ export class ContainerUserSync {
           `chmod ${claudeDir} failed: ${chmodClaude.stderr}`,
         );
       }
-      //  D6 + Managed (2026-05-20): all policy
-      // (deny rules + LLM soft-norm CLAUDE.md text) ships in cc Managed
-      // scope `/etc/claude-code/managed-settings.json`. cc binary reads
-      // it directly — no per-user cp needed. Per-user `.claude` dir
+      // All policy (deny rules + LLM soft-norm CLAUDE.md text) ships in cc
+      // Managed scope `/etc/claude-code/managed-settings.json`. cc binary
+      // reads it directly — no per-user cp needed. Per-user `.claude` dir
       // remains for cc's own state (jsonl history, .claude.json, etc).
       //
       // Ensure user-scope settings.json exists (empty `{}`) so cc /theme

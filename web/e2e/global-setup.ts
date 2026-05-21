@@ -11,17 +11,17 @@ const __dirname = dirname(__filename);
  *
  * Strategy:
  * 1. Resolve cliToken + ccanywhere internal host from
- *    `~/.config/ccanywhere/{config.json, cli-token}` (the same LaunchAgent
- *    instance — internal RPC is only reachable on loopback).
+ * `~/.config/ccanywhere/{config.json, cli-token}` (the same LaunchAgent
+ * instance — internal RPC is only reachable on loopback).
  * 2. Find or create a fixed-username `e2e` limited user via
- *    `/api/internal/users`. Username is reused across runs so the fs
- *    sandbox `<guestProjectsRoot>/e2e/` doesn't accumulate stale dirs;
- *    only the token rotates.
+ * `/api/internal/users`. Username is reused across runs so the fs
+ * sandbox `<guestProjectsRoot>/e2e/` doesn't accumulate stale dirs;
+ * only the token rotates.
  * 3. Issue a fresh token (ttl 7d) for that user.
  * 4. Write storageState.json that playwright contexts auto-load, planting
- *    `ccanywhere_session=<token-plaintext>` on the prod webOrigin (from
- *    your ccanywhere config.webOrigin — drives the prod frpc / HTTPS path,
- *    no localhost shortcut).
+ * `ccanywhere_session=<token-plaintext>` on the prod webOrigin (from
+ * your ccanywhere config.webOrigin — drives the prod frpc / HTTPS path,
+ * no localhost shortcut).
  * 5. Save `{ tokenId }` to teardown.json for globalTeardown to revoke.
  *
  * Playwright BrowserContext cookies are isolated from your real browser,

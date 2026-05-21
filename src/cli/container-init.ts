@@ -22,15 +22,15 @@ export interface ContainerInitResult {
 }
 
 /**
- *  C6: detect docker, ensure shared container
+ * detect docker, ensure shared container
  * running, build SessionContainerDeps. Returns a result the caller
  * (serve.ts) forwards into resolveIsolation (sharedContainerReady) and
  * buildServer (containerDeps).
  *
  * Behavior:
  * - `isolationPolicy: 'host-only'` → skip docker init entirely
- * - docker unavailable → don't init; sharedContainerReady=false (D5
- *   resolveIsolation will fatal if any user configured shared-container)
+ * - docker unavailable → don't init; sharedContainerReady=false
+ *   (resolveIsolation will fatal if any user configured shared-container)
  * - docker available → ensureRunning shared container + build deps
  *
  * Container name is per-instance via `<image>-<port>` to avoid collision
@@ -54,7 +54,7 @@ export async function initContainerStack(
     logger.warn(
       { reason: status.reason },
       'docker unavailable; container deps not initialized — ' +
-        'resolveIsolation D5 will fatal if any user configured shared-container',
+        'resolveIsolation will fatal if any user configured shared-container',
     );
     return { sharedContainerReady: false, shutdown: noop };
   }
@@ -98,7 +98,7 @@ export async function initContainerStack(
     userClaudeContainerRoot: containerUserClaudePath,
   });
 
-  //  D10: load owner OAuth subscription token
+  // load owner OAuth subscription token
   // for direct injection into shared-container cc processes. Optional
   // here — when missing the container path 401s upstream (anthropic
   // rejects unauthenticated /v1/messages), which surfaces to cc UI as

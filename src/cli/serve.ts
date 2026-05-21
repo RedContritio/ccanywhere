@@ -63,7 +63,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
   const workspace = resolve(config.workspace);
   mkdirSync(workspace, { recursive: true, mode: 0o700 });
 
-  //  D3: per-user `~/.claude` state root.
+  // per-user `~/.claude` state root.
   // Single bind mount into shared container (`/var/lib/ccanywhere/
   // user-claude:rw`); per-user sub-dirs created on-demand by
   // ContainerUserSync.ensureUser. Default falls under configDir so an
@@ -123,9 +123,9 @@ export async function runServe(configPathArg?: string): Promise<void> {
   });
   const cliToken = ensureCliToken(configDir);
 
-  //  (B7): one-line warn at boot if the
+  // one-line warn at boot if the
   // hardcoded Anthropic pricing table is >180 days unverified. Side
-  // effect only — priceFor() still returns the table.
+  // effect only — priceFor still returns the table.
   maybePricingStaleWarn(new Date(), (msg) => logger.warn(msg));
 
   // #46 quota: verify ccJsonlPathOf matches cc CLI's path encoding before
@@ -146,7 +146,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
     throw err;
   }
 
-  // hardcode <configDir>/sessions/ per D9. Boot
+  // hardcode <configDir>/sessions/ per. Boot
   // synchronously loads previously-persisted session metadata + last
   // screen snapshots into dead-stub map so list/Resume work from frame 0.
   const sessionRegistry = new SessionRegistry(join(configDir, 'sessions'));
@@ -156,20 +156,18 @@ export async function runServe(configPathArg?: string): Promise<void> {
   });
   manager.loadDeadStubs();
 
-  // sweep expired snapshots at boot (per D6 lazy
-  // GC). loadAllSync's side effect unlinks any record whose expiresAt
-  // is past — we don't capture the return because the route handlers
-  // re-read fresh.
+  // sweep expired snapshots at boot (lazy GC). loadAllSync's side effect
+  // unlinks any record whose expiresAt is past — we don't capture the
+  // return because the route handlers re-read fresh.
   const shareStore = new ShareStore(join(configDir, 'shares'));
   shareStore.loadAllSync();
 
   const internalHookToken = randomBytes(32).toString('hex');
 
-  //  D7: ccanywhere main spawns the anthropic
-  // proxy as a sub-process so deployment of `ccanywhere` LaunchAgent
-  // covers proxy too. Independent OS process ( D1
-  // blast radius保留: credentials file read happens only in the proxy
-  // child, never in main). Supervisor handles crash respawn with
+  // ccanywhere main spawns the anthropic proxy as a sub-process so
+  // deployment of `ccanywhere` LaunchAgent covers proxy too. Independent
+  // OS process (blast radius保留: credentials file read happens only in
+  // the proxy child, never in main). Supervisor handles crash respawn with
   // backoff + give-up after consecutive failures so a broken proxy
   // doesn't death-loop.
   const cliBinPath = process.argv[1];
@@ -185,17 +183,17 @@ export async function runServe(configPathArg?: string): Promise<void> {
   });
   logger.info({ proxyLogPath }, 'proxy cohost spawned');
 
-  //  C6: docker detect + shared container
+  // docker detect + shared container
   // ensureRunning + ContainerUserSync + TokenIssuer init. Returns
-  // sharedContainerReady flag for resolveIsolation D5 decision +
+  // sharedContainerReady flag for resolveIsolation decision +
   // containerDeps for buildServer + shutdown hook for SIGTERM.
   const containerInit = await initContainerStack(config, configDir, userClaudeRoot);
 
   // Resolve isolation policy + per-user runtime
   // BEFORE building the server (fatal on bad config; ready snapshot
-  // exposed via /healthz). Owner D3 / strict-container D5 / host-only
-  // D4 all decide here. C6 wires sharedContainerReady from
-  // containerInit so D5 unlocks when container deps are ready.
+  // exposed via /healthz). Owner / strict-container / host-only
+  // all decide here. s sharedContainerReady from
+  // containerInit so unlocks when container deps are ready.
   const { status: isolation, perUserRuntime } = resolveIsolation(
     config,
     ownerUser.username,
@@ -227,15 +225,15 @@ export async function runServe(configPathArg?: string): Promise<void> {
     // actively kill PTYs in-process. Earlier
     // attempt relied on the OS SIGHUP'ing the children after our exit,
     // but by then the JS event loop is gone and `pty.onExit` never
-    // fires — last-screen snapshots were silently dropped. killAll()
+    // fires — last-screen snapshots were silently dropped. killAll
     // here awaits each PTY's exit (which fires handleSessionExit →
-    // queues snapshot writes); detach() then drains pendingWrites so
+    // queues snapshot writes); detach then drains pendingWrites so
     // the metadata is durable before process.exit.
     await manager.killAll();
     await manager.detach();
-    //  C6: stop shared container (idempotent).
+    // stop shared container (idempotent).
     await containerInit.shutdown();
-    //  D7: stop proxy cohost (SIGTERM →
+    // stop proxy cohost (SIGTERM →
     // grace → SIGKILL). Final step so proxy serves any in-flight
     // bearer/forward requests until container/users are torn down.
     await proxyCohost.shutdown();
@@ -245,7 +243,7 @@ export async function runServe(configPathArg?: string): Promise<void> {
   process.on('SIGTERM', (s) => void shutdown(s));
 
   void isolation; // referenced by buildServer above; keep var live
-  void perUserRuntime; // ditto — C5 wired into sessions.ts via buildServer
+  void perUserRuntime; // ditto — d into sessions.ts via buildServer
 
   await app.listen({ host: config.bindHost, port: config.port });
   const addr = app.server.address();

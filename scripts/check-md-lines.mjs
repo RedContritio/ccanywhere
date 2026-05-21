@@ -5,8 +5,8 @@
  * Threshold: 300 lines per .md file (keeps docs scannable).
  *
  * Usage:
- *   node scripts/check-md-lines.mjs              # scan all tracked .md
- *   node scripts/check-md-lines.mjs FILE [...]   # check given paths only
+ * node scripts/check-md-lines.mjs # scan all tracked .md
+ * node scripts/check-md-lines.mjs FILE [...] # check given paths only
  */
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';

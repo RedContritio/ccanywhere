@@ -83,7 +83,7 @@ export class FileUsageStore implements UsageStore {
 
   async getUsage(userId: string): Promise<UsageState | null> {
     const limit = this.limitOf(userId);
-    if (limit === undefined) return null; // unknown user (D7 fail-closed)
+    if (limit === undefined) return null; // unknown user ( fail-closed)
 
     const now = this.now();
     const entry = this.state[userId];

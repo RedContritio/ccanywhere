@@ -25,13 +25,13 @@ const ResumeBodySchema = z.object({
 });
 
 /**
- *  C4: two endpoints to drive the dead-stub UX.
- *   POST /api/sessions/:id/resume — spawn a new cc PTY reusing the
- *     original ccanywhere id (= cc jsonl filename) so the conversation
- *     continues from where it left off
- *   GET /api/sessions/:id/screen — text/plain dump of the last visible
- *     frame snapshot persisted at PTY exit; the workspace pane shows
- *     this as a readonly preview until the user clicks Resume
+ * Two endpoints to drive the dead-stub UX.
+ * POST /api/sessions/:id/resume — spawn a new cc PTY reusing the
+ * original ccanywhere id (= cc jsonl filename) so the conversation
+ * continues from where it left off
+ * GET /api/sessions/:id/screen — text/plain dump of the last visible
+ * frame snapshot persisted at PTY exit; the workspace pane shows
+ * this as a readonly preview until the user clicks Resume
  */
 export async function registerSessionResumeRoutes(
   app: FastifyInstance,
@@ -94,7 +94,7 @@ export async function registerSessionResumeRoutes(
 
       const resumeInput = { webId: id, resumeSessionId: stub.info.resumeSessionId };
       const themeEnv = buildThemeEnv(parsed.data.webTheme);
-      //  C5: host vs shared-container dispatch
+      // Host vs shared-container dispatch
       // (looked up via stub.userId when req.user absent).
       const userForRuntime =
         req.user ?? options.userStore?.findById(stub.info.userId) ?? undefined;
@@ -139,7 +139,7 @@ export async function registerSessionResumeRoutes(
           deletedAt: result.session.deletedAt,
         });
       } catch (err) {
-        // Per D4: resume spawn failure surfaces as 5xx + log; session
+        // Resume spawn failure surfaces as 5xx + log; session
         // stays dead so the user can retry or delete.
         logger.error({ err, id }, 'resume spawn failed');
         await reply.code(500).send({

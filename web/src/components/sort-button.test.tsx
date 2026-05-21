@@ -12,7 +12,7 @@ describe('SortButton', () => {
     expect(screen.getByText('Name')).toBeInTheDocument();
   });
 
-  // B34: arrows are lucide SVG icons; query by aria-hidden class via parent button.
+  // Arrows are lucide SVG icons; query by aria-hidden class via parent button.
   it('shows arrow icon when active (asc / desc)', () => {
     const { container, rerender } = render(
       <SortButton active={true} dir="asc" onClick={() => {}}>

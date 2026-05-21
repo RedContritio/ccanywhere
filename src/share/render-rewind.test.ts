@@ -138,10 +138,10 @@ describe('renderShareHtml — rewind & tool folding', () => {
 
   it('filters dead branches: last-prompt.leafUuid drives active-path retrieval', () => {
     // Tree:
-    //   u1 user "A"
-    //   u2 assistant "DEAD" (parent=u1)   ← off-path
-    //   u3 assistant "ACTIVE" (parent=u1) ← active
-    //   u4 user "B" (parent=u3)
+    // u1 user "A"
+    // u2 assistant "DEAD" (parent=u1) ← off-path
+    // u3 assistant "ACTIVE" (parent=u1) ← active
+    // u4 user "B" (parent=u3)
     // last-prompt=u4 → u1, u3, u4 active; u2 dropped.
     const lines = [
       userMsg('A', { uuid: 'u1', parentUuid: null }),

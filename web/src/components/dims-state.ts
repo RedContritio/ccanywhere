@@ -7,17 +7,17 @@
  *
  * State machine:
  *
- *   unmeasured
- *       │ measurement(c, r)
- *       ▼
- *   awaiting-quiescence(c, r)
- *       │ measurement(c', r')        — restart quiescence with (c', r')
- *       │ quiescence-elapsed         — commit (c, r) as stable
- *       ▼
- *   stable(c, r)
- *       │ measurement(c', r')        — immediate fit + send (c', r')
- *       ▼
- *   stable(c', r')
+ * unmeasured
+ * │ measurement(c, r)
+ * ▼
+ * awaiting-quiescence(c, r)
+ * │ measurement(c', r') — restart quiescence with (c', r')
+ * │ quiescence-elapsed — commit (c, r) as stable
+ * ▼
+ * stable(c, r)
+ * │ measurement(c', r') — immediate fit + send (c', r')
+ * ▼
+ * stable(c', r')
  *
  * Any state + unmount → terminated (one-shot, terminal).
  */

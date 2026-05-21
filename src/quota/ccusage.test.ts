@@ -62,8 +62,8 @@ describe('ccusageCalc', () => {
   it('sums one sonnet assistant line at standard rates', async () => {
     // sonnet: input 3, output 15, cacheRead 0.3, cacheCreation 3.75 per 1M
     // 1000 input + 500 output + 200 cacheRead + 100 cacheCreation:
-    //   cost = (1000*3 + 500*15 + 200*0.3 + 100*3.75) / 1e6
-    //        = (3000 + 7500 + 60 + 375) / 1e6 = 10935 / 1e6 = 0.010935
+    // cost = (1000*3 + 500*15 + 200*0.3 + 100*3.75) / 1e6
+    // = (3000 + 7500 + 60 + 375) / 1e6 = 10935 / 1e6 = 0.010935
     writeFileSync(
       jsonl,
       assistantLine('claude-sonnet-4-6', '2026-04-16T08:22:52.400Z', {

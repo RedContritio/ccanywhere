@@ -5,13 +5,13 @@
  * session/registry which had near-identical chains.
  *
  * Contract:
- *   - same key enqueue(k,op1); enqueue(k,op2) → op2 starts only after
- *     op1 settles
- *   - diff key enqueue('a',opA); enqueue('b',opB) → may run in parallel
- *   - rejection of an op does NOT block subsequent enqueue on the same
- *     key (caller's op is expected to log-and-swallow as before)
- *   - self-cleanup: when a chain fully settles, the Map entry for that
- *     key is removed so the queue doesn't grow unbounded
+ * - same key enqueue(k,op1); enqueue(k,op2) → op2 starts only after
+ * op1 settles
+ * - diff key enqueue('a',opA); enqueue('b',opB) → may run in parallel
+ * - rejection of an op does NOT block subsequent enqueue on the same
+ * key (caller's op is expected to log-and-swallow as before)
+ * - self-cleanup: when a chain fully settles, the Map entry for that
+ * key is removed so the queue doesn't grow unbounded
  */
 export class WriteQueue<K extends string> {
   private readonly chains = new Map<K, Promise<unknown>>();
@@ -35,11 +35,11 @@ export class WriteQueue<K extends string> {
   }
 
   /** Resolves when all in-flight ops for `key` settle. If no chain
-   *  exists (no pending op), resolves immediately. Used by tests that
-   *  trigger fire-and-forget ops (e.g. lazy GC unlink) and need to wait
-   *  for the IO to settle deterministically — replaces `setImmediate × N`
-   *  guesswork. Rejections of in-flight ops are swallowed here (idle
-   *  reports "queue drained" regardless of op outcome). */
+   * exists (no pending op), resolves immediately. Used by tests that
+   * trigger fire-and-forget ops (e.g. lazy GC unlink) and need to wait
+   * for the IO to settle deterministically — replaces `setImmediate × N`
+   * guesswork. Rejections of in-flight ops are swallowed here (idle
+   * reports "queue drained" regardless of op outcome). */
   async idle(key: K): Promise<void> {
     const chain = this.chains.get(key);
     if (chain === undefined) return;

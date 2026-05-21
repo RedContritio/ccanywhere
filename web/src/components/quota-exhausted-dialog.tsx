@@ -6,7 +6,7 @@ interface Props {
   readonly reason: string | null;
   readonly onClose: () => void;
   readonly onOpenQuotaPanel?: () => void;
-  /** B23: owner sees self-service title; limited user sees "联系管理员". */
+  /** Owner sees self-service title; limited user sees "联系管理员". */
   readonly userKind?: UserKind | null;
 }
 

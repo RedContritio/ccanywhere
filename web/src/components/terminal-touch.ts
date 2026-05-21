@@ -10,17 +10,17 @@ export interface TouchInteractionHandle {
 }
 
 // CSS-px slop before a touch is classified as drag. References:
-//   - Android tap slop = 8 dp
-//   - Material Design = 8 dp
-//   - Hammer.js = 10 px
+// - Android tap slop = 8 dp
+// - Material Design = 8 dp
+// - Hammer.js = 10 px
 // 6 is tighter — cc scroll is dominant intent so promote earlier; don't go
 // lower (finger jitter ~0.5 mm reaches 4-5 css-px without intent).
 const TAP_THRESHOLD_PX = 6;
 
 // Long-press threshold for entering selection mode. Aligns with system long-press:
-//   - Android ViewConfiguration.getLongPressTimeout() = 500 ms
-//   - iOS UILongPressGestureRecognizer.minimumPressDuration = 0.5 s
-//   - W3C contextmenu (touchscreen) ≈ 500-600 ms
+// - Android ViewConfiguration.getLongPressTimeout = 500 ms
+// - iOS UILongPressGestureRecognizer.minimumPressDuration = 0.5 s
+// - W3C contextmenu (touchscreen) ≈ 500-600 ms
 const LONG_PRESS_MS = 500;
 
 // Stall threshold = 2 frames @ 60 fps ≈ 33 ms; 30 catches any gap > 2 paint
@@ -39,12 +39,12 @@ const VISUAL_LINE_HEIGHT_FACTOR = 1.2;
  * touch path which scrolls at most ~1 line per touchmove (commit 15551d6).
  *
  * Three modes for a single-finger touch:
- *   - 'idle'      tap or long-press still pending decision
- *   - 'scroll'    drag exceeded TAP_THRESHOLD_PX before LONG_PRESS_MS elapsed
- *                 → self-driven term.scrollLines path
- *   - 'selection' finger held still ≥ LONG_PRESS_MS → synthesize mouse events
- *                 so xterm's selection service takes over; touchend triggers
- *                 clipboard write
+ * - 'idle' tap or long-press still pending decision
+ * - 'scroll' drag exceeded TAP_THRESHOLD_PX before LONG_PRESS_MS elapsed
+ * → self-driven term.scrollLines path
+ * - 'selection' finger held still ≥ LONG_PRESS_MS → synthesize mouse events
+ * so xterm's selection service takes over; touchend triggers
+ * clipboard write
  *
  * Two-finger touch = pinch-zoom font size (persisted to localStorage on end).
  *
@@ -56,8 +56,8 @@ export function setupTouchInteraction(
   container: HTMLElement,
   term: Terminal,
   /** Optional. Pass `undefined` for readonly mode (dead pane snapshot)
-   *  where pinch-zoom font resize has no persistence semantics and no
-   *  fit addon is available. Long-press → selection still works. */
+   * where pinch-zoom font resize has no persistence semantics and no
+   * fit addon is available. Long-press → selection still works. */
   fit?: FitAddon,
 ): TouchInteractionHandle {
   let pinchBase: { dist: number; fontSize: number } | null = null;
@@ -256,7 +256,7 @@ export function setupTouchInteraction(
     if (touchMode === 'selection') {
       dispatchMouseEvent('mouseup', lastTouchClient.x, lastTouchClient.y);
       // Defer one tick: xterm settles selection bounds in a microtask after
-      // mouseup. Then read getSelection() and ship to clipboard.
+      // mouseup. Then read getSelection and ship to clipboard.
       setTimeout(() => {
         const text = term.getSelection();
         if (text.length === 0) {

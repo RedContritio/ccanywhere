@@ -118,7 +118,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         // ignore
       }
     }
-    // Initial `fit.fit()` here MAY produce wrong dims if the layout
+    // Initial `fit.fit` here MAY produce wrong dims if the layout
     // hasn't settled (mobile mount). That's OK — we don't send those
     // dims to the server until the dims state machine reaches `stable`.
     try {
@@ -188,7 +188,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       captureViewportMetrics,
     });
 
-    // React StrictMode dev 故意双调 cleanup. xterm.js 5.x term.dispose()
+    // React StrictMode dev 故意双调 cleanup. xterm.js 5.x term.dispose
     // 不 idempotent — 第二次抛 `_isDisposed` undefined. flag guard
     // 整个 cleanup 让它真 idempotent.
     let cleanedUp = false;

@@ -46,9 +46,8 @@ export const STYLES = `
     border-bottom: 1px solid var(--border);
     transition: padding 120ms ease-out;
   }
-  /* B28: once user scrolls past the
-   * sentinel, IntersectionObserver toggles .shrunk on header. mobile
-   * only — desktop keeps comfortable spacing. */
+  /* Once user scrolls past the sentinel, IntersectionObserver toggles
+   * .shrunk on header. mobile only — desktop keeps comfortable spacing. */
   .sticky-sentinel { height: 1px; margin-top: -1px; }
   @media (max-width: 768px) {
     header.page.shrunk {
@@ -155,8 +154,8 @@ export const STYLES = `
 `;
 
 /**
- * B28: shrink header.page when user scrolls below the first 1px of
- * content (sentinel). IntersectionObserver fires reliably across
+ * Shrink header.page when user scrolls below the first 1px of content
+ * (sentinel). IntersectionObserver fires reliably across
  * mobile browsers; falls back to no-op when IO is unavailable (very
  * old browsers — header just stays at full padding, no harm).
  */

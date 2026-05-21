@@ -3,12 +3,12 @@
 # Build the ccanywhere user runtime image.
 #
 # 用法:
-#   ./scripts/build-container-image.sh                # 默认 tag latest
-#   CCANYWHERE_IMAGE_TAG=v0.6 ./scripts/build-container-image.sh
+# ./scripts/build-container-image.sh # 默认 tag latest
+# CCANYWHERE_IMAGE_TAG=v0.6 ./scripts/build-container-image.sh
 #
 # 跑前提:
-#   docker daemon ready (Docker Desktop 启动)
-#   ~/.docker/config.json keychain 可用 OR DOCKER_CONFIG 跳过
+# docker daemon ready (Docker Desktop 启动)
+# ~/.docker/config.json keychain 可用 OR DOCKER_CONFIG 跳过
 
 set -euo pipefail
 

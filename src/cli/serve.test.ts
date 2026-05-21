@@ -59,7 +59,7 @@ describe('resolveIsolation — happy path', () => {
   });
 });
 
-describe('resolveIsolation — D3 owner runtime', () => {
+describe('resolveIsolation —  owner runtime', () => {
   it('owner not in users field → OK (default behavior)', () => {
     const r = resolveIsolation(mkConfig({ users: {} }), 'owner');
     expect(r.status.ready).toBe(true);
@@ -107,7 +107,7 @@ describe('resolveIsolation — D3 owner runtime', () => {
   });
 });
 
-describe('resolveIsolation — D4 host-only override', () => {
+describe('resolveIsolation —  host-only override', () => {
   it('host-only overrides non-host runtime to host (no fatal)', () => {
     const r = resolveIsolation(
       mkConfig({
@@ -132,7 +132,7 @@ describe('resolveIsolation — D4 host-only override', () => {
 
   it('host-only does NOT reject owner=shared-container (owner check first)', () => {
     // 实际行为: owner runtime 校验在 policy 处理之前, host-only 也防不住
-    // owner 显式配 container — D3 仍 fail-loud
+    // owner 显式配 container — 仍 fail-loud
     expect(() =>
       resolveIsolation(
         mkConfig({

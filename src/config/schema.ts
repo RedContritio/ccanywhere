@@ -53,15 +53,15 @@ export const ConfigSchema = z.object({
         /**
          * user's runtime sandbox.
          * - `host`: spawn with owner identity on the mac (admin-
-         *   trusted). owner MUST be 'host'.
+         * trusted). owner MUST be 'host'.
          * - `shared-container` (default): spawn into a shared docker
-         *   container with per-user unix uid + CLAUDE_CONFIG_DIR.
-         *   Default reflects the target architecture; admin must
-         *   explicitly opt to `host` to keep existing multi-user prod
-         *   working without docker.
+         * container with per-user unix uid + CLAUDE_CONFIG_DIR.
+         * Default reflects the target architecture; admin must
+         * explicitly opt to `host` to keep existing multi-user prod
+         * working without docker.
          * - `isolated-container`: reserved schema enum; rejected at
-         *   parse time (not implemented — needed only for truly
-         *   untrusted users).
+         * parse time (not implemented — needed only for truly
+         * untrusted users).
          */
         runtime: z
           .enum(['host', 'shared-container', 'isolated-container'])
@@ -133,15 +133,15 @@ export const ConfigSchema = z.object({
   /**
    * Three-tier isolation policy:
    * - `strict`: per-user `runtime` honored; any non-owner configured
-   *   with container runtime causes startup fatal when docker is
-   *   unreachable. Fail-safe default — owner must explicitly opt into
-   *   degraded isolation.
+   * with container runtime causes startup fatal when docker is
+   * unreachable. Fail-safe default — owner must explicitly opt into
+   * degraded isolation.
    * - `fallback`: would degrade non-owner runtime to host on docker
-   *   detection failure (currently equivalent to strict — no docker
-   *   availability detection yet; reserved name).
+   * detection failure (currently equivalent to strict — no docker
+   * availability detection yet; reserved name).
    * - `host-only`: all non-owner user.runtime override 'host' with
-   *   audit warn. Use for windows / single-tenant / docker-unavailable
-   *   environments.
+   * audit warn. Use for windows / single-tenant / docker-unavailable
+   * environments.
    */
   isolationPolicy: z
     .enum(['strict', 'fallback', 'host-only'])
@@ -167,10 +167,10 @@ export const ConfigSchema = z.object({
   }
 
   // Per-user `workspace` override checks:
-  //   1. absolute path
-  //   2. any two overrides MUST NOT nest
-  //   3. an override MUST NOT collide with `<workspace>/<other-username>`
-  //      (would shadow another user's default root)
+  // 1. absolute path
+  // 2. any two overrides MUST NOT nest
+  // 3. an override MUST NOT collide with `<workspace>/<other-username>`
+  // (would shadow another user's default root)
   if (cfg.users === undefined) return;
   const ws = resolve(cfg.workspace);
   const wsSep = ws.endsWith(sep) ? ws : ws + sep;

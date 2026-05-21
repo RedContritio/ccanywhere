@@ -1,6 +1,6 @@
 /**
  * inline quota enforcement — called before each upstream forward. Owner
- * path never reaches here (D7: owner bypasses the proxy entirely), so
+ * path never reaches here (: owner bypasses the proxy entirely), so
  * "unknown user" is fail-closed, not fail-open.
  */
 
@@ -35,8 +35,8 @@ export interface UsageStore {
   /**
    * Look up the current usage record for `userId`. `null` ⇒ user not
    * enrolled in metering (the proxy MUST reject with UnknownUserError
-   * rather than allow through). C3 will provide a real file-backed
-   * implementation; C2 ships only the interface so tests can mock.
+   * rather than allow through). will provide a real file-backed
+   * implementation; ships only the interface so tests can mock.
    */
   getUsage(userId: string): Promise<UsageState | null>;
 }

@@ -7,8 +7,8 @@ import { expect, test } from '@playwright/test';
  * HTTP/UI boundary.
  *
  * Covers:
- *   - API surface (healthz / me/quota / projects list / cwd guard / 401)
- *   - UI flow that limited users can actually use (no webauthn needed)
+ * - API surface (healthz / me/quota / projects list / cwd guard / 401)
+ * - UI flow that limited users can actually use (no webauthn needed)
  */
 
 test.describe('ccanywhere smoke (prod URL, API surface)', () => {

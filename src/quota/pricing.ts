@@ -17,8 +17,8 @@
  */
 
 /** Date the hardcoded FAMILY_RATES were last cross-checked against
- *  anthropic.com/pricing. Format: YYYY-MM-DD. Bump this when you update
- *  the table. */
+ * anthropic.com/pricing. Format: YYYY-MM-DD. Bump this when you update
+ * the table. */
 export const LAST_VERIFIED = '2026-05-13';
 
 const STALENESS_THRESHOLD_MS = 180 * 24 * 60 * 60 * 1000;
@@ -83,7 +83,7 @@ export function __resetWarnedForTest(): void {
 }
 
 /**
- * Boot-time staleness check (B7). If
+ * Boot-time staleness check. If
  * `LAST_VERIFIED` is more than 180 days old we log a single warn so the
  * dev knows to cross-check anthropic.com/pricing and bump the table.
  * Side-effect only — `priceFor` continues to return hardcoded rates.

@@ -16,7 +16,7 @@ export type ServerFrame =
   /**
    * Full-state restore. Sent on first connect or when the client's
    * `lastSeq` falls outside the server scrollback ring (data evicted).
-   * Client should `term.reset()` before writing this.
+   * Client should `term.reset` before writing this.
    */
   | { type: 'snapshot'; upToSeq: number; data: string }
   /**

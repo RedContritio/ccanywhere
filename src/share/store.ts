@@ -23,7 +23,7 @@ const ShareRecordSchema = z.object({
 });
 
 /**
- * Share metadata persisted to disk per D5.
+ * Share metadata persisted to disk.
  *
  * One json file per share at `<configDir>/shares/<code>.json` carries
  * the metadata; the rendered HTML lives next to it as `<code>.html`.
@@ -42,9 +42,8 @@ export interface ShareRecord {
 }
 
 export class ShareStore {
-  // Per-code chain (mirrors B10): same-code save
-  // / delete must serialize to avoid metadata vs html truncate races.
-  // Cross-code writes run in parallel.
+  // Per-code chain: same-code save / delete must serialize to avoid
+  // metadata vs html truncate races. Cross-code writes run in parallel.
   private readonly queue = new WriteQueue<string>();
 
   constructor(private readonly dir: string) {
@@ -54,7 +53,7 @@ export class ShareStore {
   }
 
   /** Persist metadata + rendered HTML. Caller has already validated
-   *  the code shape (UUID v4). */
+   * the code shape (UUID v4). */
   async save(record: ShareRecord, html: string): Promise<void> {
     return this.queue.enqueue(record.code, async () => {
       try {
@@ -75,8 +74,8 @@ export class ShareStore {
   }
 
   /** Read metadata (sync — used by REST routes; small file fast read).
-   *  Returns undefined for missing / corrupt / expired records.
-   *  Expired records are unlinked as a side effect (lazy GC per D6). */
+   * Returns undefined for missing / corrupt / expired records.
+   * Expired records are unlinked as a side effect (lazy GC). */
   load(code: string): ShareRecord | undefined {
     const parsed = loadJsonRecord(this.metadataPath(code), ShareRecordSchema);
     if (parsed === undefined) return undefined;
@@ -89,8 +88,8 @@ export class ShareStore {
   }
 
   /** Read the persisted HTML for a code. undefined on missing /
-   *  expired. Caller usually does load() first to check expiry; this
-   *  is for the view route fast path. */
+   * expired. Caller usually does load first to check expiry; this
+   * is for the view route fast path. */
   loadHtml(code: string): string | undefined {
     try {
       return readFileSync(this.htmlPath(code), 'utf8');
@@ -109,9 +108,9 @@ export class ShareStore {
     });
   }
 
-  /** Boot-time listing per D6. Sweeps expired records inline (unlinks
-   *  metadata + html) so we never serve them. Corrupt / malformed
-   *  files are skipped (fail-soft). */
+  /** Boot-time listing. Sweeps expired records inline (unlinks
+   * metadata + html) so we never serve them. Corrupt / malformed
+   * files are skipped (fail-soft). */
   loadAllSync(): ShareRecord[] {
     const out: ShareRecord[] = [];
     let names: string[];
@@ -149,10 +148,10 @@ export class ShareStore {
   }
 
   /** Resolves when any pending write/delete for `code` settles. Exists
-   *  for tests that need to await fire-and-forget lazy GC (load() voids
-   *  the delete promise so callers don't block on read paths). Production
-   *  callers don't need this — load/save round-trips are deterministic
-   *  through the queue. */
+   * for tests that need to await fire-and-forget lazy GC (load voids
+   * the delete promise so callers don't block on read paths). Production
+   * callers don't need this — load/save round-trips are deterministic
+   * through the queue. */
   async idle(code: string): Promise<void> {
     return this.queue.idle(code);
   }

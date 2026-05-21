@@ -17,8 +17,8 @@ import {
 
 /**
  * Endpoints covered:
- *   POST /api/sessions/:id/resume — dead stub → active session
- *   GET  /api/sessions/:id/screen — last screen text from dead stub
+ * POST /api/sessions/:id/resume — dead stub → active session
+ * GET /api/sessions/:id/screen — last screen text from dead stub
  */
 describe('Dead stub resume + screen endpoints', () => {
   let env: TestProjectsEnv;

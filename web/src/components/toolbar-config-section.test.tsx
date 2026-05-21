@@ -24,7 +24,7 @@ function getCatalogKeys(): HTMLElement[] {
 
 /**
  * ToolbarConfigSection is the non-dialog rewrite of the old
- * ToolbarEditDialog, lifted into /settings under B4.
+ * ToolbarEditDialog, lifted into /settings.
  * Same edit / save / reset logic, no open/close lifecycle.
  */
 describe('ToolbarConfigSection', () => {

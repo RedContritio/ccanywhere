@@ -11,15 +11,15 @@ const STALE_REDIRECT_MS = 5000;
  * extracted from workspace.tsx.
  *
  * Behavior:
- *   - URL has :id → mirror to useUiStore.currentSessionId AND PUT to
- *     /api/me/active-session (via useActiveSessionStore.setRemote) so
- *     other devices see the same pick on next probe
- *   - URL has no :id → pick candidate (priority: currentSessionId >
- *     remoteActiveSessionId, gated on remoteActiveLoaded so first paint
- *     doesn't bounce away). Only honored if a live (non-deletedAt)
- *     session matches
- *   - URL has :id but session not found (and !loading && !error) → 5s
- *     setTimeout navigate('/workspace'); cancel if session appears mid-wait
+ * - URL has :id → mirror to useUiStore.currentSessionId AND PUT to
+ * /api/me/active-session (via useActiveSessionStore.setRemote) so
+ * other devices see the same pick on next probe
+ * - URL has no :id → pick candidate (priority: currentSessionId >
+ * remoteActiveSessionId, gated on remoteActiveLoaded so first paint
+ * doesn't bounce away). Only honored if a live (non-deletedAt)
+ * session matches
+ * - URL has :id but session not found (and !loading && !error) → 5s
+ * setTimeout navigate('/workspace'); cancel if session appears mid-wait
  *
  * Used once by WorkspacePage. Reads/writes via zustand selectors so the
  * caller doesn't need to pre-thread any state through.

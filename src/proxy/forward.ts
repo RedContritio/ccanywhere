@@ -25,16 +25,17 @@ export interface ForwardDeps {
 }
 
 /**
- * Registers POST /v1/messages. count_tokens and SSE streaming come in C4.
+ * Registers POST /v1/messages. count_tokens and SSE streaming are
+ * future additions.
  *
  * Auth: bearer (verified by TokenIssuer) → userId
  * Quota: inline checkQuota → 429 on exceed, 401 on unknown user
  * Forward: rewrite auth to owner credentials (Bearer oauthToken
- *   when present — Claude subscription path; else X-Api-Key for
- *   Console billing), preserve all stainless-* headers (spike F4),
- *   forward query string (spike F1)
- * Meter: 2xx upstream only (D3: SDK retry safe), parse usage from
- *   response body, addUsage(costUsd) async
+ * when present — Claude subscription path; else X-Api-Key for
+ * Console billing), preserve all stainless-* headers,
+ * forward query string.
+ * Meter: 2xx upstream only (SDK retry safe), parse usage from
+ * response body, addUsage(costUsd) async
  */
 export function registerForwardRoutes(
   app: FastifyInstance,
@@ -57,7 +58,7 @@ export function registerForwardRoutes(
     });
   });
 
-  // D6: model discovery reserved. Returning 404 with explicit reason
+  // model discovery reserved. Returning 404 with explicit reason
   // makes the gap loud if a future ccanywhere user enables
   // CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1.
   app.get('/v1/models', async (_req, reply) => {
@@ -85,7 +86,7 @@ async function handleForward(
   // 1. Auth: accept Authorization: Bearer OR X-Api-Key.
   // cc decides which header to use based on token prefix —
   // sk-ant-oat-... → Bearer, sk-ant-... → X-Api-Key. Our refreshed
-  // bearer carries the `cca.` prefix ( D2 token
+  // bearer carries the `cca.` prefix ( token
   // format), so cc treats it as a Console-style API key and sends it
   // via X-Api-Key. Accept both shapes and run the same TokenIssuer
   // verify either way — the HMAC validates regardless of header.
@@ -138,13 +139,13 @@ async function handleForward(
   // 3. Build upstream request
   const baseUrl = deps.upstreamBaseUrl ?? DEFAULT_UPSTREAM;
   const upstreamUrl = new URL(route.upstreamPath, baseUrl);
-  // spike F1: preserve query string (?beta=true etc.)
+  // preserve query string (?beta=true etc.)
   const queryIdx = req.url.indexOf('?');
   if (queryIdx >= 0) {
     upstreamUrl.search = req.url.slice(queryIdx);
   }
 
-  // Header passthrough (spike F4: x-stainless-* must survive).
+  // Header passthrough (x-stainless-* must survive).
   // Strip hop-by-hop + authorization (replaced) + content-length (fetch
   // sets fresh).
   const upstreamHeaders: Record<string, string> = {};

@@ -18,10 +18,10 @@ export function buildThemeEnv(
 }
 
 /**
- *  C5: deps required to spawn user sessions
- * inside the shared container. Optional in BuildServerOptions — when
- * absent, ALL user.runtime overrides degrade to host (per-user runtime
- * map already enforces host via resolveIsolation).
+ * Deps required to spawn user sessions inside the shared container.
+ * Optional in BuildServerOptions — when absent, ALL user.runtime
+ * overrides degrade to host (per-user runtime map already enforces host
+ * via resolveIsolation).
  */
 export interface SessionContainerDeps {
   /** name of the long-running shared container (per ccanywhere instance) */
@@ -77,11 +77,11 @@ export interface SessionRuntimeOverlay {
   };
   readonly env?: Record<string, string>;
   /**
-   * spawn `command` override. container path
-   * sets this to the container-internal claude binary (`claude` on PATH,
-   * installed via `npm install -g @anthropic-ai/claude-code` in the
-   * image) so spawn doesn't try to exec the host `config.claudeBin`
-   * path inside the container.
+   * Spawn `command` override. Container path sets this to the
+   * container-internal claude binary (`claude` on PATH, installed via
+   * `npm install -g @anthropic-ai/claude-code` in the image) so spawn
+   * doesn't try to exec the host `config.claudeBin` path inside the
+   * container.
    */
   readonly command?: string;
 }
@@ -91,11 +91,11 @@ export interface SessionRuntimeOverlay {
  * (from IsolationResolution) + container deps availability.
  *
  * - perUserRuntime says 'shared-container' AND deps present: ensure
- *   unix account exists in container + issue short bearer + assemble
- *   env (ANTHROPIC_BASE_URL/AUTH_TOKEN/CLAUDE_CONFIG_DIR + telemetry
- *   off) → return runtime+container+env overlay
+ * unix account exists in container + issue short bearer + assemble
+ * env (ANTHROPIC_BASE_URL/AUTH_TOKEN/CLAUDE_CONFIG_DIR + telemetry
+ * off) → return runtime+container+env overlay
  * - else: return overlay with merged baseEnv only (host path, identity
- *   spawn — caller's existing spawn call works as before)
+ * spawn — caller's existing spawn call works as before)
  *
  * Side-effect: when shared-container path, ensureUser may run
  * `useradd` in container on first call per user (idempotent).
@@ -116,15 +116,15 @@ export async function buildSessionRuntimeOverlay(
   }
 
   // shared-container path: ensure user account + inject env + translate
-  // host project.cwd → container working dir (D9).
+  // host project.cwd → container working dir.
   //
-  //  D10: anthropic 2026-02 policy bans third-
-  // party Bearer with OAuth subscription token (only cc binary itself
-  // is first-party). proxy forward path is dead — container cc must
-  // connect directly to anthropic. Inject owner's setup-token via
-  // CLAUDE_CODE_OAUTH_TOKEN env (cc-supported, 1-year long-lived).
-  // Trust model D6 accepts the token visible inside container env;
-  // shared-container deployments require owner-trusted users only.
+  // anthropic 2026-02 policy bans third-party Bearer with OAuth
+  // subscription token (only cc binary itself is first-party). proxy
+  // forward path is dead — container cc must connect directly to
+  // anthropic. Inject owner's setup-token via CLAUDE_CODE_OAUTH_TOKEN
+  // env (cc-supported, 1-year long-lived). Trust model accepts the
+  // token visible inside container env; shared-container deployments
+  // require owner-trusted users only.
   await deps.userSync.ensureUser(user.username);
   const env: Record<string, string> = {
     ...baseEnv,

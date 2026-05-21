@@ -14,8 +14,8 @@ import {
  * Integration tests for token-based user login (#44 ).
  *
  * Covers:
- *   POST /api/auth/token  — happy path / wrong token / revoked / short body
- *   GET  /api/me/quota    — owner null limits / user returns quota / no cookie 401
+ * POST /api/auth/token — happy path / wrong token / revoked / short body
+ * GET /api/me/quota — owner null limits / user returns quota / no cookie 401
  *
  * Builds the server with userStore + tokenStore wired so hookEarlyAuth
  * exercises the token-session path (cookie value === token plaintext).

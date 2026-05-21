@@ -268,7 +268,7 @@ export class SessionManager {
   }
 
   /** Awaits pending writes (shutdown flush, no PTY kill). Loops because
-   *  handleSessionExit can trackWrite during await — snapshot leaks. */
+   * handleSessionExit can trackWrite during await — snapshot leaks. */
   async detach(): Promise<void> {
     while (this.pendingWrites.size > 0) {
       await Promise.allSettled([...this.pendingWrites]);

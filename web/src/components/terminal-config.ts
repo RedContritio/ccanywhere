@@ -8,13 +8,13 @@ export type RendererKind = 'webgl' | 'canvas' | 'dom';
  * Pick the xterm renderer. Default 'webgl':
  *
  * 1. DOM renderer rebuilds all cell <span> children on every row paint
- *    (~1500 DOM mutations × 30-80 ms on mobile = 700 ms touchmove stalls
- *    during fast scrollback drag). Caught in feedback 2d2f1c7d.
+ * (~1500 DOM mutations × 30-80 ms on mobile = 700 ms touchmove stalls
+ * during fast scrollback drag). Caught in feedback 2d2f1c7d.
  * 2. Canvas addon (`@xterm/addon-canvas`) is deprecated upstream and has
- *    known atlas / sub-pixel issues at high dpr. Feedback 0d84f615
- *    confirmed: smooth performance but visually corrupted output.
+ * known atlas / sub-pixel issues at high dpr. Feedback 0d84f615
+ * confirmed: smooth performance but visually corrupted output.
  * 3. WebGL is the actively maintained path; uses GPU atlas without DOM
- *    mutations and gets correctness fixes upstream.
+ * mutations and gets correctness fixes upstream.
  *
  * Devs can override per-navigation with `?renderer=canvas|webgl|dom`.
  * NOT persisted — one-shot URL knob, not a sticky preference.
@@ -29,7 +29,7 @@ export function pickRenderer(): RendererKind {
   return 'webgl';
 }
 
-// B35: hex values mirror tokens.css `--xterm-*` raw values (light/dark
+// Hex values mirror tokens.css `--xterm-*` raw values (light/dark
 // :root blocks). Kept inline as fallback for jsdom / SSR / first-paint
 // before CSS is parsed — xterm.js webgl canvas reads ITheme at mount
 // and doesn't observe CSS var changes, so we keep the constant table
@@ -51,14 +51,14 @@ export const THEMES: Record<'light' | 'dark', ITheme> = {
 };
 
 // Font size bounds for pinch-zoom.
-//   - 4 px: minimum requested by mobile users on high-dpr screens (Xiaomi
-//     17 Pro at dpr ≈ 2.75 keeps 4-css-px glyphs readable — device-px
-//     is still ~11 px on the panel). Sub-pixel hinting is lost below 6
-//     css-px on standard-dpr screens but the user-side trade-off is
-//     "show more cc TUI content per pane".
-//   - 32 px: caps zoom to roughly 4×; beyond this the grid shrinks so much
-//     cc TUI breaks layout.
-//   - 13 px default = body 14 px – 1, monospace matches surrounding UI height.
+// - 4 px: minimum requested by mobile users on high-dpr screens (Xiaomi
+// 17 Pro at dpr ≈ 2.75 keeps 4-css-px glyphs readable — device-px
+// is still ~11 px on the panel). Sub-pixel hinting is lost below 6
+// css-px on standard-dpr screens but the user-side trade-off is
+// "show more cc TUI content per pane".
+// - 32 px: caps zoom to roughly 4×; beyond this the grid shrinks so much
+// cc TUI breaks layout.
+// - 13 px default = body 14 px – 1, monospace matches surrounding UI height.
 export const FONT_SIZE_MIN = 4;
 export const FONT_SIZE_MAX = 32;
 export const FONT_SIZE_DEFAULT = 13;
@@ -96,10 +96,10 @@ export function loadStoredFontSize(): number {
 }
 
 // Chunk size for chunkedWrite's RAF-paced writes. 4 KiB:
-//   - Longest plausible single ANSI escape (SGR RGB / OSC) is well under
-//     256 B; 4 KiB makes split-across-chunks vanishingly rare.
-//   - 4 KiB into xterm parser stays well under one 60fps frame (~16 ms).
-//   - 1 KiB costs more RAF round-trips; 16 KiB+ risks frame drops.
+// - Longest plausible single ANSI escape (SGR RGB / OSC) is well under
+// 256 B; 4 KiB makes split-across-chunks vanishingly rare.
+// - 4 KiB into xterm parser stays well under one 60fps frame (~16 ms).
+// - 1 KiB costs more RAF round-trips; 16 KiB+ risks frame drops.
 export const SNAPSHOT_CHUNK_BYTES = 4096;
 
 export function chunkedWrite(

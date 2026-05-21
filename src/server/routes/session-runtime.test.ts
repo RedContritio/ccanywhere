@@ -121,7 +121,7 @@ describe('buildSessionRuntimeOverlay — shared-container path', () => {
     expect(r.runtime).toBe('shared-container');
     expect(r.container).toEqual({ name: 'cca-shared', unixUser: 'alice' });
     expect(r.env?.['COLORFGBG']).toBe('15;0');
-    //  D10: anthropic 2026-02 政策禁第三方
+    // anthropic 2026-02 政策禁第三方
     // OAuth Bearer → container cc 直连 anthropic, env 不再含 proxy
     // wire (ANTHROPIC_BASE_URL / CC_HELPER_TOKEN / ANTHROPIC_AUTH_TOKEN),
     // 而是 CLAUDE_CODE_OAUTH_TOKEN 直接走 cc OAuth env path.
@@ -152,7 +152,7 @@ describe('buildSessionRuntimeOverlay — shared-container path', () => {
     expect(r.env).toEqual({ COLORFGBG: '15;0' });
   });
 
-  it('D9: translates projectCwd → containerCwd via hostWorkspace prefix', async () => {
+  it('translates projectCwd → containerCwd via hostWorkspace prefix', async () => {
     const map = new Map<string, 'shared-container'>([
       ['alice', 'shared-container'],
     ]);
@@ -170,7 +170,7 @@ describe('buildSessionRuntimeOverlay — shared-container path', () => {
     expect(r.container?.workingDir).toBe('/workspace/alice/myproject');
   });
 
-  it('D9: projectCwd outside hostWorkspace → no workingDir (defensive)', async () => {
+  it('projectCwd outside hostWorkspace → no workingDir (defensive)', async () => {
     const map = new Map<string, 'shared-container'>([
       ['alice', 'shared-container'],
     ]);
@@ -188,7 +188,7 @@ describe('buildSessionRuntimeOverlay — shared-container path', () => {
     expect(r.container?.workingDir).toBeUndefined();
   });
 
-  it('D9: projectCwd undefined → no workingDir (backward compat)', async () => {
+  it('projectCwd undefined → no workingDir (backward compat)', async () => {
     const map = new Map<string, 'shared-container'>([
       ['alice', 'shared-container'],
     ]);

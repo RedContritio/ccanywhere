@@ -7,9 +7,9 @@ import {
 } from './render-parse.js';
 
 /**
- * Programmatic cc jsonl → HTML renderer ( D1, D8;
- *  adds rewind-aware path filtering + tool-call
- * folding via the parseJsonl helper in `render-parse.ts`).
+ * Programmatic cc jsonl → HTML renderer. Adds rewind-aware path
+ * filtering + tool-call folding via the parseJsonl helper in
+ * `render-parse.ts`.
  *
  * cc writes one message per line. We care about user / assistant rows on
  * the **active path** — everything off-path (rewind dead branches) plus
@@ -29,7 +29,7 @@ import {
  *
  * Output is a complete standalone HTML document with inline CSS and a
  * single 3-line theme-toggle script. No client React, no external
- * stylesheet — fully cacheable per D7.
+ * stylesheet — fully cacheable.
  */
 
 export interface RenderInput {

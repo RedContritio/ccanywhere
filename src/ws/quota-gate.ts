@@ -26,7 +26,7 @@ const HARMLESS_CONTROL_SEQUENCES: ReadonlySet<string> = new Set([
  * missing UserStore / harmless control sequences all pass through;
  * otherwise check the per-user cost / tokens limits using the latest
  * QuotaWatcher-written `used` values. Cost first then tokens (mirror
- * of  "first to trip" semantics).
+ * of "first to trip" semantics).
  */
 export function evaluateQuotaGate(
   userStore: UserStore | undefined,

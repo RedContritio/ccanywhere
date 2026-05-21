@@ -6,13 +6,13 @@ import { join } from 'node:path';
  * Derive the cc-generated jsonl file path for a given (cwd, sessionId).
  *
  * cc CLI lays out per-session jsonl under
- *   `<home>/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`
+ * `<home>/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`
  * where `encoded-cwd` is the absolute cwd with every `/` replaced by `-`
  * (leading `/` becomes leading `-`).
  *
  * Examples:
- *   /Users/me/Projects/foo → -Users-me-Projects-foo
- *   /private/tmp/abc       → -private-tmp-abc
+ * /Users/me/Projects/foo → -Users-me-Projects-foo
+ * /private/tmp/abc → -private-tmp-abc
  *
  * Algorithm verified at 2026-05-11 against real cc 2.1.x layouts. cc upgrades
  * can change this encoding; `runStartupSanityCheck` below catches drift before
@@ -20,7 +20,7 @@ import { join } from 'node:path';
  */
 /**
  * `claudeRoot` overrides the parent of `projects/` for non-owner / container
- * users ( D5). Defaults to `<homedir>/.claude` so
+ * users. Defaults to `<homedir>/.claude` so
  * owner host path continues to land in `~/.claude/projects/...` unchanged.
  */
 export function ccJsonlPathOf(
@@ -67,7 +67,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.
  * would silently miss jsonl files, letting users bypass their quota.
  *
  * - empty `~/.claude/projects/` → `skipped` + warn (new install; the check
- *   will retry implicitly on the first hook fire when a real jsonl appears)
+ * will retry implicitly on the first hook fire when a real jsonl appears)
  * - mismatch → throw `QuotaPathError` (caller decides whether to fatal-exit)
  * - match → `verified` + info log
  */

@@ -4,7 +4,7 @@ export interface Device {
   /** UUIDv4. */
   readonly id: string;
   /**
-   * User.id this device belongs to.  reframe:
+   * User.id this device belongs to. reframe:
    * data layer is symmetric — any user kind may be referenced here, but
    * pair policy currently restricts pair-time assignment to the owner
    * (CLI approve uses owner.id). Legacy records (pre-multi-user) load with
@@ -37,9 +37,9 @@ export interface PendingPair {
   /**
    * Stage marker.
    * - 'awaiting-registration': browser hasn't called register-complete yet.
-   * - 'awaiting-approval':     browser submitted attestation, mac CLI approve hasn't run.
-   * - 'approved':              CLI approved, device created, sessionId issued.
-   * - 'rejected':              CLI rejected (or pending expired and was cleaned up).
+   * - 'awaiting-approval': browser submitted attestation, mac CLI approve hasn't run.
+   * - 'approved': CLI approved, device created, sessionId issued.
+   * - 'rejected': CLI rejected (or pending expired and was cleaned up).
    */
   readonly status: PendingStatus;
   /** epoch-ms when register-init was called. */

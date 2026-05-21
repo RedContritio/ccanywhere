@@ -18,9 +18,9 @@ interface RequestOptions {
   idempotencyKey?: string;
   signal?: AbortSignal;
   /** Called once with response status + ccanywhere idempotency headers
-   *  before the body is decoded. Lets callers record trace context
-   *  (POST /api/sessions in particular needs to know whether the request
-   *  was a 200 attach vs 201 created — both look the same in the body). */
+   * before the body is decoded. Lets callers record trace context
+   * (POST /api/sessions in particular needs to know whether the request
+   * was a 200 attach vs 201 created — both look the same in the body). */
   onMeta?: (meta: ResponseMeta) => void;
 }
 

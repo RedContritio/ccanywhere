@@ -4,8 +4,8 @@
 // directly. Picks an existing session's jsonl and mints a share so the
 // dev (you) can open the public URL in a fresh incognito.
 //
-// Usage:  pnpm tsx scripts/mint-share.mjs <sessionId>
-//   or:   pnpm tsx scripts/mint-share.mjs    (auto-pick first session)
+// Usage: pnpm tsx scripts/mint-share.mjs <sessionId>
+// or: pnpm tsx scripts/mint-share.mjs (auto-pick first session)
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';

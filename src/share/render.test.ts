@@ -128,7 +128,7 @@ describe('renderShareHtml', () => {
   });
 
   it('strips tool_use bodies entirely (only footer count survives)', () => {
-    //  followed up by "完全不显示": tool I/O
+    // followed up by "完全不显示": tool I/O
     // never appears in HTML. Even huge tool inputs/outputs drop to
     // zero bytes in the rendered share.
     const big = 'x'.repeat(5000);

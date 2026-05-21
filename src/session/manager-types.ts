@@ -22,18 +22,18 @@ export interface SpawnOptions {
    * derive the jsonl path without ambiguity. Tests using non-cc binaries
    * (e.g. `sh`) MUST NOT pass this — manager falls back to randomUUID.
    *
-   * also used by `resumeDeadStub()` to reuse the
+   * also used by `resumeDeadStub` to reuse the
    * original ccanywhere id (and thus the original cc jsonl).
    */
   readonly forcedSessionId?: string;
   /**
    * runtime sandbox.
    * - `host` (default, omitted = host): spawn `command` directly via
-   *   node-pty (owner path + admin-trusted multi-user)
+   * node-pty (owner path + admin-trusted multi-user)
    * - `shared-container`: wrap spawn as `docker exec -it -u <user>
-   *   -e KEY=VAL ... <container.name> <command> ...args`. caller
-   *   (sessions.ts) sources from user.runtime config + a live
-   *   SharedContainerManager + ContainerUserSync
+   * -e KEY=VAL ... <container.name> <command> ...args`. caller
+   * (sessions.ts) sources from user.runtime config + a live
+   * SharedContainerManager + ContainerUserSync
    *
    * When `shared-container`, `container` MUST be set.
    */
@@ -91,8 +91,8 @@ export interface SessionManagerOptions {
   readonly deletedSessionTtlMs?: number;
   /**
    * Optional disk persistence. When set, spawn/markDeleted/exit/gc all
-   * write to disk so the next `loadDeadStubs()` can recover the session
-   * list (per ). Tests with no persistence needs
+   * write to disk so the next `loadDeadStubs` can recover the session
+   * list. Tests with no persistence needs
    * leave this undefined.
    */
   readonly registry?: SessionRegistry;

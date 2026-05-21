@@ -97,7 +97,7 @@ describe('POST /v1/messages — SSE streaming', () => {
     await app.close();
   });
 
-  it('does NOT meter SSE on non-2xx (D3)', async () => {
+  it('does NOT meter SSE on non-2xx ()', async () => {
     const issuer = mkIssuer();
     const { token } = issuer.issue('alice');
     const usageCalls: number[] = [];

@@ -57,7 +57,7 @@ interface DiagViewport {
   windowW: number;
   windowH: number;
   /** visualViewport 实测尺寸；与 windowW/H 在键盘升起 / 浏览器 UI bar
-   *  滑动时会偏离。triage 排版 / 键盘相关 bug 必备。 */
+   * 滑动时会偏离。triage 排版 / 键盘相关 bug 必备。 */
   vvW?: number;
   vvH?: number;
   vvOffsetTop?: number;
@@ -101,11 +101,11 @@ interface DiagApp {
   theme?: string;
   effectiveTheme?: string;
   /** `<short-sha> @ <ISO build time>` — injected at vite build (see
-   *  web/vite.config.ts `define`). 'dev' when git is unavailable. */
+   * web/vite.config.ts `define`). 'dev' when git is unavailable. */
   version?: string;
   /** Account class — `owner` = webauthn-paired device, `limited` =
-   *  token-authenticated user. Triage uses this to know whether a
-   *  feedback came from the host or a guest. */
+   * token-authenticated user. Triage uses this to know whether a
+   * feedback came from the host or a guest. */
   userKind?: UserKind;
 }
 interface DiagWs {
@@ -119,15 +119,15 @@ interface DiagWs {
 interface DiagTerm {
   rendererKind?: string;
   /** xterm fontSize in css-px. Pinch-zoom-mutable (4..32). Critical for
-   *  triage: cellWidth/cellHeight derive from this, cols × cellW is
-   *  what cc receives — any "排版乱 / cols off-by-one" feedback needs
-   *  fontSize reconstructable. */
+   * triage: cellWidth/cellHeight derive from this, cols × cellW is
+   * what cc receives — any "排版乱 / cols off-by-one" feedback needs
+   * fontSize reconstructable. */
   fontSize?: number;
   fontFamily?: string;
   scrollback?: number;
   cursorBlink?: boolean;
   /** xterm 实际渲染的 cell 尺寸（css-px）。`cellWidth × cols` 与
-   *  `containerWidth` 的差就是 fit-addon off-by-one bug 的判据 */
+   * `containerWidth` 的差就是 fit-addon off-by-one bug 的判据 */
   cellWidth?: number;
   cellHeight?: number;
   lastWriteTs?: number;

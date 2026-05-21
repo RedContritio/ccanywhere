@@ -3,20 +3,20 @@ import { SerializeAddon } from '@xterm/addon-serialize';
 
 /**
  * Server-side mirror of the cc TUI grid. Replays every PTY byte through
- * an xterm-headless instance, then exposes `snapshot()` which emits the
+ * an xterm-headless instance, then exposes `snapshot` which emits the
  * **current grid state** as minimal ANSI (via SerializeAddon).
  *
  * Why not just replay the raw scrollback? Two reasons:
  *
  * 1. The Scrollback ring buffer truncates at byte boundaries — it can
- *    cut a multi-byte ANSI escape sequence in half, leaving the client's
- *    parser in a broken state for the rest of the stream.
+ * cut a multi-byte ANSI escape sequence in half, leaving the client's
+ * parser in a broken state for the rest of the stream.
  *
  * 2. cc draws its TUI in alt-screen with cursor positioning (`\x1b[H`,
- *    `\x1b[2K`, etc), redrawing the same cells thousands of times. The
- *    raw byte log contains every redraw; replaying all of them on the
- *    client is wasted work and, when the PTY has been resized between
- *    redraws, places cursors in the wrong rows.
+ * `\x1b[2K`, etc), redrawing the same cells thousands of times. The
+ * raw byte log contains every redraw; replaying all of them on the
+ * client is wasted work and, when the PTY has been resized between
+ * redraws, places cursors in the wrong rows.
  *
  * SerializeAddon output captures only the visible grid + colors + cursor
  * position — one snapshot, no replay, correct after any number of resizes.

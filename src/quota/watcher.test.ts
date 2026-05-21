@@ -150,8 +150,8 @@ describe('QuotaWatcher', () => {
     expect(true).toBe(true);
   });
 
-  it('shared-container user: translates host cwd → container cwd before encoding (B24 fix)', async () => {
-    //  B24: cc inside container writes jsonl under
+  it('shared-container user: translates host cwd → container cwd before encoding', async () => {
+    // cc inside container writes jsonl under
     // ENCODED CONTAINER cwd (e.g. /workspace/<user>/test → -workspace-...),
     // not encoded host cwd (/Users/.../e2e/test → -Users-...). Watcher
     // must translate via hostWorkspace + containerWorkspacePath before
@@ -205,8 +205,8 @@ describe('QuotaWatcher', () => {
   });
 
   it('shared-container user: watches userClaudeRoot/<user>/projects/... not owner home', async () => {
-    //  D5: per-user runtime map + userClaudeRoot
-    // route container users' jsonl off the owner's ~/.claude path.
+    // per-user runtime map + userClaudeRoot route container users' jsonl
+    // off the owner's ~/.claude path.
     const userClaudeRoot = mkdtempSync(join(tmpdir(), 'qw-userclaude-'));
     const perUserRuntime = new Map<string, 'host' | 'shared-container'>([
       ['alice', 'shared-container'],

@@ -2,9 +2,9 @@
  * Ring buffer of raw PTY bytes with a monotonic cumulative byte counter.
  *
  * Two distinct numbers:
- *   - `headSeq`  total bytes ever appended to this scrollback (monotonic).
- *   - `tailSeq`  oldest seq still retained — anything < tailSeq has been
- *                evicted by ring rotation. `headSeq - tailSeq === bufferedBytes`.
+ * - `headSeq` total bytes ever appended to this scrollback (monotonic).
+ * - `tailSeq` oldest seq still retained — anything < tailSeq has been
+ * evicted by ring rotation. `headSeq - tailSeq === bufferedBytes`.
  *
  * `since(seq)` returns the bytes in `(seq, headSeq]` if `seq` is still in
  * the ring; null if `seq < tailSeq` (caller must fall back to a full
@@ -86,7 +86,7 @@ export class Scrollback {
 
   clear(): void {
     this.chunks = [];
-    // Note: clear() does NOT reset headSeq — restarting the ring keeps the
+    // Note: clear does NOT reset headSeq — restarting the ring keeps the
     // session-wide cumulative counter monotonic so that any client still
     // holding a `lastSeq` from before the clear is correctly downgraded
     // to "fall back to snapshot" by the since(seq) < tailSeq check.

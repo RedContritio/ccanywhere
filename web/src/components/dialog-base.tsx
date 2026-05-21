@@ -27,7 +27,7 @@ export interface DialogBaseProps {
   readonly size?: DialogSize;
   readonly className?: string;
   /**
-   * Per DP8: dialogs do NOT autoFocus by default. Set true only when an
+   * Dialogs do NOT autoFocus by default. Set true only when an
    * explicit input focus is desired on desktop. Mobile UA detection is left
    * to the caller — the rule is "be explicit about who steals focus".
    */

@@ -16,7 +16,7 @@ function mkStore(records: Record<string, UsageState | null>): UsageStore {
 const future = Date.now() + 60_000;
 
 describe('checkQuota', () => {
-  it('throws UnknownUserError for unknown userId (fail-closed, D7)', async () => {
+  it('throws UnknownUserError for unknown userId (fail-closed, )', async () => {
     const store = mkStore({});
     await expect(checkQuota({ userId: 'ghost', store })).rejects.toThrow(
       UnknownUserError,

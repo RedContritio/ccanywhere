@@ -34,7 +34,7 @@ const IssueTokenSchema = z.object({
 });
 
 /**
- *  (#44) internal routes for user + token CRUD. Mounted alongside
+ * (#44) internal routes for user + token CRUD. Mounted alongside
  * `registerInternalRoutes` (device/pending) — both rely on the cliToken bearer
  * gate in `server/auth.ts`.
  */

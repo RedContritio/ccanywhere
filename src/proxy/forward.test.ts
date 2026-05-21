@@ -90,7 +90,7 @@ describe('POST /v1/messages — auth', () => {
     await app.close();
   });
 
-  it('401 when valid token but unknown user (fail-closed, D7)', async () => {
+  it('401 when valid token but unknown user (fail-closed, )', async () => {
     const issuer = mkIssuer();
     const { token } = issuer.issue('ghost');
     const app = await buildProxyServer({
@@ -215,13 +215,13 @@ describe('POST /v1/messages — forward', () => {
     expect(sentHeaders['x-api-key']).toBe('sk-ant-owner-secret');
     // Bearer must NOT be forwarded
     expect(sentHeaders['authorization']).toBeUndefined();
-    // stainless headers must survive (spike F4)
+    // stainless headers must survive
     expect(sentHeaders['x-stainless-arch']).toBe('arm64');
     expect(sentHeaders['x-stainless-lang']).toBe('js');
     await app.close();
   });
 
-  it('preserves ?beta=true query string (spike F1)', async () => {
+  it('preserves ?beta=true query string ', async () => {
     const issuer = mkIssuer();
     const { token } = issuer.issue('alice');
     const captured: { url?: string; init?: RequestInit } = {};
@@ -380,7 +380,7 @@ describe('POST /v1/messages — metering', () => {
     await app.close();
   });
 
-  it('does NOT record cost on 5xx (D3: SDK retry safety)', async () => {
+  it('does NOT record cost on 5xx (: SDK retry safety)', async () => {
     const issuer = mkIssuer();
     const { token } = issuer.issue('alice');
     const usageCalls: Array<{ userId: string; cost: number }> = [];
@@ -415,7 +415,7 @@ describe('POST /v1/messages — metering', () => {
   });
 });
 
-describe('GET /v1/models (D6 reserved)', () => {
+describe('GET /v1/models ( reserved)', () => {
   it('returns 404 with reserved code', async () => {
     const app = await buildProxyServer({
       credentials,

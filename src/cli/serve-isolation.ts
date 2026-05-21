@@ -7,9 +7,9 @@ export interface IsolationResolution {
   readonly status: IsolationStatus;
   /**
    * Effective per-user runtime after isolationPolicy override applied
-   * (D4 host-only → all non-owner 'host'; otherwise per-user config or
+   * (host-only → all non-owner 'host'; otherwise per-user config or
    * default). Lookup by username; missing key = 'host' (owner or
-   * unknown user). sessions.ts uses this for spawn dispatch (C5).
+   * unknown user). sessions.ts uses this for spawn dispatch.
    */
   readonly perUserRuntime: ReadonlyMap<string, 'host' | 'shared-container'>;
 }
@@ -92,9 +92,9 @@ export function resolveIsolation(
 
   // strict / fallback + any non-owner shared-container.
   // - sharedContainerReady=true: non-fatal; runtime enters
-  //   perUserRuntime map for sessions.ts dispatch
+  // perUserRuntime map for sessions.ts dispatch
   // - sharedContainerReady=false: fatal (avoid silent fallback to
-  //   host hiding the isolation gap)
+  // host hiding the isolation gap)
   //
   // Treat undefined runtime as 'shared-container' (schema default):
   // existing multi-user prod config without explicit runtime fatals

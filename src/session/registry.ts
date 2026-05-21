@@ -37,11 +37,11 @@ export interface Persisted {
 }
 
 export class SessionRegistry {
-  //  (B10): per-id chain serializes concurrent
-  // writes to the same <id>.json / <id>.screen.txt. Without this two
-  // racing writeFile calls (e.g. markDeleted's eager save + onExit's
-  // post-SIGINT save) can interleave a truncate against a partial write
-  // and corrupt the file. Cross-id writes still run in parallel.
+  // Per-id chain serializes concurrent writes to the same
+  // <id>.json / <id>.screen.txt. Without this two racing writeFile calls
+  // (e.g. markDeleted's eager save + onExit's post-SIGINT save) can
+  // interleave a truncate against a partial write and corrupt the file.
+  // Cross-id writes still run in parallel.
   private readonly queue = new WriteQueue<string>();
 
   constructor(private readonly dir: string) {
@@ -51,7 +51,7 @@ export class SessionRegistry {
   }
 
   /**
-   * Async fire-and-forget per D2. Caller does `void registry.save(...)`
+   * Async fire-and-forget. Caller does `void registry.save(...)`
    * — IO runs on libuv worker pool, main loop unaffected. Failure
    * surfaces to log but does not propagate.
    */
@@ -118,13 +118,13 @@ export class SessionRegistry {
   }
 
   /**
-   * Boot-time read. Synchronous per D5 — we want listen to start with
-   * the list already complete. N is bounded by user's session count
-   * (typically < 100), each file is small, so even with cold disk the
-   * total stays under ~100ms.
+   * Boot-time read. Synchronous — we want listen to start with the list
+   * already complete. N is bounded by user's session count (typically
+   * < 100), each file is small, so even with cold disk the total stays
+   * under ~100ms.
    *
    * Corrupt json or missing files are skipped with a warn log; one bad
-   * session never blocks the others (D4 fail-soft).
+   * session never blocks the others (fail-soft).
    */
   loadAllSync(): Persisted[] {
     const out: Persisted[] = [];

@@ -76,7 +76,7 @@ export interface AuthMultiUserRoutesOptions {
 }
 
 /**
- *  (#44) auth routes for token-based user login + the
+ * (#44) auth routes for token-based user login + the
  * current-user quota endpoint. Mounted by `registerAuthRoutes` only when
  * `userStore` + `tokenStore` are wired.
  */

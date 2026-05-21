@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildProxyServer } from './server.js';
 
 describe('buildProxyServer', () => {
-  it('responds 200 to HEAD / (claude startup probe, spike F5)', async () => {
+  it('responds 200 to HEAD / (claude startup probe, )', async () => {
     const app = await buildProxyServer({
       credentials: { apiKey: 'sk-ant-test' },
     });
@@ -46,7 +46,7 @@ describe('buildProxyServer', () => {
     await app.close();
   });
 
-  it('accepts request bodies up to ~10MB (spike F2)', async () => {
+  it('accepts request bodies up to ~10MB ', async () => {
     const app = await buildProxyServer({
       credentials: { apiKey: 'sk-ant-test' },
     });

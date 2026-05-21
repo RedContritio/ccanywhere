@@ -11,7 +11,7 @@ try {
   // ignore
 }
 
-console.log('# P4: node-pty + docker exec TTY/resize prototype');
+console.log('# node-pty + docker exec TTY/resize prototype');
 console.log(`# image: ${IMAGE}, container: ${CTN}\n`);
 
 // 1. start long-running container

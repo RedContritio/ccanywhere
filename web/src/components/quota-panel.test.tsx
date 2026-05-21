@@ -25,8 +25,8 @@ function mockFetchSequence(bodies: object[]): void {
 }
 
 /**
- * After C3 the dialog is built on Radix Dialog
- * (renders into document.body via Portal). We can no longer rely on
+ * The dialog is built on Radix Dialog (renders into document.body via
+ * Portal). We can no longer rely on
  * `container.firstChild` to detect open/closed — assertions go through
  * screen text instead.
  *

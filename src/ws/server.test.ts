@@ -117,7 +117,7 @@ function connect(port: number, sessionId: string, cookie: string): TrackedClient
   });
   // Server defers the snapshot until the first 'resize' message; send a
   // default size on open so we don't burn the 1.5s fallback timeout on
-  // every test that calls connect().
+  // every test that calls connect.
   ws.on('open', () => {
     try {
       ws.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));

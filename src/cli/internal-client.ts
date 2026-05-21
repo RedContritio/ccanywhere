@@ -12,7 +12,7 @@ export interface InternalClientConfig {
  * Loads the CLI's connection info from disk:
  * - host:port from the same config.json the server uses.
  * - cliToken from `<configDir>/cli-token`, where configDir is
- *   `config.configDir` if set, else the dir containing config.json.
+ * `config.configDir` if set, else the dir containing config.json.
  *
  * Mac CLI subcommands accept `--config <path>`; pass it through to
  * target a non-default instance (e.g. staging). Without `--config` the

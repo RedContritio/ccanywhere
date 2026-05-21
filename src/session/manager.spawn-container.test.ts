@@ -95,7 +95,7 @@ describe('buildSpawnCommand — shared-container', () => {
     expect(r.args).not.toContain('-e');
   });
 
-  it('D9: workingDir produces -w docker exec arg', () => {
+  it('workingDir produces -w docker exec arg', () => {
     const r = buildSpawnCommand(
       baseOpts({
         runtime: 'shared-container',
@@ -111,7 +111,7 @@ describe('buildSpawnCommand — shared-container', () => {
     expect(r.args[wIdx + 1]).toBe('/workspace/alice/myproject');
   });
 
-  it('D9: no workingDir → no -w arg', () => {
+  it('no workingDir → no -w arg', () => {
     const r = buildSpawnCommand(
       baseOpts({
         runtime: 'shared-container',

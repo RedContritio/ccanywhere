@@ -17,15 +17,15 @@ interface Props {
 
 /**
  * Renders a `ToolbarLayout` as a grid of buttons. Layout source order:
- *   1. user preference (`usePrefsStore.toolbar`) when loaded
- *   2. fall back to DEFAULT_TOOLBAR_LAYOUT
+ * 1. user preference (`usePrefsStore.toolbar`) when loaded
+ * 2. fall back to DEFAULT_TOOLBAR_LAYOUT
  *
  * The store loads on mount so a freshly-logged-in client doesn't show the
  * default for a frame before snapping to the user's saved layout. Cells
  * are dispatched by `ToolbarKey.action`:
- *   - plain:              forward `payload` to PTY (consumes sticky Ctrl)
- *   - ctrl-letter:        translate payload (a..z) to its 0x01..0x1A byte
- *   - toggle-sticky-ctrl: toggle the next-key Ctrl-prefix flag
+ * - plain: forward `payload` to PTY (consumes sticky Ctrl)
+ * - ctrl-letter: translate payload (a..z) to its 0x01..0x1A byte
+ * - toggle-sticky-ctrl: toggle the next-key Ctrl-prefix flag
  *
  * Visible on mobile only (`md:hidden`). Grid dims drive inline-style
  * `gridTemplateColumns/Rows` so user-customized layouts render without

@@ -101,7 +101,7 @@ export async function registerAuth(
     }
 
     // 2) CLI internal RPC — only reachable from local mac CLI with the
-    //    cliToken file (mode 0600 in ~/.config/ccanywhere/).
+    // cliToken file (mode 0600 in ~/.config/ccanywhere/).
     if (url.startsWith('/api/internal/')) {
       const token = extractBearer(req.headers.authorization);
       if (token !== opts.cliToken) {
@@ -161,7 +161,7 @@ export async function registerAuth(
     }
 
     // Fall back to token session (any user kind via POST /api/auth/token,
-    //  — owner can self-issue and use a token too).
+    // — owner can self-issue and use a token too).
     if (opts.tokenStore !== undefined && opts.userStore !== undefined) {
       const token = opts.tokenStore.verify(sessionId);
       if (token) {

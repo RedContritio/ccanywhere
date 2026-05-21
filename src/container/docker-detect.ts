@@ -21,12 +21,12 @@ export interface DockerDetectorOpts {
 
 /**
  * Detects whether the host docker daemon is reachable. Used by
- * `` D6:
- *   - strict + unavailable → fatal (serve.ts decides)
- *   - fallback + unavailable → override all user.runtime → 'host'
- *   - host-only → detection skipped entirely
+ * `` :
+ * - strict + unavailable → fatal (serve.ts decides)
+ * - fallback + unavailable → override all user.runtime → 'host'
+ * - host-only → detection skipped entirely
  *
- * `detect()` runs `docker info` (cheap, no container spawn). On-going
+ * `detect` runs `docker info` (cheap, no container spawn). On-going
  * health is via `startMonitoring(onChange)` — fires the callback only
  * when status flips (not on every tick).
  */

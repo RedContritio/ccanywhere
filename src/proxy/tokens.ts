@@ -20,7 +20,7 @@ export interface VerifyResult {
 }
 
 const PREFIX = 'cca';
-const DEFAULT_TTL_MS = 5 * 60 * 1000; // D2: 5-min rotation via apiKeyHelper
+const DEFAULT_TTL_MS = 5 * 60 * 1000; // : 5-min rotation via apiKeyHelper
 
 interface Payload {
   readonly uid: string;

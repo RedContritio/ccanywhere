@@ -30,27 +30,27 @@ export interface QuotaWatcherOptions {
   /** Debounce window in ms; defaults to 500. */
   readonly debounceMs?: number;
   /**
-   *  D5: per-user effective runtime map (from
-   * resolveIsolation). When set, `start(session)` looks up the user's
-   * runtime and points the watcher at `<userClaudeRoot>/<username>/
-   * projects/...` for `shared-container` users instead of the owner's
-   * `~/.claude/projects/...`. host runtime users + missing map → legacy
-   * homedir behavior (owner spawn lands jsonl in owner home).
+   * Per-user effective runtime map (from resolveIsolation). When set,
+   * `start(session)` looks up the user's runtime and points the watcher
+   * at `<userClaudeRoot>/<username>/projects/...` for `shared-container`
+   * users instead of the owner's `~/.claude/projects/...`. host runtime
+   * users + missing map → legacy homedir behavior (owner spawn lands
+   * jsonl in owner home).
    */
   readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
   /**
-   *  D5: host root that maps to per-user
-   * `~/.claude` for container users. Required when perUserRuntime maps
-   * any user to 'shared-container'; ignored otherwise.
+   * Host root that maps to per-user `~/.claude` for container users.
+   * Required when perUserRuntime maps any user to 'shared-container';
+   * ignored otherwise.
    */
   readonly userClaudeRoot?: string;
   /**
-   *  B24 fix: container-internal mount point
-   * of hostWorkspace. cc inside container sees cwd at
-   * `<containerWorkspacePath>/<rel>` and encodes that path into its
-   * jsonl directory name. Watcher must translate `session.info.cwd`
-   * (host) → container cwd before calling ccJsonlPathOf, otherwise it
-   * watches a non-existent dir while cc writes to the real one.
+   * Container-internal mount point of hostWorkspace. cc inside container
+   * sees cwd at `<containerWorkspacePath>/<rel>` and encodes that path
+   * into its jsonl directory name. Watcher must translate
+   * `session.info.cwd` (host) → container cwd before calling
+   * ccJsonlPathOf, otherwise it watches a non-existent dir while cc
+   * writes to the real one.
    */
   readonly hostWorkspace?: string;
   readonly containerWorkspacePath?: string;

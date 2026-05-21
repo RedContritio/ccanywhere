@@ -82,7 +82,7 @@
   --warning: #c47a00;
   --danger: #d33a3a;
 
-  /* B35: xterm theme raw values. xterm.js webgl canvas doesn't read
+  /* xterm theme raw values. xterm.js webgl canvas doesn't read
    * CSS vars at render time, so terminal-config.ts reads these via
    * getComputedStyle on mount + theme switch. Defined here so the
    * 8 xterm hex live in the central design token file, not scattered

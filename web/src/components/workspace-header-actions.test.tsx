@@ -71,7 +71,7 @@ describe('SidebarGlobalActions', () => {
 });
 
 describe('DeadHeaderActions', () => {
-  it('renders Resume + delete; no share (per D2)', () => {
+  it('renders Resume + delete; no share', () => {
     render(
       <DeadHeaderActions
         busy={false}

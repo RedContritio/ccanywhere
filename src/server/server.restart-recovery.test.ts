@@ -34,17 +34,17 @@ async function listSessions(
 }
 
 /**
- *  end-to-end: simulates a ccanywhere restart.
+ * end-to-end: simulates a ccanywhere restart.
  *
- *   1. boot server1 (fresh registry dir)
- *   2. POST /api/sessions → creates active session, manager1 spawns PTY
- *   3. simulate shutdown: PTY → SIGINT → onExit writes snapshot;
- *      manager1.detach awaits pending IO; app.close
- *   4. boot server2 with new manager2 + same registry dir
- *   5. manager2.loadDeadStubs replays metadata → session shows up as
- *      dead in GET /api/sessions
- *   6. POST /api/sessions/:id/resume → 201, same id, state=idle,
- *      mode=resume
+ * 1. boot server1 (fresh registry dir)
+ * 2. POST /api/sessions → creates active session, manager1 spawns PTY
+ * 3. simulate shutdown: PTY → SIGINT → onExit writes snapshot;
+ * manager1.detach awaits pending IO; app.close
+ * 4. boot server2 with new manager2 + same registry dir
+ * 5. manager2.loadDeadStubs replays metadata → session shows up as
+ * dead in GET /api/sessions
+ * 6. POST /api/sessions/:id/resume → 201, same id, state=idle,
+ * mode=resume
  */
 describe('restart recovery (server-level)', () => {
   let env: TestProjectsEnv;

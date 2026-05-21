@@ -14,7 +14,7 @@ import {
 
 /**
  * Integration tests for cross-user isolation on the REST surface
- * (#44  + ). Covers cwd guard,
+ * (#44 + ). Covers cwd guard,
  * GET filter, DELETE 404 mask, and per-user ProjectStore resolution
  * (limited user sees only `<guestProjectsRoot>/<username>/`).
  */
@@ -268,7 +268,7 @@ describe('REST API: cross-user isolation (multi-user)', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  //  §6.1: end-to-end positive case — user creates own
+  // §6.1: end-to-end positive case — user creates own
   // project then spawns a session in it (would have hit project_not_found
   // before reframe because sessions.ts used owner singleton store).
   it('POST /api/sessions for own project → 201', async () => {
@@ -293,7 +293,7 @@ describe('REST API: cross-user isolation (multi-user)', () => {
     expect(body.projectId).toBe('p1');
   });
 
-  //  §6.5: owner can self-issue + use a token (auth-multi-user
+  // §6.5: owner can self-issue + use a token (auth-multi-user
   // route no longer hardcodes `kind === 'limited'`). Owner-via-token still
   // sees owner's projects.
   it('owner token login + GET /api/projects → still sees owner projects', async () => {

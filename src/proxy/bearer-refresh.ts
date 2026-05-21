@@ -6,7 +6,7 @@ export interface BearerRefreshDeps {
 }
 
 /**
- *  C5c: `POST /ccanywhere/bearer-refresh`.
+ * `POST /ccanywhere/bearer-refresh`.
  *
  * cc's `apiKeyHelper` rotates the short-TTL ANTHROPIC_AUTH_TOKEN when
  * the previous one 401s upstream. The helper script in the container
@@ -20,8 +20,8 @@ export interface BearerRefreshDeps {
  *
  * Threat model: helper bearer leak ⇒ attacker can refresh short bearers
  * indefinitely while the long token's TTL remains. Cost is still
- * gated by per-user quota in the forward path ( D3);
- * D6 trust model accepts this (alt-account-only shared container).
+ * gated by per-user quota in the forward path ;
+ * trust model accepts this (alt-account-only shared container).
  */
 export function registerBearerRefreshRoute(
   app: FastifyInstance,

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Visual screenshots. Each test snaps a
- * meaningful UI state to `test-results/visual-*.png`. Author Read()s the
+ * meaningful UI state to `test-results/visual-*.png`. Author Reads the
  * PNGs and does visual inspection — replaces the legacy "user opens
  * browser and checks visually" loop (see feedback_e2e_visual_verify.md).
  *
@@ -77,7 +77,7 @@ test.describe('design-system visual', () => {
   });
 
   test('login page idle (unpaired) dark mode', async ({ page, context }) => {
-    // Clear the planted session cookie so probeSession() returns null and
+    // Clear the planted session cookie so probeSession returns null and
     // LoginPage settles in `idle / suggestLogin: false` mode (no
     // localStorage deviceId in a fresh BrowserContext).
     await context.clearCookies();
@@ -94,7 +94,7 @@ test.describe('design-system visual', () => {
     // RequireAuth gates /settings on auth state held in zustand-persist
     // localStorage, not the cookie. A fresh BrowserContext has no
     // localStorage, so a direct `goto('/settings')` bounces to /login. Hit
-    // /workspace first so probeSession() populates the limited-user state,
+    // /workspace first so probeSession populates the limited-user state,
     // then navigate to /settings.
     await page.goto('/workspace');
     await page.waitForURL(/\/workspace/);
@@ -114,7 +114,7 @@ test.describe('design-system visual', () => {
   });
 
   test('stale session id shows friendly recovery pane', async ({ page }) => {
-    // Hit /workspace first so probeSession() hydrates the limited-user
+    // Hit /workspace first so probeSession hydrates the limited-user
     // state into zustand-persist (RequireAuth would otherwise bounce a
     // direct goto to /login since fresh BrowserContext has empty
     // localStorage). See the /settings test above for the same pattern.
@@ -257,11 +257,10 @@ test.describe('design-system visual', () => {
     await expect(page.getByText('prompt > ls').first()).toBeVisible();
   });
 
-  //  P5 regression: dead pane plain-text render
-  // on mobile viewport. Verifies sidebar drawer ☰ stays reachable (was
-  // broken by P4 overlay z-index+pointer-events) and the snapshot text
-  // is selectable via Range API (proxy for native long-press selection
-  // which playwright can't simulate at the OS level).
+  // Dead pane render on mobile viewport. Verifies sidebar drawer ☰ stays
+  // reachable (was broken by overlay z-index+pointer-events) and the
+  // snapshot text is selectable via Range API (proxy for native long-press
+  // selection which playwright can't simulate at the OS level).
   test.describe('mobile (iPhone 13)', () => {
     // Hand-set the iPhone 13 properties instead of spreading
     // devices['iPhone 13'] — the device descriptor includes
@@ -276,7 +275,7 @@ test.describe('design-system visual', () => {
       hasTouch: iphone13.hasTouch,
     });
 
-    test('dead session pane (P7 DOM renderer + capture-phase mouse stop) — sidebar reachable + text selectable', async ({
+    test('dead session pane (DOM renderer + capture-phase mouse stop) — sidebar reachable + text selectable', async ({
       page,
     }) => {
       await page.goto('/workspace');
@@ -327,9 +326,9 @@ test.describe('design-system visual', () => {
         fullPage: false,
       });
 
-      // P4 broke this: overlay z-index+pointer-events covered/intercepted
-      // the header sibling area on mobile, making the drawer button hard
-      // to reach. P5 has no overlay → ☰ stays clickable.
+      // The overlay z-index+pointer-events covered/intercepted the header
+      // sibling area on mobile, making the drawer button hard to reach.
+      // Current approach has no overlay → ☰ stays clickable.
       const hamburger = page.getByRole('button', { name: '打开侧边栏' });
       await expect(hamburger).toBeVisible();
 
@@ -343,11 +342,11 @@ test.describe('design-system visual', () => {
         timeout: 5000,
       });
 
-      // Selectability proxy (P6): xterm's default DOM renderer puts
+      // Selectability proxy: xterm's default DOM renderer puts
       // each cell in a <span>; xterm-overrides.css unlocks user-select
       // for [data-dead-pane="true"] descendants. Programmatically
       // selecting the xterm-rows container via Range and reading
-      // getSelection() back confirms the spans are real native HTML
+      // getSelection back confirms the spans are real native HTML
       // text and selectable. Native long-press is OS-level and not
       // driveable from playwright, but Range working means the element
       // is genuinely selectable end-to-end.
@@ -366,9 +365,10 @@ test.describe('design-system visual', () => {
       expect(selectionText).toContain('prompt > ls');
 
       // Tap the drawer button → confirms touch routing reaches header
-      // (P4 overlay would have intercepted). Sheet portal content
-      // mounts to document.body with `data-slot="sheet-content"`
-      //       await hamburger.tap();
+      // (overlay would have intercepted in previous approach). Sheet
+      // portal content mounts to document.body with
+      // `data-slot="sheet-content"`.
+      // await hamburger.tap;
       await expect(
         page.locator('[data-slot="sheet-content"]'),
       ).toBeVisible({ timeout: 2000 });

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Visual check for the chat-bubble share view (
- * P1 polish). Targets a freshly-minted share URL on prod — server-
+ * polish). Targets a freshly-minted share URL on prod — server-
  * rendered HTML, no SPA mount, public path (no auth cookie needed).
  *
  * The share code is read from CCANYWHERE_SHARE_CODE env so the test

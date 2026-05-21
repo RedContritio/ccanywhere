@@ -2,19 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { SessionManager } from './manager.js';
 
 /**
- * Regression for .
+ * Regression: detach-drain ordering.
  *
- * Background: detach() used to do `await Promise.allSettled([...pendingWrites])`
+ * Background: detach used to do `await Promise.allSettled([...pendingWrites])`
  * — a single snapshot. handleSessionExit (called from pty.onExit, which fires
- * during detach's await window if markDeleted's fire-and-forget kill() races)
+ * during detach's await window if markDeleted's fire-and-forget kill races)
  * uses trackWrite to enqueue post-exit writes (save + saveScreen). Those
  * writes were never awaited by detach, leaking into the moment after detach
  * returned — and racing readFile against fs.writeFile's open(O_TRUNC)→write
  * window, causing test reads to land on a zero-byte file (SyntaxError on
- * JSON.parse). Production shutdown (cli/serve.ts manager.detach()) had the
+ * JSON.parse). Production shutdown (cli/serve.ts manager.detach) had the
  * same vulnerability.
  *
- * Fix: detach() now loops until pendingWrites is empty. This test directly
+ * Fix: detach now loops until pendingWrites is empty. This test directly
  * exercises that loop without depending on real PTY timing — trackWrite is
  * used to schedule a "late" write from inside an "early" write's settling
  * callback, mirroring what handleSessionExit does in the real path.

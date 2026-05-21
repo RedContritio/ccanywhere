@@ -68,7 +68,7 @@ export function WorkspacePage(): JSX.Element {
   }, [fetchProjects, fetchSessions, loadActiveSession]);
 
   const onLogout = async (): Promise<void> => {
-    // Clear the server-side cookie first; otherwise probeSession() on the
+    // Clear the server-side cookie first; otherwise probeSession on the
     // login page still sees a valid session and bounces straight back to
     // /workspace, where RequireAuth (deviceId === null) bounces it to
     // /login again — infinite loop, blank screen.

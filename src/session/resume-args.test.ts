@@ -31,9 +31,9 @@ describe('buildResumeArgs', () => {
     ]);
   });
 
-  // Regression guard for P7 of : cc rejects
-  // --resume X --session-id X as conflicting. Asserting absence of
-  // --session-id keeps that bug from sneaking back in.
+  // Regression guard: cc rejects --resume X --session-id X as
+  // conflicting. Asserting absence of --session-id keeps that bug from
+  // sneaking back in.
   it('never emits --session-id flag', () => {
     const args1 = buildResumeArgs({ webId: 'w1', resumeSessionId: null });
     const args2 = buildResumeArgs({ webId: 'w1', resumeSessionId: 'cc_X' });
@@ -41,7 +41,7 @@ describe('buildResumeArgs', () => {
     expect(args2).not.toContain('--session-id');
   });
 
-  // Regression guard for P8: web id and cc jsonl id diverge for
+  // Regression guard: web id and cc jsonl id diverge for
   // resume-mode sessions. The args must use the cc jsonl id, not the
   // web id (cc finds no jsonl named after the web id → auto-exit).
   it('uses cc jsonl id rather than web id when they differ', () => {

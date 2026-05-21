@@ -4,7 +4,7 @@ const CTN = 'p3b-exec-test';
 const IMAGE = process.env.P3B_IMAGE ?? 'python:3.13-slim';
 const N = Number(process.env.P3B_N ?? 10);
 
-console.log(`# P3.5: docker exec latency into long-running container`);
+console.log(`# docker exec latency into long-running container`);
 console.log(`# image: ${IMAGE}, container: ${CTN}, runs: ${N}\n`);
 
 try {

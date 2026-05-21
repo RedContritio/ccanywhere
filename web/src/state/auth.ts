@@ -34,7 +34,7 @@ export interface AuthSnapshot {
    * the local fingerprint of "I'm currently logged in as X".
    *
    * For owner this is the device id; for limited this is the user id.
-   * Cleared by `clearSession()` — RequireAuth then auto-redirects to
+   * Cleared by `clearSession` — RequireAuth then auto-redirects to
    * /login, where the stored credential slots below drive the UI.
    */
   deviceId: string | null;
@@ -45,7 +45,7 @@ export interface AuthSnapshot {
    * Heuristic: epoch-ms of the last successful auth. UI uses it to
    * decide whether to skip an immediate /api/auth/me probe; it isn't
    * trusted by the server. Always cleared together with the active
-   * session on `clearSession()`.
+   * session on `clearSession`.
    */
   verifiedAt: number | null;
 
@@ -135,7 +135,7 @@ const initial: AuthSnapshot = {
 
 /**
  * Add or refresh one token under one limited user. Dedup is by
- * **username** (not userId) per B19: if the operator deletes + recreates
+ * **username** (not userId): if the operator deletes + recreates
  * a user, the server picks a fresh userId for the same name, but the
  * login page should still show one entry, not two. Token-level dedup is
  * by plaintext (same plaintext just bumps expiresAt).
@@ -189,7 +189,7 @@ export const useAuthStore = create<AuthStore>()(
               ? // Probe rehydration: we know the user is logged in but
                 // never saw the plaintext token. Make sure the user has
                 // a record (with empty token list if new), don't fake
-                // tokens we never observed. Dedup by username (B19).
+                // tokens we never observed. Dedup by username.
                 s.limitedUsers.some((u) => u.username === username)
                 ? s.limitedUsers.map((u) =>
                     u.username === username ? { ...u, userId } : u,
@@ -245,10 +245,9 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'ccanywhere.auth',
       storage: createJSONStorage(() => localStorage),
-      //  B19: bump to v2 so existing localStorage runs the
-      // dedupe-by-username migration once. Operators who deleted +
-      // recreated a user (or had pre-dedup duplicates) collapse to one
-      // entry on next page load.
+      // bump to v2 so existing localStorage runs the dedupe-by-username
+      // migration once. Operators who deleted + recreated a user (or had
+      // pre-dedup duplicates) collapse to one entry on next page load.
       version: 2,
       migrate: (persisted, fromVersion) => {
         const s = (persisted ?? {}) as Partial<AuthSnapshot>;

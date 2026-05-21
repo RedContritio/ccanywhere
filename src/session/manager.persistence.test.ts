@@ -53,9 +53,9 @@ describe('SessionManager × persistence', () => {
     await flush(mgr);
     expect(existsSync(join(dir, `${session.info.id}.json`))).toBe(true);
 
-    // kill() resolves when pty.onExit fires (see session-impl.ts); by
+    // kill resolves when pty.onExit fires (see session-impl.ts); by
     // then handleSessionExit has already migrated the row + queued
-    // saveScreen. flush() drains that pending IO.
+    // saveScreen. flush drains that pending IO.
     await session.kill();
     await flush(mgr);
 

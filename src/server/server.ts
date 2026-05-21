@@ -58,7 +58,7 @@ export interface BuildServerOptions {
   readonly projectStore: ProjectStore;
   readonly deviceStore: DeviceStore;
   /**
-   *  (#44). Optional during the multi-step rollout — wired to
+   * (#44). Optional during the multi-step rollout — wired to
    * routes in step 3 (auth改造). Once wired, fixtures will need to provide
    * a real instance.
    */
@@ -81,19 +81,19 @@ export interface BuildServerOptions {
    */
   readonly isolation?: IsolationStatus;
   /**
-   *  C5: effective per-user runtime map from
-   * resolveIsolation. Lookup by username; missing = host. sessions.ts
-   * + sessions-resume.ts use this to decide host vs container dispatch.
+   * Effective per-user runtime map from resolveIsolation. Lookup by
+   * username; missing = host. sessions.ts + sessions-resume.ts use this
+   * to decide host vs container dispatch.
    */
   readonly perUserRuntime?: ReadonlyMap<string, 'host' | 'shared-container'>;
   /**
-   *  C5: deps for shared-container session
-   * spawn. undefined = no container path available (sessions degrade
-   * to host even if perUserRuntime says shared). C6 wires via serve.ts
-   * after docker-detect + SharedContainerManager.ensureRunning.
+   * Deps for shared-container session spawn. undefined = no container
+   * path available (sessions degrade to host even if perUserRuntime says
+   * shared). Wired via serve.ts after docker-detect +
+   * SharedContainerManager.ensureRunning.
    */
   readonly containerDeps?: SessionContainerDeps;
-  /**  D5: host root mapped to per-user ~/.claude in containers; forwarded to QuotaWatcher. */
+  /** Host root mapped to per-user ~/.claude in containers; forwarded to QuotaWatcher. */
   readonly userClaudeRoot?: string;
   readonly historyRoot?: string;
   readonly idempotencyTtlMs?: number;
@@ -115,9 +115,9 @@ export interface BuildServerOptions {
 
 function defaultWebDistDir(): string | null {
   // Candidates ordered by likelihood:
-  // 1. cwd/web/dist  — production: launchd / systemd sets WorkingDirectory to repo root
-  // 2. <cli.js>/../web/dist  — bundled output: dist/cli.js → repo/web/dist
-  // 3. <server.ts>/../../web/dist  — dev (tsx): src/server/server.ts → repo/web/dist
+  // 1. cwd/web/dist — production: launchd / systemd sets WorkingDirectory to repo root
+  // 2. <cli.js>/../web/dist — bundled output: dist/cli.js → repo/web/dist
+  // 3. <server.ts>/../../web/dist — dev (tsx): src/server/server.ts → repo/web/dist
   const candidates = [
     resolve(process.cwd(), 'web/dist'),
     resolve(fileURLToPath(import.meta.url), '../../web/dist'),

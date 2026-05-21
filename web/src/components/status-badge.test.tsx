@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { StatusBadge } from './status-badge.js';
 
 describe('StatusBadge', () => {
-  // B27: text variant renders BOTH the mono
-  // label (desktop, `md:inline`) and the Chinese label (mobile, `md:hidden`)
+  // Text variant renders BOTH the mono label (desktop, `md:inline`) and
+  // the Chinese label (mobile, `md:hidden`)
   // — the inner mono <span> carries the english text, the inner zh <span>
   // carries 中文. Color / aria / custom className live on the outer wrapper.
   it('renders all 4 SessionState mono labels (desktop variant)', () => {
@@ -29,7 +29,7 @@ describe('StatusBadge', () => {
     expect(screen.getByText('已结束')).toBeInTheDocument();
   });
 
-  it('applies color class on the outer wrapper (per DP7 mapping)', () => {
+  it('applies color class on the outer wrapper (per status mapping)', () => {
     const { rerender } = render(<StatusBadge state="starting" />);
     expect(screen.getByText('starting').parentElement?.className).toMatch(/text-brand/);
     rerender(<StatusBadge state="idle" />);

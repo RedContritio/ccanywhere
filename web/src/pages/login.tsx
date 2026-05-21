@@ -180,10 +180,10 @@ export function LoginPage(): JSX.Element {
   // Click a stored user → try its tokens newest-expiry-first.
   // - invalid token → forget it, move to next token
   // - transient (network glitch / 5xx, after backoff cap) → stop, KEEP
-  //   the token, surface "network issue, please retry"
+  // the token, surface "network issue, please retry"
   // - all tokens exhausted as invalid → KEEP the user record (with
-  //   empty tokens) so the device remembers it's been used here;
-  //   surface a hint nudging the user to paste a fresh token.
+  // empty tokens) so the device remembers it's been used here;
+  // surface a hint nudging the user to paste a fresh token.
   const onPickUser = (user: LimitedUserRecord): void => {
     if (user.tokens.length === 0) {
       setTokenInput('');

@@ -95,7 +95,7 @@ describe('collectDiag', () => {
   );
 
   it('omits userKind when auth store has no kind (logged out)', () => {
-    // resetAuthStoreForTest() in beforeEach already cleared kind to null.
+    // resetAuthStoreForTest in beforeEach already cleared kind to null.
     const d = collectDiag();
     expect(d.app?.userKind).toBeUndefined();
   });

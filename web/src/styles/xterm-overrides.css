@@ -18,7 +18,7 @@
   overscroll-behavior: contain;
 }
 
-/* m-dead-pane-touch-select P6: xterm.css sets `.xterm { user-select:
+/* xterm.css sets `.xterm { user-select:
  * none }` which kills native HTML selection on every cell, regardless
  * of renderer. Dead pane uses xterm's default DOM renderer (no WebGL/
  * Canvas addon loaded) so each cell is a real <span> with inline fg/bg

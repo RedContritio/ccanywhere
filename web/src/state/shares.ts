@@ -4,7 +4,7 @@ import { api } from '../api.js';
 
 /**
  * Share metadata as exposed by the server. `expiresAt: null` = never
- * expire (per D3 + body `ttlMs: null`).
+ * expire (body `ttlMs: null`).
  */
 export interface Share {
   readonly code: string;

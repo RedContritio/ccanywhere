@@ -49,7 +49,7 @@ export function isValidProjectName(name: string): boolean {
 /**
  * Validate projectsRoot at startup. Creates the directory if missing.
  * Throws on read failure (no point continuing); returns `{ writable }` so
- * the caller can warn but keep running when create() will fail later.
+ * the caller can warn but keep running when create will fail later.
  */
 export function ensureProjectsRoot(projectsRoot: string): { readonly writable: boolean } {
   const path = resolve(projectsRoot);

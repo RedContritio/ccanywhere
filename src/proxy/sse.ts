@@ -8,7 +8,7 @@ import { meterResponse, type UpstreamUsage } from './metering.js';
  *
  * `content-encoding` is stripped because undici's fetch implementation
  * transparently decompresses gzip/br/deflate response bodies — by the
- * time we read `await arrayBuffer()` / `body.getReader()`, the bytes
+ * time we read `await arrayBuffer` / `body.getReader`, the bytes
  * are already plaintext. Forwarding the upstream `content-encoding:
  * gzip` header would tell cc to decompress what is already plain text
  * (ZlibError on cc side, surfaced as "Unable to connect to API").
@@ -115,8 +115,8 @@ export function splitSseChunks(buf: string): {
 /**
  * Pull `event: <type>` + `data: <json>` from one SSE block, then update
  * accum / model based on Anthropic event shapes:
- *   message_start: message.model + message.usage (input_tokens etc).
- *   message_delta: usage (cumulative output_tokens).
+ * message_start: message.model + message.usage (input_tokens etc).
+ * message_delta: usage (cumulative output_tokens).
  * Other events (content_block_*, ping, message_stop) ignored.
  * Malformed blocks or unparseable JSON: silently skip.
  */

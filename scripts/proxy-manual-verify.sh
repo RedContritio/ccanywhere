@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
-# proxy-manual-verify.sh — D7 mitigation: ship 后没真实流量走代理
-# (owner 路径绕过, user 容器化是 Phase 2). 本脚本起 proxy 临时颁发
+# proxy-manual-verify.sh — mitigation: ship 后没真实流量走代理
+# (owner 路径绕过, user 容器化暂不覆盖). 本脚本起 proxy 临时颁发
 # bearer + claude --print 走代理验证完整链路.
 #
 # 用法:
-#   ./scripts/proxy-manual-verify.sh [--keep]
+# ./scripts/proxy-manual-verify.sh [--keep]
 #
-#   --keep   不 kill 后台 proxy (留着 owner 手动 dogfood 用)
+# --keep 不 kill 后台 proxy (留着 owner 手动 dogfood 用)
 #
 # 前置:
-#   1. pnpm build:all 已跑过 (dist/cli.js 就绪)
-#   2. ~/.config/ccanywhere/anthropic-credentials.json 含 owner key
-#      (mode 0600), 内容 { "apiKey": "sk-ant-..." }
-#   3. ccanywhere 主 server 已经跑过, ~/.config/ccanywhere/users.json
-#      含至少一个 user record (验证 owner 即可)
+# 1. pnpm build:all 已跑过 (dist/cli.js 就绪)
+# 2. ~/.config/ccanywhere/anthropic-credentials.json 含 owner key
+# (mode 0600), 内容 { "apiKey": "sk-ant-..." }
+# 3. ccanywhere 主 server 已经跑过, ~/.config/ccanywhere/users.json
+# 含至少一个 user record (验证 owner 即可)
 
 set -euo pipefail
 
@@ -105,7 +105,7 @@ CLAUDE_OUT=$(ANTHROPIC_BASE_URL="http://127.0.0.1:$PROXY_PORT" \
   claude --print "reply only with the word OK" 2>&1 | head -5 || true)
 echo "  claude output: $CLAUDE_OUT"
 
-# 5. grep proxy log for token leak (D4 self-test 跑过, 这里再 verify)
+# 5. grep proxy log for token leak (redact self-test 跑过, 这里再 verify)
 echo "[4/4] checking proxy log for bearer leak..."
 if grep -F "$BEARER" /tmp/proxy-manual-verify.log > /dev/null 2>&1; then
   echo "  FAIL: bearer leaked in proxy log!" >&2

@@ -19,11 +19,11 @@ export interface ListBaseProps<T> {
  * resume session pickers, and other single-select scenarios inside
  * dialogs and pages.
  *
- * Visuals (per D6 / DP7):
- *  - flat list with 1px borders, no shadow, no card chrome
- *  - selected row uses `bg-muted` (= bg-elevated) + brand-text accent
- *  - primary slot uses sans (default); secondary slot uses mono for data
- *    values like timestamps / session ids (F1 字体硬规则)
+ * Visuals:
+ * - flat list with 1px borders, no shadow, no card chrome
+ * - selected row uses `bg-muted` (= bg-elevated) + brand-text accent
+ * - primary slot uses sans (default); secondary slot uses mono for data
+ * values like timestamps / session ids (F1 字体硬规则)
  */
 export function ListBase<T>({
   items,

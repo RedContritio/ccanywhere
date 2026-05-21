@@ -95,7 +95,7 @@ export async function registerProjectRoutes(
         .send({ error: { code: 'not_found', message: 'project not found' } });
       return;
     }
-    // hide() is idempotent: re-DELETE returns 204 too. Hidden = soft-delete,
+    // hide is idempotent: re-DELETE returns 204 too. Hidden = soft-delete,
     // directory stays on disk; restore by removing id from projects-state.json.
     store.hide(id);
     await reply.code(204).send();

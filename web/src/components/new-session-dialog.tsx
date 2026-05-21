@@ -56,8 +56,8 @@ export function NewSessionDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 'asc' is the user-intuitive default per field:
-  //   modified asc = most-recently-modified first
-  //   name     asc = a → z
+  // modified asc = most-recently-modified first
+  // name asc = a → z
   const [sortField, setSortField] = useState<ProjectSortField>('modified');
   const [sortDir, setSortDir] = useState<ProjectSortDir>('asc');
 

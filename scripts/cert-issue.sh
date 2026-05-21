@@ -2,10 +2,10 @@
 # 一键申请 Let's Encrypt 证书 + 装到 ccanywhere 期望的路径。
 #
 # 前置：
-#   export CCANYWHERE_DOMAIN='cc.your-domain.com'
-#   export CCANYWHERE_ACME_EMAIL='you@your-domain.com'
-#   export Tencent_SecretId='...'
-#   export Tencent_SecretKey='...'
+# export CCANYWHERE_DOMAIN='cc.your-domain.com'
+# export CCANYWHERE_ACME_EMAIL='you@your-domain.com'
+# export Tencent_SecretId='...'
+# export Tencent_SecretKey='...'
 #
 # 续签：每天的 launchd timer 跑 `acme.sh --cron` 自动检查；本脚本只用
 # 于第一次申请。续签时 acme.sh 从 ~/.acme.sh/account.conf 读凭证。

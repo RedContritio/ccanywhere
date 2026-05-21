@@ -22,7 +22,7 @@ export interface SharedContainerOpts {
   readonly name: string;
   /**
    * Pass `--cap-add NET_ADMIN` so entrypoint's iptables REJECT
-   * api.anthropic.com can install (D5). Default true; tests turn off.
+   * api.anthropic.com can install. Default true; tests turn off.
    */
   readonly capAddNetAdmin?: boolean;
   /**
@@ -37,13 +37,13 @@ export interface SharedContainerOpts {
 /**
  * Lifecycle wrapper around `ccanywhere/user-runtime` shared container.
  *
- * Idempotent. ccanywhere main server calls `ensureRunning()` at boot
- * (after docker-detect says available); `stop()` at shutdown. Per-
- * session spawn (`docker exec`) is C4 — this module only owns the
+ * Idempotent. ccanywhere main server calls `ensureRunning` at boot
+ * (after docker-detect says available); `stop` at shutdown. Per-
+ * session spawn (`docker exec`) is — this module only owns the
  * outer container lifecycle.
  *
- * D8: container crash recovery comes from docker's `--restart unless-
- * stopped` (set in ensureRunning) + ccanywhere `healthCheck()` poll.
+ * container crash recovery comes from docker's `--restart unless-
+ * stopped` (set in ensureRunning) + ccanywhere `healthCheck` poll.
  * Repeated unhealthy state outside this module's concern — let
  * DockerDetector + ccanywhere serve.ts decide what to do.
  */

@@ -4,7 +4,7 @@ const IMAGE = process.env.P3_IMAGE ?? 'python:3.13-slim';
 const N = Number(process.env.P3_N ?? 10);
 const CMD = `docker run --rm ${IMAGE} true`;
 
-console.log(`# P3 cold start prototype`);
+console.log(`# cold start prototype`);
 console.log(`# image: ${IMAGE}`);
 console.log(`# cmd:   ${CMD}`);
 console.log(`# runs:  ${N}\n`);

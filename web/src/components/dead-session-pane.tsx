@@ -19,27 +19,27 @@ interface Props {
  * native mobile selection.
  *
  * History:
- *   - P3 synthetic mouse events for long-press; xterm canvas pixels
- *     aren't native HTML text so mobile got no system handles.
- *   - P4 transparent <pre> overlay on canvas; sub-pixel alignment
- *     failed at dpr=3.25 + z-index/pointer-events broke sibling layout.
- *   - P5 pure plain-text <pre>, no xterm; lost ANSI colors and user
- *     reported the text layer still felt misaligned at edges.
- *   - P6 xterm's default DOM renderer (no WebGL/Canvas addon load) —
- *     each cell is a real <span> with inline fg/bg, xterm's own
- *     metrics guarantee alignment, ANSI colors preserved. Overriding
- *     xterm.css's `.xterm { user-select: none }` via xterm-overrides
- *     scoped to `[data-dead-pane="true"]` unlocks the spans for
- *     selection. User reported "偶尔无法选中".
- *   - P7 (current): capture-phase mouse* stop. xterm SelectionService
- *     registers a mousedown listener on `.xterm` that calls
- *     `event.preventDefault()` (SelectionService.ts:467) to block
- *     browser native selection in favor of its own canvas-overlay
- *     selection. Mobile touch→mouse translation fires mousedown and
- *     xterm wins the race, swallowing native selection. Stopping
- *     mouse* events at capture phase before they reach xterm cuts
- *     this — touch events are untouched so OS-level long-press still
- *     drives selection directly on the DOM spans.
+ * - synthetic mouse events for long-press; xterm canvas pixels
+ * aren't native HTML text so mobile got no system handles.
+ * - transparent <pre> overlay on canvas; sub-pixel alignment
+ * failed at dpr=3.25 + z-index/pointer-events broke sibling layout.
+ * - pure plain-text <pre>, no xterm; lost ANSI colors and user
+ * reported the text layer still felt misaligned at edges.
+ * - xterm's default DOM renderer (no WebGL/Canvas addon load) —
+ * each cell is a real <span> with inline fg/bg, xterm's own
+ * metrics guarantee alignment, ANSI colors preserved. Overriding
+ * xterm.css's `.xterm { user-select: none }` via xterm-overrides
+ * scoped to `[data-dead-pane="true"]` unlocks the spans for
+ * selection. User reported "偶尔无法选中".
+ * - (current): capture-phase mouse* stop. xterm SelectionService
+ * registers a mousedown listener on `.xterm` that calls
+ * `event.preventDefault` (SelectionService.ts:467) to block
+ * browser native selection in favor of its own canvas-overlay
+ * selection. Mobile touch→mouse translation fires mousedown and
+ * xterm wins the race, swallowing native selection. Stopping
+ * mouse* events at capture phase before they reach xterm cuts
+ * this — touch events are untouched so OS-level long-press still
+ * drives selection directly on the DOM spans.
  *
  * Net: no synthetic events, no overlay, no two-layer alignment, no
  * race. Mobile native long-press selection works reliably on the
@@ -100,13 +100,13 @@ export function DeadSessionSnapshot({ sessionId }: Props): JSX.Element {
       term = t;
     })();
 
-    //  P7: xterm's SelectionService registers a
-    // mousedown listener on `.xterm` that calls `event.preventDefault()`
-    // (SelectionService.ts:467) to block "regular" browser selection in
-    // favor of its own canvas-overlay selection. P6 enabled user-select
-    // on the spans, but on mobile touch→mouse translation fires
-    // mousedown and xterm's listener wins the race, swallowing the
-    // selection. User saw this as "偶尔无法选中".
+    // xterm's SelectionService registers a mousedown listener on `.xterm`
+    // that calls `event.preventDefault` (SelectionService.ts:467) to
+    // block "regular" browser selection in favor of its own canvas-overlay
+    // selection. The DOM renderer enabled user-select on the spans, but
+    // on mobile touch→mouse translation fires mousedown and xterm's
+    // listener wins the race, swallowing the selection. User saw this as
+    // "偶尔无法选中".
     //
     // Stop mouse* events at capture phase before they reach xterm. The
     // helper textarea is already disabled, dead pane has no real mouse

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 /**
  * Right-slot icons for an active terminal session header. Only contextual
  * (per-current-session) actions live here — global config (settings,
- * quota) moved to the sidebar in .
+ * quota) moved to the sidebar.
  */
 export function ActiveHeaderIcons({
   onShare,
@@ -41,7 +41,7 @@ export function ActiveHeaderIcons({
 /**
  * Sidebar bottom row: global config entrypoints (settings / quota /
  * feedback). Sits below the session list — these are user-level, not
- * tied to any current session.  moved them out
+ * tied to any current session. moved them out
  * of the topbar so per-session and global actions are visually split.
  */
 export function SidebarGlobalActions({

@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import type { ToolbarLayout } from '../components/toolbar-layout.js';
 
 /**
- * `api()` only speaks GET/POST/DELETE; preferences + active-session use
+ * `api` only speaks GET/POST/DELETE; preferences + active-session use
  * PUT. Reach for fetch directly so we don't have to widen the shared
  * helper for two callers.
  */
@@ -120,7 +120,7 @@ export const useActiveSessionStore = create<ActiveSessionState & ActiveSessionAc
         await apiPut<ActiveSessionResponse>('/api/me/active-session', { sessionId });
       } catch {
         // Best effort — local store already reflects the user's intent;
-        // next page load will reconcile via load() if the PUT failed.
+        // next page load will reconcile via load if the PUT failed.
       }
     },
     resetLocal: () => set({ ...activeSessionInitial }),

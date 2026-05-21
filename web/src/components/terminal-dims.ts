@@ -16,7 +16,7 @@ interface FitInputs {
   readonly cellW: number;
   readonly cellH: number;
   /** parentElement.clientWidth/Height — the same element FitAddon reads
-   *  getComputedStyle on. Fractional in some browsers / dpr settings. */
+   * getComputedStyle on. Fractional in some browsers / dpr settings. */
   readonly containerW: number;
   readonly containerH: number;
   /** Inner padding subtracted by FitAddon before dividing. */
@@ -63,7 +63,7 @@ function captureFitInputs(term: Terminal): FitInputs | null {
 }
 
 /**
- * After a fit.fit() runs, record the inputs and check whether the post-fit
+ * After a fit.fit runs, record the inputs and check whether the post-fit
  * cols × cellW exceeds the usable width — that's the off-by-one signature
  * (cc draws into N columns but xterm physically renders into N-1 because
  * the Nth overflows the container).

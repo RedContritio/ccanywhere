@@ -7,16 +7,16 @@ import { cn } from '@/lib/utils';
  * (per F7)。
  *
  * 两种 variant：
- *  - `text` (default)：mono 文字 (idle / busy / dead / starting)，
- *    用在 session-list 行内（紧凑数据视图，需明确字面状态）
- *  - `dot`：彩色圆点，用在 terminal header（紧贴 project 名，sans 一
- *    行，避免 mono/sans 视觉混排冲突）
+ * - `text` (default)：mono 文字 (idle / busy / dead / starting)，
+ * 用在 session-list 行内（紧凑数据视图，需明确字面状态）
+ * - `dot`：彩色圆点，用在 terminal header（紧贴 project 名，sans 一
+ * 行，避免 mono/sans 视觉混排冲突）
  *
  * 颜色映射（两种 variant 共享）：
- *  - starting → brand (蓝紫，准备中)
- *  - idle     → fg-muted (静默)
- *  - busy     → warning (琥珀，运行中)
- *  - dead     → danger (红，已死)
+ * - starting → brand (蓝紫，准备中)
+ * - idle → fg-muted (静默)
+ * - busy → warning (琥珀，运行中)
+ * - dead → danger (红，已死)
  */
 const stateLabel: Record<SessionState, string> = {
   starting: 'starting',
@@ -25,9 +25,9 @@ const stateLabel: Record<SessionState, string> = {
   dead: 'dead',
 };
 
-//  (B27): mobile users (often limited e2e users
-// not familiar with shell jargon) get the Chinese variant; desktop keeps
-// the mono `idle / busy / ...` for power users / tighter info density.
+// Mobile users (often limited e2e users not familiar with shell jargon)
+// get the Chinese variant; desktop keeps the mono `idle / busy / ...`
+// for power users / tighter info density.
 const stateLabelZh: Record<SessionState, string> = {
   starting: '启动中',
   idle: '空闲',

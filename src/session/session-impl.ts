@@ -50,9 +50,9 @@ export class SessionImpl implements Session {
     public readonly screenState: ScreenState,
     /**
      * Invoked once on PTY exit with the last-visible-frame text from
-     * screenState.snapshot(). Caller (SessionManager) persists this to
+     * screenState.snapshot. Caller (SessionManager) persists this to
      * the registry so the workspace UI can show user the final screen
-     * + a Resume button after restart. Captured BEFORE dispose() so the
+     * + a Resume button after restart. Captured BEFORE dispose so the
      * headless buffer is still readable.
      */
     private readonly onSnapshotReady?: (text: string) => void,
@@ -62,7 +62,7 @@ export class SessionImpl implements Session {
       this.screenState.feed(data);
       this.lastDataAt = Date.now();
       // Append-only: every PTY chunk for the lifetime of the session.
-      // Memory bound is the session itself — exit() releases this array
+      // Memory bound is the session itself — exit releases this array
       // along with the rest of SessionImpl.
       this._recentDataChunks.push({
         ts: this.lastDataAt,

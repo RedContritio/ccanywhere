@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   /** Plain string or error object — Error.message is read; anything else
-   * is rendered via String(). */
+   * is rendered via String. */
   readonly error: string | Error | unknown;
   readonly retry?: ReactNode;
   readonly className?: string;

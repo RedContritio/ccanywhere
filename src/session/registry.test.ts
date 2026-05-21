@@ -158,12 +158,11 @@ describe('SessionRegistry', () => {
     expect(persisted!.lastScreen).toBe('');
   });
 
-  //  (B10) regression: two concurrent writes to
-  // the same <id>.json used to be able to interleave truncate + partial
-  // write, corrupting the file. Per-id chain in registry now serializes
-  // them — final state MUST be a valid JSON matching the last issued
-  // payload, never a parse error.
-  it('serializes concurrent writes to the same id (regression: B10)', async () => {
+  // Regression: two concurrent writes to the same <id>.json used to be
+  // able to interleave truncate + partial write, corrupting the file.
+  // Per-id chain in registry now serializes them — final state MUST be a
+  // valid JSON matching the last issued payload, never a parse error.
+  it('serializes concurrent writes to the same id (regression: write-queue ordering)', async () => {
     const id = 'race';
     const promises: Promise<void>[] = [];
     for (let i = 0; i < 100; i++) {

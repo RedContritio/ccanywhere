@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import { type Share, useSharesStore } from '../state/shares.js';
 
 /**
- * "我的分享" section for /settings ( D10).
+ * "我的分享" section for /settings.
  *
  * Lists the caller's shares newest-first with copy / delete actions.
  * Delete hits `DELETE /api/share/:code` — the snapshot 立即 404 from
- * origin, but per D7 the immutable cache means any already-cached
- * viewer can still see it. The UI warning makes this clear.
+ * origin, but the immutable cache means any already-cached viewer can
+ * still see it. The UI warning makes this clear.
  */
 export function MySharesSection(): JSX.Element {
   const shares = useSharesStore((s) => s.shares);

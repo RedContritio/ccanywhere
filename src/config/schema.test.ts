@@ -54,7 +54,7 @@ describe('ConfigSchema — users.<name>.runtime', () => {
     expect(cfg.users?.['alice']?.runtime).toBe('shared-container');
   });
 
-  it('rejects isolated-container at parse time (D2 reserved)', () => {
+  it('rejects isolated-container at parse time ( reserved)', () => {
     expect(() =>
       ConfigSchema.parse(
         baseRaw({ users: { alice: { runtime: 'isolated-container' } } }),

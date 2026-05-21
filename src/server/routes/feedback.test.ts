@@ -119,7 +119,7 @@ describe('POST /api/feedback', () => {
     // from a 60s × 90 ev/s × 1.2 budget). Submissions at any plausible
     // client size MUST pass — including bursts that briefly exceed the
     // documented client cap due to in-flight events between
-    // snapshotOps() and POST. Regression caught manually when this cap
+    // snapshotOps and POST. Regression caught manually when this cap
     // was an undertuned 100: dogfood feedback got a silent 400.
     const ops = Array.from({ length: 7_000 }, (_, i) => ({
       ts: 1_700_000_000_000 + i,
