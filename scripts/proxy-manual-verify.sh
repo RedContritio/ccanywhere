@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# proxy-manual-verify.sh — mitigation: ship 后没真实流量走代理
-# (owner 路径绕过, user 容器化暂不覆盖). 本脚本起 proxy 临时颁发
-# bearer + claude --print 走代理验证完整链路.
+# proxy-manual-verify.sh — verify the anthropic proxy path end-to-end:
+# spin up proxy, issue a temporary bearer, run `claude --print` through
+# it, assert proxy log redacts the bearer.
 #
 # 用法:
 # ./scripts/proxy-manual-verify.sh [--keep]

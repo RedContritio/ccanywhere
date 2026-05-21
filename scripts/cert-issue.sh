@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # 一键申请 Let's Encrypt 证书 + 装到 ccanywhere 期望的路径。
 #
+# DNS provider: 默认以**腾讯云 DNSPod (dns_tencent)** 为 example。换
+# Cloudflare / AWS Route53 / 阿里云等只需 (1) 改下面 `--dns dns_tencent`
+# 为对应 acme.sh plugin (如 `dns_cf` / `dns_aws` / `dns_ali`),
+# (2) export 对应 plugin 的凭证 env (见 acme.sh wiki:
+# https://github.com/acmesh-official/acme.sh/wiki/dnsapi)。
+#
 # 前置：
 # export CCANYWHERE_DOMAIN='cc.your-domain.com'
 # export CCANYWHERE_ACME_EMAIL='you@your-domain.com'
-# export Tencent_SecretId='...'
+# export Tencent_SecretId='...'   # 换 provider 时改对应 env name
 # export Tencent_SecretKey='...'
 #
 # 续签：每天的 launchd timer 跑 `acme.sh --cron` 自动检查；本脚本只用

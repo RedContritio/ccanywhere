@@ -8,7 +8,6 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "06:00"
-      timezone: "Asia/Shanghai"
     open-pull-requests-limit: 5
     assignees:
       - "RedContritio"
@@ -27,7 +26,6 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "06:00"
-      timezone: "Asia/Shanghai"
     open-pull-requests-limit: 5
     assignees:
       - "RedContritio"
@@ -46,7 +44,6 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "06:00"
-      timezone: "Asia/Shanghai"
     open-pull-requests-limit: 3
     assignees:
       - "RedContritio"
