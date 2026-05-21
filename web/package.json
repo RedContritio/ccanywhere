@@ -39,7 +39,7 @@
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.28.0",
     "tailwind-merge": "^3.6.0",
-    "zustand": "^4.5.0"
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
