@@ -1,9 +1,10 @@
 # Deployment
 
-macOS 单机部署 ccanywhere + frpc。Linux 类似（用 systemd 替代 launchd）。
-
-frpc 配置（LaunchDaemon + acme.sh + frpc.toml）见 [deployment-frpc.md](./deployment-frpc.md)。
-Staging 实例（同域不同 port）见 [deployment-staging.md](./deployment-staging.md)。
+macOS 单机部署 ccanywhere(Linux 类似,systemd 替代 launchd)。HTTPS
+frontend 默认 caddy(见 README §4);其它 reverse proxy + DNS-01 cert 流程
+见 `scripts/cert-issue.sh` 内嵌使用说明;tunnel(frp / Tailscale /
+Cloudflare Tunnel)参考各自官方文档 reverse-proxy 到 `127.0.0.1:8081`。
+Staging 实例(同域不同 port)见 [deployment-staging.md](./deployment-staging.md)。
 
 ## 前置
 
@@ -102,7 +103,8 @@ LaunchAgent / LaunchDaemon 的 PATH 默认是 `/usr/bin:/bin:/usr/sbin:/sbin`，
 
 **注意**：
 
-- `node` 路径写**当前 nvm 用的具体版本**——nvm 升级 node 后这条要更新
+- `node` 路径用 `which node` 拿绝对值(nvm `~/.nvm/.../bin/node` 随版本
+  变;brew Apple Silicon `/opt/homebrew/bin/node` / Intel `/usr/local/bin/node`)
 - `WorkingDirectory` 设到 repo 根（让 server 的 `web/dist` 自动解析）
 - log 路径 `~/.config/ccanywhere/server.log` 集中放置
 
@@ -161,7 +163,7 @@ mac 终端跑 `ccanywhere approve` 选择该 pending → 浏览器自动跳到 w
 | frpc 重启后 proxy already exists 一直在 retry | frps 旧 connection 还没超时清理 | 等 60 秒，或在 frps 端踢旧 client |
 | 浏览器 `ERR_SSL_PROTOCOL_ERROR` / 连不上 443 | frps `vhostHTTPSPort` 没配，或公网 443 被防火墙挡 | `frps.toml` 加 `vhostHTTPSPort = 443` 重启 frps；云厂商安全组放行 443 |
 | `acme.sh --issue` 卡在 "Verifying" | DNS 没生效或 TXT 记录写错 | `dig +short TXT _acme-challenge.cc.<domain>` 验证；DNS-01 凭证（Tencent_SecretId/Key）有没有 export |
-| 续签 timer 跑了但 frpc 没拿到新证书 | sudoers NOPASSWD 没配，reloadcmd 静默失败 | `tail ~/.config/ccanywhere/cert-renew.log` 看错误；按 [deployment-frpc.md](./deployment-frpc.md) §2.B.4 配 sudoers |
+| 续签 timer 跑了但 reverse proxy 没拿到新证书 | `reloadcmd` 静默失败(常见原因:sudoers NOPASSWD 没配,或 reload 命令路径不对) | `tail ~/.config/ccanywhere/cert-renew.log` 看错误;按 reverse proxy 实际 reload 命令调 `--reloadcmd` |
 | 浏览器证书 valid 但 `502 Bad Gateway` | frpc 拿到流量后回源 `127.0.0.1:8081` 不通 | `curl http://127.0.0.1:8081/healthz` 确认 ccanywhere 在跑 |
 
 ## 6. 升级流程

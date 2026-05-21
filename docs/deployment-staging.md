@@ -8,10 +8,9 @@ prod    https://cc.<your-domain>:443  ──frpc tunnel A──▶ 127.0.0.1:808
 staging https://cc.<your-domain>:7443 ──frpc tunnel B──▶ 127.0.0.1:8082
 ```
 
-同 frpc 进程，同证书。**关键的隔离点**：
+同 HTTPS frontend,同证书。**关键的隔离点**：
 
-ccanywhere 主部署见 [deployment.md](./deployment.md)；frpc 配置见
-[deployment-frpc.md](./deployment-frpc.md)。
+ccanywhere 主部署见 [deployment.md](./deployment.md)。
 
 ## 1. staging config.json
 
