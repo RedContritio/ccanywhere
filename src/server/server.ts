@@ -35,9 +35,9 @@ export type { SessionContainerDeps } from './routes/session-runtime.js';
  * `ready: true` ⇔ every user.runtime in config is honored as-is
  * (host-only mode or strict mode with all host users). `ready: false`
  * + reason ⇔ at least one user requested container runtime but the
- * runtime layer doesn't implement it yet — startup would have
- * fataled in current code path, so seeing ready:false in healthz
- * means a future Phase 2 build is in a transitional state.
+ * runtime layer can't satisfy it (docker unreachable etc). Startup
+ * would have fataled in the current code path, so `ready:false` in
+ * /healthz indicates a transitional / degraded build.
  */
 export interface IsolationStatus {
   readonly mode: 'strict' | 'fallback' | 'host-only';

@@ -25,8 +25,7 @@ export interface FileUsageStoreOpts {
    * downstream). Typically wraps `userStore.findById(id)?.quota.cost
    * .limitUsd`. Re-evaluated on every getUsage call so admin limit
    * edits propagate without restart (within the in-memory UserStore
-   * scope; cross-process change still needs proxy restart — BACKLOG
-   * follow-up for Phase 2).
+   * scope; cross-process change still needs proxy restart).
    */
   readonly limitOf: (userId: string) => number | null | undefined;
   /** Injectable for tests; default `Date.now`. */
@@ -35,9 +34,8 @@ export interface FileUsageStoreOpts {
 
 /**
  * Daily-resetting USD usage accounting. Single source of truth for
- * proxy-routed traffic (D3 metering). Phase 1: no sync with
- * UserStore.quota.usedUsd; Phase 2 user-container flow will need
- * bidirectional reconciliation (BACKLOG ).
+ * proxy-routed traffic. No sync with UserStore.quota.usedUsd —
+ * proxy and user-container flows track usage independently.
  *
  * Reset window: per calendar day, UTC. First call of a new day
  * implicitly zeros the user's `used`; no background timer.
@@ -107,7 +105,7 @@ export class FileUsageStore implements UsageStore {
 
   /**
    * Atomic-ish increment (single-process; multi-process needs a lock —
-   * not required for Phase 1 where proxy is a single LaunchAgent).
+   * not required while proxy is a single child process per host).
    * Lazy-resets on period boundary.
    */
   async addUsage(userId: string, costUsd: number): Promise<void> {

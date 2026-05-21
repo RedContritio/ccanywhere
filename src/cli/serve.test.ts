@@ -93,10 +93,10 @@ describe('resolveIsolation — D3 owner runtime', () => {
     ).toThrow(ExitCalled);
   });
 
-  it('non-owner without runtime → fatal (default shared-container, D2 amendment)', () => {
+  it('non-owner without runtime → fatal (schema default = shared-container)', () => {
     // raw Config bypassing zod parse: userCfg.runtime is undefined.
     // serve-isolation treats undefined as 'shared-container' and
-    // fatals, mirroring what happens on既有 prod after schema bump.
+    // fatals, mirroring what happens on existing prod after schema bump.
     expect(() =>
       resolveIsolation(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

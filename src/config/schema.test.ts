@@ -82,6 +82,6 @@ describe('ConfigSchema — users.<name>.runtime', () => {
     expect(cfg.users?.['alice']?.workspace).toBe('/tmp/alice');
     expect(cfg.users?.['alice']?.runtime).toBe('host');
     expect(cfg.users?.['bob']?.workspace).toBeUndefined();
-    expect(cfg.users?.['bob']?.runtime).toBe('shared-container'); // default reflects Phase 2 direction
+    expect(cfg.users?.['bob']?.runtime).toBe('shared-container'); // schema default
   });
 });

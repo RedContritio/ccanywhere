@@ -53,17 +53,15 @@ export const ConfigSchema = z.object({
         /**
          * user's runtime sandbox.
          * - `host`: spawn with owner identity on the mac (admin-
-         *   trusted). owner MUST be 'host' (D3).
-         * - `shared-container` (default): reflects Phase 2 direction;
-         *   rejected in Phase 1.B with explicit error pointing at fix.
-         *   Phase 2 implements actual container
-         *   spawn. Default reflects target architecture rather than
-         *   既有 behavior — admin must explicitly opt to `host` to
-         *   keep existing multi-user prod working (D2 amended; see
-         *   archive proposal C4 amendment).
+         *   trusted). owner MUST be 'host'.
+         * - `shared-container` (default): spawn into a shared docker
+         *   container with per-user unix uid + CLAUDE_CONFIG_DIR.
+         *   Default reflects the target architecture; admin must
+         *   explicitly opt to `host` to keep existing multi-user prod
+         *   working without docker.
          * - `isolated-container`: reserved schema enum; rejected at
-         *   parse time (Phase 1 and Phase 2 both don't implement —
-         *   needed only for truly untrusted users, BACKLOG long-term).
+         *   parse time (not implemented — needed only for truly
+         *   untrusted users).
          */
         runtime: z
           .enum(['host', 'shared-container', 'isolated-container'])
@@ -103,13 +101,13 @@ export const ConfigSchema = z.object({
    * applied in the route handler when unset; explicit body `ttlMs:
    * null` on POST /api/share bypasses both this default and the
    * per-share cap. Kept optional so existing prod config files don't
-   * need a schema-bump migration ( D3).
+   * need a schema-bump migration.
    */
   shareTtlMs: z.number().int().positive().optional(),
   /**
    * ccanywhere-anthropic-proxy listen address.
-   * Independent process (own LaunchAgent). user containers (Phase 2)
-   * point `ANTHROPIC_BASE_URL` here; owner path 完全不经此代理 (D7).
+   * Independent child process. user containers may point
+   * `ANTHROPIC_BASE_URL` here; owner path 完全不经此代理.
    * Defaults let existing prod config files load without a bump.
    */
   proxy: z
@@ -119,28 +117,28 @@ export const ConfigSchema = z.object({
     })
     .default({ port: 8082, bindHost: '127.0.0.1' }),
   /**
-   *  D3: host root directory containing per-user
-   * `~/.claude` state (jsonl history under `<root>/<username>/projects/`,
-   * settings.json + CLAUDE.md per-user). SharedContainerManager mounts
-   * this single root into the container at
-   * `/var/lib/ccanywhere/user-claude` (rw); ContainerUserSync.ensureUser
-   * mkdirs per-user sub-dirs (chmod 0700 chown <uid>:<gid>) on demand.
-   * Defaulted so existing prod configs load without a bump; absolute
-   * paths are recommended (relative paths resolve against process cwd).
-   * macOS docker desktop note: bind mount inode perms are not enforced
-   * (see proposal D4 / spike-results P9 Step A) — inter-user fs
-   * isolation under macOS depends on the D2 trust model, not chmod.
+   * Host root directory containing per-user `~/.claude` state (jsonl
+   * history under `<root>/<username>/projects/`, settings.json +
+   * CLAUDE.md per-user). SharedContainerManager mounts this single
+   * root into the container at `/var/lib/ccanywhere/user-claude`
+   * (rw); ContainerUserSync.ensureUser mkdirs per-user sub-dirs
+   * (chmod 0700 chown <uid>:<gid>) on demand. Defaulted so existing
+   * prod configs load without a bump; absolute paths are recommended
+   * (relative paths resolve against process cwd). macOS docker
+   * desktop note: bind mount inode perms are not enforced —
+   * inter-user fs isolation under macOS depends on the admin trust
+   * model, not chmod.
    */
   userClaudeRoot: z.string().optional(),
   /**
    * Three-tier isolation policy:
    * - `strict`: per-user `runtime` honored; any non-owner configured
-   *   with container runtime causes startup fatal (Phase 2 not ready).
-   *   Fail-safe default — owner must explicitly opt into degraded
-   *   isolation.
-   * - `fallback`: docker availability detection (Phase 2 only) would
-   *   degrade to host on detection failure. Phase 1.B equivalent to
-   *   strict (no detection yet).
+   *   with container runtime causes startup fatal when docker is
+   *   unreachable. Fail-safe default — owner must explicitly opt into
+   *   degraded isolation.
+   * - `fallback`: would degrade non-owner runtime to host on docker
+   *   detection failure (currently equivalent to strict — no docker
+   *   availability detection yet; reserved name).
    * - `host-only`: all non-owner user.runtime override 'host' with
    *   audit warn. Use for windows / single-tenant / docker-unavailable
    *   environments.
@@ -149,10 +147,10 @@ export const ConfigSchema = z.object({
     .enum(['strict', 'fallback', 'host-only'])
     .default('strict'),
 }).superRefine((cfg, ctx) => {
-  // Reject `runtime: 'isolated-container'` at
-  // parse time — schema accepts the enum for forward-compat but no
-  // phase implements it. Caller gets a clear message at config load
-  // instead of a confused fatal at serve.ts.
+  // Reject `runtime: 'isolated-container'` at parse time — schema
+  // accepts the enum for forward-compat but it's not implemented.
+  // Caller gets a clear message at config load instead of a confused
+  // fatal at serve.ts.
   if (cfg.users !== undefined) {
     for (const [username, userCfg] of Object.entries(cfg.users)) {
       if (userCfg.runtime === 'isolated-container') {
@@ -160,7 +158,7 @@ export const ConfigSchema = z.object({
           code: z.ZodIssueCode.custom,
           message:
             `users.${username}.runtime: 'isolated-container' is ` +
-            `reserved (Phase 1/2 don't implement). Use 'host' or ` +
+            `reserved (not implemented). Use 'host' or ` +
             `'shared-container'.`,
           path: ['users', username, 'runtime'],
         });

@@ -16,20 +16,19 @@ export interface IsolationResolution {
 
 export interface ResolveIsolationOpts {
   /**
-   *  C5: when true, D5 unlocks — non-owner
-   * `runtime: 'shared-container'` no longer fatals but flows into
-   * perUserRuntime map. Default false keeps Phase 1.B behavior (fatal
-   * on container config). serve.ts sets true after docker-detect
-   * passes AND container deps are wired.
+   * When true, non-owner `runtime: 'shared-container'` no longer
+   * fatals but flows into perUserRuntime map. Default false keeps
+   * the fail-safe (fatal on container config). serve.ts sets true
+   * after docker-detect passes AND container deps are wired.
    */
   readonly sharedContainerReady?: boolean;
 }
 
 /**
- * Validate config.isolationPolicy + per-user
- * runtime + emit boot banner. Fatal-exits on D3 (owner != host) or D5
- * (strict + container runtime configured without sharedContainerReady).
- * Returns IsolationResolution: status snapshot for /healthz + per-user
+ * Validate config.isolationPolicy + per-user runtime + emit boot
+ * banner. Fatal-exits when owner != host, or when strict + container
+ * runtime configured without sharedContainerReady. Returns
+ * IsolationResolution: status snapshot for /healthz + per-user
  * runtime map for sessions.ts dispatch.
  *
  * Exported so unit tests can drive it without spinning up the full
@@ -44,10 +43,10 @@ export function resolveIsolation(
   const users = config.users ?? {};
   const sharedReady = opts.sharedContainerReady ?? false;
 
-  // D3: owner MUST be host. Schema default is 'host' so admin who
-  // doesn't list owner at all (common in既有 prod) passes silently.
-  // We only reject when admin explicitly set owner.runtime to a
-  // non-host value.
+  // Owner MUST be host. Schema default is 'host' so admin who
+  // doesn't list owner at all (common in existing prod) passes
+  // silently. We only reject when admin explicitly set owner.runtime
+  // to a non-host value.
   const ownerCfg = users[ownerUsername];
   // runtime may be undefined here when callers bypass schema parse and
   // build Config objects by hand (tests, future programmatic uses).
@@ -60,13 +59,12 @@ export function resolveIsolation(
     logger.fatal(
       { ownerUsername, configured: ownerCfg.runtime },
       `users.${ownerUsername}.runtime: '${ownerCfg.runtime}' invalid — ` +
-        `owner MUST be 'host' (D3 ). Remove the ` +
-        `field or set to 'host'.`,
+        `owner MUST be 'host'. Remove the field or set to 'host'.`,
     );
     process.exit(2);
   }
 
-  // D4: host-only mode → override all non-owner runtime to host;
+  // host-only mode → override all non-owner runtime to host;
   // explicit per-user container configs become audit-logged ignores.
   if (policy === 'host-only') {
     const ignored: string[] = [];
@@ -92,16 +90,16 @@ export function resolveIsolation(
     };
   }
 
-  // D5: strict / fallback + any non-owner shared-container.
-  // - sharedContainerReady=true (C5 wire): non-fatal; runtime enters
+  // strict / fallback + any non-owner shared-container.
+  // - sharedContainerReady=true: non-fatal; runtime enters
   //   perUserRuntime map for sessions.ts dispatch
-  // - sharedContainerReady=false (Phase 1.B default): fatal (避免
-  //   silent fallback to host hiding isolation gap)
+  // - sharedContainerReady=false: fatal (avoid silent fallback to
+  //   host hiding the isolation gap)
   //
   // Treat undefined runtime as 'shared-container' (schema default):
-  // 既有 multi-user prod config 没显式配 runtime 启动 fatal (D2
-  // amendment); 走 ccanywhere schema bump 同步流程, admin 编辑
-  // config 显式声明 runtime: 'host' 或切 host-only.
+  // existing multi-user prod config without explicit runtime fatals
+  // on startup; admin must edit config to declare runtime: 'host' or
+  // switch to host-only.
   const perUserRuntime = new Map<string, 'host' | 'shared-container'>();
   for (const [username, userCfg] of Object.entries(users)) {
     if (username === ownerUsername) continue;
@@ -112,22 +110,21 @@ export function resolveIsolation(
           { username, runtime: userCfg.runtime },
           `users.${username}.runtime: ` +
             `${userCfg.runtime === undefined ? '<unset, default shared-container>' : `'${userCfg.runtime}'`} ` +
-            `but container runtime is Phase 2 — ` +
-            `not ready. Fix: set users.${username}.runtime: 'host' OR ` +
+            `but container runtime not ready. ` +
+            `Fix: set users.${username}.runtime: 'host' OR ` +
             `top-level isolationPolicy: 'host-only' to override all.`,
         );
         process.exit(2);
       }
-      // D9 amendment: workspace override + shared-container 不支持
-      // (override path 不在 container workspace mount 内, project
-      // cwd 无法 translate). 留 BACKLOG 
-      // -override.
+      // workspace override + shared-container not supported (override
+      // path is outside the container workspace mount, project cwd
+      // can't be translated). Caller must use 'host' runtime.
       if (userCfg.workspace !== undefined) {
         logger.fatal(
           { username, workspace: userCfg.workspace },
           `users.${username}: workspace override + runtime: ` +
-            `'shared-container' not supported yet (D9). Remove the ` +
-            `workspace override OR switch runtime to 'host'.`,
+            `'shared-container' not supported. Remove the workspace ` +
+            `override OR switch runtime to 'host'.`,
         );
         process.exit(2);
       }

@@ -29,11 +29,10 @@ export interface SpawnOptions {
   /**
    * runtime sandbox.
    * - `host` (default, omitted = host): spawn `command` directly via
-   *   node-pty (legacy behavior — owner path + 既有 multi-user
-   *   admin-trusted users)
+   *   node-pty (owner path + admin-trusted multi-user)
    * - `shared-container`: wrap spawn as `docker exec -it -u <user>
    *   -e KEY=VAL ... <container.name> <command> ...args`. caller
-   *   (sessions.ts in C5) sources from user.runtime config + a live
+   *   (sessions.ts) sources from user.runtime config + a live
    *   SharedContainerManager + ContainerUserSync
    *
    * When `shared-container`, `container` MUST be set.
@@ -49,9 +48,9 @@ export interface SpawnOptions {
     readonly name: string;
     readonly unixUser: string;
     /**
-     * D9 amendment: container-internal cwd for `docker exec -w <path>`.
-     * caller (session-runtime) computes by translating host project.cwd
-     * via SessionContainerDeps.hostWorkspace mount path. Without this,
+     * Container-internal cwd for `docker exec -w <path>`. caller
+     * (session-runtime) computes by translating host project.cwd via
+     * SessionContainerDeps.hostWorkspace mount path. Without this,
      * claude lands in container WORKDIR (/) and can't see project files.
      */
     readonly workingDir?: string;

@@ -35,34 +35,34 @@ export interface SessionContainerDeps {
    */
   readonly proxyBaseUrl: string;
   /**
-   * D9 amendment: absolute host path of `config.workspace`. mounted
-   * 1:1 into the container at `containerWorkspacePath` so project
-   * cwds resolve. session-runtime translates host project.cwd into
-   * container path via this prefix.
+   * Absolute host path of `config.workspace`. Mounted 1:1 into the
+   * container at `containerWorkspacePath` so project cwds resolve.
+   * session-runtime translates host project.cwd into container path
+   * via this prefix.
    */
   readonly hostWorkspace: string;
   /**
-   * D9 amendment: container-internal mount point of hostWorkspace.
-   * Typically `/workspace`. Set by container-init alongside the
+   * Container-internal mount point of hostWorkspace. Typically
+   * `/workspace`. Set by container-init alongside the
    * `docker run -v <hostWorkspace>:<containerWorkspacePath>` arg.
    */
   readonly containerWorkspacePath: string;
   /**
-   *  D3: container-internal mount point of the
-   * host `userClaudeRoot` (typically `/var/lib/ccanywhere/user-claude`).
-   * Per-spawn `CLAUDE_CONFIG_DIR` is set to `<root>/<username>` so cc
-   * finds per-user jsonl history + settings.json + CLAUDE.md.
+   * Container-internal mount point of the host `userClaudeRoot`
+   * (typically `/var/lib/ccanywhere/user-claude`). Per-spawn
+   * `CLAUDE_CONFIG_DIR` is set to `<root>/<username>` so cc finds
+   * per-user jsonl history + settings.json + CLAUDE.md.
    * ContainerUserSync.ensureUser is responsible for mkdir + chown +
    * chmod 0700 on the per-user sub-dir.
    */
   readonly userClaudeContainerRoot: string;
   /**
-   *  D10: owner's `CLAUDE_CODE_OAUTH_TOKEN`
-   * (sk-ant-oat-...) injected per-spawn so container cc binary connects
-   * to anthropic directly (anthropic 2026-02 policy bans third-party
-   * OAuth Bearer proxies). Required for shared-container path; absence
-   * means user spawn can't reach anthropic (D6 trust model accepts
-   * token visibility in container env).
+   * Owner's `CLAUDE_CODE_OAUTH_TOKEN` (sk-ant-oat-...) injected
+   * per-spawn so container cc binary connects to anthropic directly
+   * (anthropic 2026-02 policy bans third-party OAuth Bearer proxies).
+   * Required for shared-container path; absence means user spawn
+   * can't reach anthropic (trust model accepts token visibility in
+   * container env).
    */
   readonly ownerOauthToken: string | undefined;
 }
@@ -72,7 +72,7 @@ export interface SessionRuntimeOverlay {
   readonly container?: {
     readonly name: string;
     readonly unixUser: string;
-    /** D9 amendment: -w <path> for docker exec; container-internal cwd */
+    /** -w <path> for docker exec; container-internal cwd */
     readonly workingDir?: string;
   };
   readonly env?: Record<string, string>;

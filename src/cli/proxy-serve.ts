@@ -60,12 +60,11 @@ interface UsersFileShape {
 }
 
 /**
- * Sync read of users.json on every quota check. Phase 1 chooses
- * decoupled-from-UserStore over performance: ccanywhere CLI can update
- * limits without proxy restart. File is small (KB), read latency
- * negligible vs upstream API roundtrip. BACKLOG follow-up
- * lru cache + fs.watch invalidation when traffic
- * scales (Phase 2 user containers).
+ * Sync read of users.json on every quota check. Decoupling from
+ * UserStore over performance: ccanywhere CLI can update limits
+ * without proxy restart. File is small (KB), read latency negligible
+ * vs upstream API roundtrip. Could swap to lru cache + fs.watch
+ * invalidation if proxy traffic ever scales.
  */
 function makeLimitLookup(
   usersPath: string,

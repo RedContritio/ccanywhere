@@ -106,10 +106,9 @@ export class QuotaWatcher {
       isShared && this.userClaudeRoot !== undefined
         ? join(this.userClaudeRoot, user.username)
         : undefined;
-    //  B24 fix: shared-container cc writes
-    // jsonl under encoded container cwd, not host cwd. Translate
-    // session.info.cwd → container path via D9 amendment workspace
-    // mount mapping.
+    // Shared-container cc writes jsonl under encoded container cwd,
+    // not host cwd. Translate session.info.cwd → container path via
+    // the workspace mount mapping.
     let effectiveCwd = session.info.cwd;
     if (
       isShared &&

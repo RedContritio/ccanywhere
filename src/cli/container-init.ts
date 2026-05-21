@@ -60,13 +60,12 @@ export async function initContainerStack(
   }
 
   const containerName = `ccanywhere-shared-${config.port}`;
-  // D9 amendment: mount host workspace into container 1:1 so per-user
-  // project cwds resolve via session-runtime's relative-path translate.
+  // Mount host workspace into container 1:1 so per-user project cwds
+  // resolve via session-runtime's relative-path translate.
   const containerWorkspacePath = '/workspace';
-  //  D3: mount per-user `~/.claude` state root.
-  // Per-user sub-dirs are created on demand by ContainerUserSync.ensureUser
-  // (C3 commit). session-runtime sets CLAUDE_CONFIG_DIR per spawn so cc
-  // finds the right per-user dir.
+  // Mount per-user `~/.claude` state root. Per-user sub-dirs are
+  // created on demand by ContainerUserSync.ensureUser. session-runtime
+  // sets CLAUDE_CONFIG_DIR per spawn so cc finds the right per-user dir.
   const containerUserClaudePath = '/var/lib/ccanywhere/user-claude';
   const sharedManager = new SharedContainerManager({
     image: IMAGE_NAME,
