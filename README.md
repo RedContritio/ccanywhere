@@ -28,7 +28,7 @@ ccanywhere 自身 listen `127.0.0.1:8081` (HTTP, internal-only)。本机自测
 - **macOS / Linux** — author 在 macOS 上 daily-driver,Linux 使用 systemd
   等价路径。Windows untested (理论上 `node-pty` ConPTY 可运行,但
   LaunchAgent / shared-container docker desktop windows 未适配)
-- **Node.js >= 20**
+- **Node.js >= 22**
 - **pnpm 11+**(项目用 workspaces;`pnpm-workspace.yaml` 定义 root +
   `web/` 两个 package)
 - **已登录的 Claude Code** — 本机 `claude /login` 已经登过(ccanywhere

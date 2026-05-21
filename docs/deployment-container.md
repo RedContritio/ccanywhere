@@ -20,7 +20,7 @@ Main deployment docs: [deployment.md](./deployment.md); proxy:
 ```bash
 ./scripts/build-container-image.sh
 # image: ccanywhere/user-runtime:latest (~663MB)
-# 含: node:20-alpine + iptables + shadow + npm install -g
+# 含: node:22-alpine + iptables + shadow + npm install -g
 #     @anthropic-ai/claude-code (Linux 版 claude)
 ```
 

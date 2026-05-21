@@ -6,7 +6,7 @@
 # baked into this image; user-sync.ts creates them via `docker exec
 # useradd` when ccanywhere adds a user.
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Packages:
 #   iptables           — egress lock to api.anthropic.com

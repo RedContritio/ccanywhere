@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -173,7 +173,16 @@ describe('Dead stub resume + screen endpoints', () => {
       expect(mgr.get('reborn')?.info.id).toBe('reborn');
       expect(mgr.getDeadStub('reborn')).toBeUndefined();
       await mgr.detach(); // flush pending IO
-      expect(existsSync(join(regDir, 'reborn.screen.txt'))).toBe(false);
+      // 验证 stale 'old' snapshot 已被清除. 端点状态: macOS bash 上
+      // 新 PTY (sh --resume reborn) 处理 unknown flag 较慢, 在 detach
+      // 之前仍存活 → deleteScreen 生效, file 不存在; ubuntu dash 上
+      // sh 立即 exit, handleSessionExit 再写一次 saveScreen('') →
+      // file 重新存在但为空。两种环境均满足 "stale 'old' 已清除"。
+      const screenPath = join(regDir, 'reborn.screen.txt');
+      const content = existsSync(screenPath)
+        ? readFileSync(screenPath, 'utf8')
+        : '';
+      expect(content).not.toContain('old');
     });
   });
 

@@ -8,7 +8,7 @@ Staging 实例(同域不同 port)见 [deployment-staging.md](./deployment-stagin
 
 ## 前置
 
-- macOS 或 Linux,Node 20+,pnpm
+- macOS 或 Linux,Node 22+,pnpm
 - cc CLI 已安装且 user 已经在本机用 `claude /login` 登录过
 - **可选**:远程访问需要 reverse-proxy (caddy / frp / Tailscale / 等),
   本机自测可以跳过;主 README §6 列出各方案细节
