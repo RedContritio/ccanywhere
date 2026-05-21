@@ -1,13 +1,26 @@
 # Deployment — anthropic 代理
 
+> **Status: DORMANT — 普通部署可跳过这整篇文档**
+>
+> proxy 子进程由 ccanywhere main 自动 spawn,缺 credentials 时以
+> 503/degraded mode 启动(不 crash-loop),所有 forward 路由返 503。
+> **当前 user 流量不经 proxy**——anthropic 2026-02 起禁止第三方应用
+> 通过 `Authorization: Bearer` 转发 OAuth subscription token,user
+> 容器内 cc 改用 `CLAUDE_CODE_OAUTH_TOKEN` env 直连 anthropic。
+>
+> 只在以下情形需要继续读:
+> 1. 你 hacking on proxy 子进程本身
+> 2. owner 切到 Console API key (`sk-ant-api03-...` 按 token 计费)
+>    且想用 proxy 路径(anthropic 仍允许 `X-Api-Key` 转发)
+> 3. anthropic 政策回退时反向 wire user 流量
+
 ccanywhere main process 启动时通过 `child_process.spawn` 起的子进程
 `ccanywhere proxy serve`,listen `config.proxy.port` (default 8082) on
 `config.proxy.bindHost` (default 127.0.0.1)。
 
-**当前不在 user 流量路径上**(anthropic 2026-02 起禁止第三方应用通过
-`Authorization: Bearer` 转发 OAuth subscription token)。proxy 仍 listen
-作 future fallback(政策回退 或 owner 切 Console API key 时反向 wire)。
-当前靠 `scripts/proxy-manual-verify.sh` + 单元测试验证。
+proxy 仍 listen 作 future fallback(政策回退 或 owner 切 Console API
+key 时反向 wire)。当前靠 `scripts/proxy-manual-verify.sh` + 单元测试
+验证。
 
 主部署文档见 [deployment.md](./deployment.md)。
 

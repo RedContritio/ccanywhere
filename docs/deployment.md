@@ -9,8 +9,9 @@ Staging 实例(同域不同 port)见 [deployment-staging.md](./deployment-stagin
 ## 前置
 
 - macOS（或 Linux），Node 20+，pnpm
-- frpc 装在本机，frps 在远端可达
 - cc CLI 装好且 user 已经在本机用 `claude /login` 登过
+- **可选**：远程访问需要 reverse-proxy(caddy / frp / Tailscale / 等),
+  本机自测可以跳;主 README §6 列了各方案细节
 
 ## 1. 构建
 
@@ -40,9 +41,9 @@ chmod 600 ~/.config/ccanywhere/config.json
 |------|------|
 | `port` | 默认 `8081`（一次性随机选定）。多机部署改成别的 |
 | `claudeBin` | 写**绝对路径**。LaunchAgent 的 PATH 不含 `~/.local/bin`，相对名 `claude` 会找不到导致 spawn 立即 dead |
-| `webOrigin` | web SPA 实际服务的 origin（如 `https://cc.example.com`）。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；改这一项会让所有已配对设备失效 |
-| `projectsRoot` | 项目集合根目录（绝对路径），其直接子目录被自动列为可选项目；启动时不存在会自动 mkdir，不可读直接 fatal，不可写则只能列/选不能新建 |
-| `guestProjectsRoot` | **必填**（）。limited user 项目沙盒父目录（绝对路径），其下每个 limited user 拿到一个 `<username>/` 子目录作 cwd 根。**MUST NOT** 与 `projectsRoot` 相同，**MUST NOT** 互为父子。启动时自动 `mkdir -p` (mode 0700)。详见 §7 |
+| `webOrigin` | web SPA 实际服务的 origin。本机自测填 `http://localhost:<port>`（WebAuthn spec 对 localhost 例外）；远程访问填 `https://cc.example.com`。WebAuthn `rpID` 由其 hostname 派生；非 https 时 cookie `Secure` 关闭；**改这一项会让所有已配对设备失效** |
+| `workspace` | **required**。每个 user 项目沙盒父目录（绝对路径）。每个 user 自动得到 `<workspace>/<username>/` 作 cwd 根。启动时自动 `mkdir -p` (mode 0700)。详见 §7 |
+| `users.<name>.workspace` | 可选 per-user 覆盖。owner 默认 username 是 `owner`，走默认 `<workspace>/owner/`；想指向已有 repo 目录（如 `/Users/<you>/Projects`）就配 `users.owner.workspace`。两个 user override MUST NOT 互嵌或与他人默认槽位冲突，schema 启动校验 |
 | `outputFps` | WS 输出最大帧率，1..240 默认 60。带宽紧张可调到 24 |
 | `deletedSessionTtlMs` | 软删除保留时长，默认 600_000（10 分钟）|
 | `wsHeartbeat.timeoutMs` | 必须严格大于 `intervalMs`，默认 60000/30000 |
@@ -190,24 +191,33 @@ launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
 
 owner 不受影响（owner 全程 quota skip）。
 
-## 7. multi-user 配置（）
+## 7. multi-user 配置
 
 ccanywhere 支持单 owner + N 个 limited user。owner 走 WebAuthn 配对，
-limited user 通过 token 登录（owner CLI 颁发）。每个 limited user 的项目
-沙盒在 `<guestProjectsRoot>/<username>/` 下，不可访问 owner 的 `projectsRoot`。
+limited user 通过 token 登录（owner CLI 颁发）。每个 user（含 owner）
+默认 cwd 根是 `<workspace>/<username>/`；想指向已有目录就 per-user
+`workspace` override。
 
-### 7.1 config 必填字段
+### 7.1 config 字段
 
 ```json
 {
-  "projectsRoot": "/Users/<you>/Projects/cc",
-  "guestProjectsRoot": "/Users/<you>/Projects/cc-guests",
+  "workspace": "/Users/<you>/ccanywhere-workspace",
+  "users": {
+    "owner": { "workspace": "/Users/<you>/Projects" },
+    "alice": { "runtime": "host" }
+  },
   ...
 }
 ```
 
-`guestProjectsRoot` 与 `projectsRoot` MUST 不相同 + MUST 不互为父子。
-启动时自动 `mkdir -p` (mode 0700)。
+- `workspace`（required）：所有 user 项目沙盒父目录。启动时自动
+  `mkdir -p` (mode 0700)
+- `users.owner.workspace`（可选）：owner 指向已有 repo 目录，不指
+  就走 `<workspace>/owner/` + 启动 warning
+- `users.<other>.workspace`（可选）：non-owner 指向他用的目录；不
+  指就 `<workspace>/<username>/`。任何两个 override MUST 不相同 +
+  MUST 不互为父子，schema 启动校验
 
 ### 7.2 创建第一个 limited user
 
@@ -256,8 +266,8 @@ token 失效（revoke 或 expire）后 cookie 立即失效，回到登录页。
 ### 7.5 限制
 
 - limited user 暂不能通过 web 创建项目（POST /api/projects 限 owner）。
-  alice 的 cwd 必须由 owner 在 `<guestProjectsRoot>/alice/` 下预创建项目
-  目录。
+  alice 的 cwd 必须由 owner 在 `<workspace>/alice/`（或 `users.alice.
+  workspace` 指向的目录）下预创建项目子目录。
 - limited user 无 WebAuthn 配对路径（仅 owner）；POST `/api/auth/webauthn/login-init`
   对 limited user 直接 403。
 - token ttl ≤ 7d 硬限。要长期使用，owner 定期 re-issue。

@@ -35,9 +35,15 @@ container 跑。本文档描述 config schema 跟运维行为。
 
 | 值 | 行为 |
 |---|---|
-| `host` (默认) | 跟 owner 同身份跑(admin-trusted) |
-| `shared-container` | 跑在共享 docker container 内(per-user CLAUDE_CONFIG_DIR + unix user 隔离 + iptables egress 锁 api.anthropic.com) |
+| `host` | 跟 owner 同身份跑(admin-trusted) |
+| `shared-container` (默认) | 跑在共享 docker container 内(per-user CLAUDE_CONFIG_DIR + unix user 隔离) |
 | `isolated-container` | reserved,schema parse 阶段直接拒(未实现) |
+
+**Default = `shared-container`** 反映 multi-user 场景默认 isolate user 流量。
+不想要 docker 依赖的话:
+- 单 owner 部署:不配 `users.<name>` 即可,schema 不会强制添加 runtime
+- 多个信任的小号:每个 user 显式配 `runtime: 'host'`,或 top-level 配
+  `isolationPolicy: 'host-only'`(§5.3)统一 override
 
 容器化细节见 [deployment-container.md](./deployment-container.md)。
 

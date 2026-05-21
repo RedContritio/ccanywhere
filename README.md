@@ -16,23 +16,30 @@ browser  ──https──▶  HTTPS frontend (cc.example.com)  ──HTTP──
                                                                      继承 ~/.claude 的登录态
 ```
 
-ccanywhere 自身 listen `127.0.0.1:8081`(HTTP, internal-only)。你需要一个
-HTTPS frontend 把公网 HTTPS 流量 reverse-proxy 到 8081 + 处理 TLS。最简
-方案是 [caddy](https://caddyserver.com/)(auto-cert)。如果 mac 在 NAT
-后无公网 IP,自己另起 tunnel(frp / Tailscale / Cloudflare Tunnel 等);
-`examples/frpc.toml` 提供 frp 模板作参考。
+ccanywhere 自身 listen `127.0.0.1:8081`(HTTP, internal-only)。本机自测
+直接访问 `http://localhost:8081` 即可——WebAuthn spec 对 localhost 例外,
+不需要 TLS。开放给公网访问时再加一层 HTTPS frontend(reverse-proxy 到
+8081 + 处理 TLS),见下文 Step 6。
 
 ## Prerequisites
+
+**核心(本机跑通需要)**:
 
 - **macOS only** — LaunchAgent + `node-pty` 原生模块(目前没有 Linux /
   Windows 移植)
 - **Node.js >= 20**
 - **pnpm 11+**(项目用 workspaces;`pnpm-workspace.yaml` 定义 root +
   `web/` 两个 package)
-- **HTTPS frontend** + **公网入口**:推荐 caddy(auto-cert,本节后续
-  指引);其他选项见 `docs/`。如果 mac 没公网 IP,自己另起 tunnel。
-- **域名 + DNS**:把 `cc.example.com` A 记录指到 mac 公网 IP(或 tunnel
-  entry)。caddy 申 cert 需要 DNS 已生效。
+- **已登录的 Claude Code** — 本机 `claude /login` 已经登过(ccanywhere
+  spawn 的 cc 子进程继承 `~/.claude/` 登录态)
+
+**远程访问需要**(本机自测可跳过,Step 6 再配):
+
+- **HTTPS frontend**(reverse-proxy + TLS 终结):caddy / nginx / frp /
+  Cloudflare Tunnel / Tailscale 都可,Step 6 给 caddy 主流程 + frp 给
+  NAT 后无公网 IP 的场景
+- **域名 + DNS**:把 `cc.example.com` A 记录指到 mac 公网 IP(或
+  tunnel 入口)。caddy 自动申 cert 需要 DNS 已生效
 
 ## 跟同类的差异
 
@@ -88,21 +95,49 @@ chmod 600 ~/.config/ccanywhere/config.json
 编辑 `~/.config/ccanywhere/config.json`(把模板里所有 `<you>` 占位
 替换为你的 mac 用户名):
 
-- `webOrigin` 改成 web 实际访问的 URL(如 `https://cc.example.com`)。
-  WebAuthn `rpID` 由其 hostname 派生;改 `webOrigin` 后所有已配对设备需重新 pair
-- `claudeBin` 写绝对路径(如 `/Users/<you>/.local/bin/claude`),LaunchAgent
-  下的 PATH 不一定含 `~/.local/bin`
-- `projectsRoot` 改成你想作为"项目集合根"的目录(绝对路径,如
-  `/Users/<you>/Projects`)。其下的直接子目录都会被自动列为可选项目,
-  新建 / 隐藏可在 web 端 NewSessionDialog 里完成
-- `guestProjectsRoot`(模板已默认 `/Users/<you>/.ccanywhere-guests`)是
-  limited user 项目沙盒父目录。**必填**,即便只跑 single-owner 也得
-  保留,启动会 `mkdir -p` (mode 0700);**MUST NOT** 跟 `projectsRoot`
-  相同或互为父子(详见 `docs/deployment.md`)
+- `workspace`:每个 user 的项目沙盒父目录(绝对路径)。每个 user
+  自动得到 `<workspace>/<username>/` 作 cwd 根,owner 默认 username
+  是 `owner`,所以 owner 的项目落在 `<workspace>/owner/`。**required**
+- `webOrigin`:web 实际访问的 URL。本机自测填 `http://localhost:8081`
+  (WebAuthn spec 对 localhost 例外,可跳 TLS);远程访问后改成
+  `https://cc.example.com`。**改这一项会让所有已配对设备失效**,
+  需要重新 pair
+- `claudeBin`:`claude` CLI 的**绝对路径**(如 `/Users/<you>/.local/bin/
+  claude`)。LaunchAgent 下 PATH 不一定含 `~/.local/bin`,写绝对路径
+  最稳
 
-### 3. 跑起 ccanywhere(LaunchAgent)
+**可选** — 把 owner 项目根指向已有 repo 目录(而非新建 `<workspace>/
+owner/`):
 
-参考 `docs/deployment.md` 写一个
+```json
+{
+  "workspace": "/Users/<you>/ccanywhere-workspace",
+  "users": {
+    "owner": { "workspace": "/Users/<you>/Projects" }
+  }
+}
+```
+
+不写 `users.owner.workspace` 时启动会打 warning 提示这个 override
+可用,但不影响运行。多 user 场景见 [`docs/deployment.md`](docs/deployment.md) §7。
+
+### 3. 跑起来(foreground 试运行)
+
+先 foreground 跑,验证服务能起 + 浏览器能配对:
+
+```bash
+ccanywhere                                # 默认 = ccanywhere serve
+# 另开 terminal:
+curl -sf http://127.0.0.1:8081/healthz    # 应返 {"ok":true,...}
+```
+
+Step 5 走完浏览器配对、验证 cc session 能开起来之后,再考虑 Step 4
+(LaunchAgent 持久化)和 Step 6(远程访问)。本机自测阶段就这样 `Ctrl-C`
+随起随停即可。
+
+### 4. 守护进程(LaunchAgent,可选)
+
+让 ccanywhere 开机自启 + crash 自重启。参考 `docs/deployment.md` 写一个
 `~/Library/LaunchAgents/com.<you>.ccanywhere.plist`,然后:
 
 ```bash
@@ -111,11 +146,33 @@ launchctl print gui/$(id -u)/com.<you>.ccanywhere | head    # 看 state=running
 curl -sf http://127.0.0.1:8081/healthz                       # 应返 {"ok":true,...}
 ```
 
-### 4. 配 HTTPS frontend(推荐 caddy)
+### 5. 浏览器配对 + 访问
 
-先确保 `cc.example.com` 的 DNS A 记录已指到 mac 公网 IP(或 tunnel 入口)。
+第一次访问 `http://localhost:8081/login`(或远程访问场景下的
+`https://<webOrigin host>/login`):
+
+1. 浏览器:输入设备名(如 "iPhone")→ 点「申请配对」→ 触发平台认证器
+   (Touch ID / Face ID / 指纹)。
+2. mac 终端:跑 `ccanywhere approve`,列出 pending → 选择 → 确认。
+3. 浏览器自动跳到 workspace。
+
+之后再访问只需点「用本机生物识别登入」,不需要再 approve。撤销设备:
+`ccanywhere revoke <device-id>`(先 `ccanywhere devices` 找 id)。
+
+### 6. 远程访问(可选)
+
+本机自测跑通后,想从外面手机 / 笔记本访问就接一层 HTTPS frontend。
+**改 `webOrigin` 会让 Step 5 配过的设备全失效,需要重新 pair**——
+建议确定好最终 origin 一次配到位。
+
+两类典型场景:
+
+#### A. mac 有公网 IP / 路由器能 NAT 转发 — caddy
+
+最简单的方案。caddy 自动申 + 续 Let's Encrypt 证书。
 
 ```bash
+# 先确保 cc.example.com 的 DNS A 记录已指到 mac 公网 IP
 brew install caddy
 sudo tee /opt/homebrew/etc/Caddyfile >/dev/null <<EOF
 cc.example.com {
@@ -126,29 +183,35 @@ brew services restart caddy
 curl -sf https://cc.example.com/healthz                      # 应返 {"ok":true,...}
 ```
 
-Caddy 自动申请 + 续 Let's Encrypt 证书(443 端口必须公网可达)。
+config 里把 `webOrigin` 改成 `https://cc.example.com` + 重启 ccanywhere。
 
-**其他选项**:
+#### B. mac 在 NAT 后 / 无公网 IP — frp tunnel
 
-- **nginx / 其它 reverse proxy** + `scripts/cert-issue.sh`(Let's Encrypt
-  DNS-01,适合 443 不能直连场景或想用 wildcard cert)。脚本内含使用说明,
-  默认 DNS provider 是腾讯云作 example。
-- **frp tunnel**(mac 在 NAT 后):`examples/frpc.toml` 含详细 inline
-  注释。frp 官方文档:<https://github.com/fatedier/frp>。
-- **Tailscale / Cloudflare Tunnel**:参考各自官方文档,reverse-proxy 到
-  `127.0.0.1:8081`。
+家庭网络、运营商 NAT 等场景。租一台有公网 IP 的小机器跑 frps,mac
+跑 frpc 把流量拉过去 + TLS 终结在 mac 端(tunnel server 不持
+key)。
 
-### 5. 浏览器配对 + 访问
+```bash
+# mac 本机:
+brew install frpc
+# 拿到 cc.example.com 的证书(用 scripts/cert-issue.sh DNS-01,或自带)
+# 复制并编辑 examples/frpc.toml,inline 注释指引每个字段
+cp examples/frpc.toml ~/.config/ccanywhere/frpc.toml
+# 启动 frpc(LaunchAgent 模板见 examples/launchd/)
+```
 
-第一次访问 `https://<webOrigin host>/login`:
+`examples/frpc.toml` 用 `https + https2http` plugin(frpc 端 TLS
+终结);注释里附 plain TCP fallback。frp 官方文档:
+<https://github.com/fatedier/frp>。
 
-1. 浏览器:输入设备名(如 "iPhone")→ 点「申请配对」→ 触发平台认证器
-   (Touch ID / Face ID / 指纹)。
-2. mac 终端:跑 `ccanywhere approve`,列出 pending → 选择 → 确认。
-3. 浏览器自动跳到 workspace。
+#### 其他选项
 
-之后再访问只需点「用本机生物识别登入」,不需要再 approve。撤销设备:
-`ccanywhere revoke <device-id>`(先 `ccanywhere devices` 找 id)。
+- **nginx / 其它 reverse proxy** + `scripts/cert-issue.sh`(Let's
+  Encrypt DNS-01,适合 443 不能直连场景或想用 wildcard cert)
+- **Tailscale**:私网 + magicDNS,把 `100.x.x.x:8081` 当 origin
+  (cc 浏览器侧需要 Tailscale client),参考 Tailscale 官方文档
+- **Cloudflare Tunnel**:`cloudflared tunnel run --url
+  http://127.0.0.1:8081`,cert 由 Cloudflare 边缘维护
 
 ## 关键文件
 

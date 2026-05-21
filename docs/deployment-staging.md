@@ -21,7 +21,7 @@ ccanywhere 主部署见 [deployment.md](./deployment.md)。
   "port": 8082,
   "bindHost": "127.0.0.1",
   "claudeBin": "/Users/<you>/.local/bin/claude",
-  "projectsRoot": "/Users/<you>/.ccanywhere-staging/projects",
+  "workspace": "/Users/<you>/.ccanywhere-staging/workspace",
   "webOrigin": "https://cc.<your-domain>:7443",
   "cookieName": "ccanywhere_session_e2e"
 }
@@ -32,7 +32,7 @@ ccanywhere 主部署见 [deployment.md](./deployment.md)。
 | 字段 | staging 值 | 为什么 |
 |---|---|---|
 | `port` | 与 prod 不同（如 `8082`） | 同主机两 instance 不能抢端口 |
-| `projectsRoot` | 完全独立路径 | `.devices.json` / `.projects-state.json` / cc 子进程的 cwd 全自动隔离，cc history (`~/.claude/projects/<encoded-cwd>/...`) 因 cwd 不同自动落到不同目录 |
+| `workspace` | 完全独立路径 | `.devices.json` / `.projects-state.json` / cc 子进程的 cwd 全自动隔离，cc history (`~/.claude/projects/<encoded-cwd>/...`) 因 cwd 不同自动落到不同目录 |
 | `webOrigin` | 含 `:7443` 端口 | WebAuthn `rpID` 由 hostname 派生（同 prod = `cc.<your-domain>`），但 origin 校验严格匹配 scheme+host+port |
 | `cookieName` | 与 prod 不同（如 `ccanywhere_session_e2e`） | RFC 6265 cookie 忽略 port —— 同 host 同 cookie name 浏览器 last-write-wins，staging Set-Cookie 会踢掉 prod 会话；用不同 name 让两份 cookie 共存 |
 
@@ -114,6 +114,6 @@ pair 出来的 cookie name 是 `ccanywhere_session_e2e`，与 prod 的
 curl -k -b "ccanywhere_session=<prod-cookie>"     https://cc.<your-domain>/api/sessions
 curl -k -b "ccanywhere_session_e2e=<staging-cookie>" https://cc.<your-domain>:7443/api/sessions
 
-# 两份 .devices.json 独立
-ls /Users/<you>/Projects/.devices.json /Users/<you>/.ccanywhere-staging/projects/.devices.json
+# 两份 .devices.json 独立（落在各自 configDir 旁）
+ls ~/.config/ccanywhere/.devices.json ~/.config/ccanywhere-staging/.devices.json
 ```
