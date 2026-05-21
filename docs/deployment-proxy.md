@@ -165,4 +165,4 @@ sleep 2 && curl -sf http://127.0.0.1:8082/healthz
 
 proxy 改 schema(`configDir` 新字段)时按主 server 同样规则:先
 docs 同步 + user 显式同步 prod config + kickstart 验证。proxy 字段
-带 zod default 时既有 prod config 零改动可加载。
+带 zod default 时 existing prod config 零改动可加载。

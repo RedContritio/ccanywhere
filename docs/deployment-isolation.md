@@ -18,7 +18,7 @@ container 跑。本文档描述 config schema 跟运维行为。
 }
 ```
 
-两字段都带 zod default,**既有 prod config 零改动可加载**。
+两字段都带 zod default,**existing prod config 零改动可加载**。
 
 ### 1.1 `isolationPolicy` (全局)
 
@@ -129,7 +129,7 @@ schema default 让 owner 自己跑 host,零运维负担。
 
 ## 6. 从老版 schema 升级
 
-某个版本之前 `users.<name>.runtime` 字段不存在。升级后既有 multi-user
+某个版本之前 `users.<name>.runtime` 字段不存在。升级后 existing multi-user
 prod config 启动 fatal:
 
 ```
@@ -144,7 +144,7 @@ isolationPolicy: 'host-only' to override all.
 
 **两种 migration**:
 
-### 6.1 显式 host(跟既有行为一致)
+### 6.1 显式 host(跟 existing 行为一致)
 
 每个非 owner user 加 `runtime: 'host'`:
 

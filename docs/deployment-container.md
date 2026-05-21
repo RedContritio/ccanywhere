@@ -1,21 +1,20 @@
-# Deployment — user shared container (, Phase 2)
+# Deployment — user shared container
 
-Phase 2 user runtime isolation：admin 配 `users.<name>.runtime:
-'shared-container'` 时，session spawn 通过 `docker exec` 进入一个
-长跑 shared container 里跑 claude（不再走 owner 身份）。anthropic
-流量经 ccanywhere-anthropic-proxy 隔离（Phase 1.A）。
+When a non-owner user has `runtime: 'shared-container'` in config, session
+spawn uses `docker exec` to run claude inside a long-running shared container
+rather than on the host. Anthropic traffic goes directly from the container
+to `api.anthropic.com` using the owner's OAuth token (see §5).
 
-主部署文档见 [deployment.md](./deployment.md)；代理见
-[deployment-proxy.md](./deployment-proxy.md)；schema/启动行为见
-[deployment-isolation.md](./deployment-isolation.md)。
+Main deployment docs: [deployment.md](./deployment.md); proxy:
+[deployment-proxy.md](./deployment-proxy.md); schema/startup behavior:
+[deployment-isolation.md](./deployment-isolation.md).
 
 ## 1. 前置
 
 - macOS Docker Desktop 运行中
-- 已 ship Phase 1.A （`ccanywhere proxy serve`
+- ccanywhere proxy 已配置并运行（`ccanywhere proxy serve`
   独立 LaunchAgent listen :8082）
-- 已 ship Phase 1.B （schema 含
-  `isolationPolicy` + `users.<name>.runtime`）
+- `isolationPolicy` + `users.<name>.runtime` 已在 config 配好
 
 ## 2. build user runtime image
 
@@ -23,7 +22,7 @@ Phase 2 user runtime isolation：admin 配 `users.<name>.runtime:
 ./scripts/build-container-image.sh
 # image: ccanywhere/user-runtime:latest (~663MB)
 # 含: node:20-alpine + iptables + shadow + npm install -g
-#     @anthropic-ai/claude-code (Linux 版 claude, D7)
+#     @anthropic-ai/claude-code (Linux 版 claude)
 ```
 
 每次 claude release 想升级时 rebuild + restart shared container：
@@ -70,31 +69,29 @@ sleep 3 && curl -sf http://127.0.0.1:8081/healthz
 [server] shared container running: ccanywhere-shared-8081
 ```
 
-## 5. session 行为 ( D10 反转后)
+## 5. session 行为
 
 alice/bob 通过 web 起 session:
 - ccanywhere ContainerUserSync.ensureUser 在 shared container 内
   `useradd alice` (lazy, per user 首 session 触发) + chmod 0700
   `/home/alice` + mkdir `/var/lib/ccanywhere/user-claude/alice`
-  chown 0700 + cp baked `CLAUDE.md` + `settings.json` 进去 (D6
-  defense in depth: LLM soft norm + cc permission deny rules)
+  chown 0700 + cp baked `CLAUDE.md` + `settings.json` 进去
+  (defense in depth: LLM soft norm + cc permission deny rules)
 - spawn `docker exec -it -u alice -e CLAUDE_CONFIG_DIR=/var/lib/
   ccanywhere/user-claude/alice -e DISABLE_AUTOUPDATER=1 -e
   DISABLE_TELEMETRY=1 -e CLAUDE_CODE_OAUTH_TOKEN=<owner sk-ant-oat>
   -w <translated cwd> ccanywhere-shared-<port> claude --session-id
   <uuid>`
-- claude 在容器内跑, **直连** `api.anthropic.com` (entrypoint 不
-  再 hosts override / iptables REJECT — D10 撤回 anthropic 拦截).
-  anthropic 看到的请求是 cc binary first-party + 容器内 setup-token
-  匹配 device fingerprint → 接受 OAuth subscription path, 计费走
-  owner Pro/Max plan.
+- claude 在容器内跑, **直连** `api.anthropic.com`。anthropic 看到的
+  请求是 cc binary first-party + 容器内 setup-token 匹配 device
+  fingerprint → 接受 OAuth subscription path, 计费走 owner Pro/Max plan.
 
 **owner OAuth token 一次性容器内 setup** (在 container 内跑 `claude
 setup-token`, token 必须容器内 issued 才能容器内 use; host 跑出来
-的 token 跨设备给容器用 anthropic 会 invalidate). 详 D10 amendment.
+的 token 跨设备给容器用 anthropic 会 invalidate).
 
 owner 路径 0 改动: owner session 仍直接本机 spawn claude 走 mac
-Keychain → api.anthropic.com (D7 D8 决策).
+Keychain → api.anthropic.com.
 
 ## 6. CLI 子命令
 
@@ -107,7 +104,7 @@ ccanywhere container build     # hint → 用 scripts/build-container-image.sh
 
 ## 7. 限制 + 已知 trade-off
 
-**单 shared container 故障域** (D8): 一 user crash → 全容器 die。
+**单 shared container 故障域**: 一 user crash → 全容器 die。
 mitigation: docker `--restart unless-stopped` 自动 respawn。
 
 **不可信 user 不要用 shared-container**: shared 模型 fs/process
@@ -115,21 +112,19 @@ mitigation: docker `--restart unless-stopped` 自动 respawn。
 看 bob 的 claude 命令行。真正不可信场景需 `isolated-container`
 runtime（schema 接受 enum 但 reserved，未实现）。
 
-**~~iptables + /etc/hosts 双层防护~~ (D10 撤回)**: 早期 entrypoint
-强制 anthropic 流量经 proxy 用 iptables REJECT + /etc/hosts override
-两层. D10 反转后 anthropic 政策禁第三方 proxy 转 OAuth Bearer,
-proxy 离开 user 流量路径, 容器直连 anthropic, 两层防护一起撤.
+**anthropic 流量不经 proxy**: Anthropic 2026-02 起禁止第三方应用
+转发 OAuth subscription token。容器内 cc 直连 anthropic，两层早期
+iptables/hosts 防护已随之撤回。
 
 **claude binary 版本由 image 决定**：rebuild image 时 npm 拉
 latest，跟 host 可能漂移。想 pin 改 Dockerfile：
 `@anthropic-ai/claude-code@<version>`。
 
-**workspace override + shared-container 不支持** (D9): non-owner
+**workspace override + shared-container 不支持**: non-owner
 user 在 config 里加 `workspace` override + `runtime:
 'shared-container'` → 启动 fatal。原因: override path 不在 host
 workspace mount 内, container 看不到; cwd 翻译失败。fix 或者删
-workspace override 或者改 runtime 为 host。完整支持留
-BACKLOG `` follow-up。
+workspace override 或者改 runtime 为 host。
 
 ## 8. 排错
 
@@ -151,12 +146,10 @@ docker exec ccanywhere-shared-8081 grep api.anthropic /etc/hosts
 docker exec ccanywhere-shared-8081 iptables -L OUTPUT
 ```
 
-## 9. follow-up (reserved, 见 archive proposal)
+## 9. future work
 
-- : per-user 独立容器, 给真不可信用户
-- : web 顶条提示 user host mode
-- : /api/internal/runtime-status admin
-- : 限上限
-- : proxy 账本 + UserStore.quota 双向 sync
-- : 5min token 自动 rotation via
-  apiKeyHelper（替代每 session 启动新 token）
+- `isolated-container` runtime: per-user 独立容器, 给真不可信用户
+- web 顶条提示 user host mode
+- /api/internal/runtime-status admin endpoint
+- per-user 容器资源上限
+- 5min token 自动 rotation via apiKeyHelper
