@@ -25,8 +25,9 @@ ccanywhere 自身 listen `127.0.0.1:8081`(HTTP, internal-only)。本机自测
 
 **核心(本机跑通需要)**:
 
-- **macOS only** — LaunchAgent + `node-pty` 原生模块(目前没有 Linux /
-  Windows 移植)
+- **macOS / Linux** — author 在 macOS 上 daily-driver,Linux 走 systemd
+  等价路径。Windows untested(理论上 `node-pty` ConPTY 可跑,但
+  LaunchAgent / shared-container docker desktop windows 没适配)
 - **Node.js >= 20**
 - **pnpm 11+**(项目用 workspaces;`pnpm-workspace.yaml` 定义 root +
   `web/` 两个 package)
@@ -65,7 +66,7 @@ ccanywhere 解决一个具体场景:**你在外面想接着用本机已经登录
   维护;如果走 tunnel(frp 等)也建议 TLS 终结在 mac 端,tunnel server
   不持有 key。
 
-## Quick start (macOS, single host)
+## Quick start (single host)
 
 下文 `ccanywhere` CLI 等价于 `node <repo>/dist/cli.js`。Build 后把
 `dist/cli.js` 加到 PATH 最方便(下面 Step 1 末尾给一个 symlink 写法)。
@@ -135,14 +136,23 @@ Step 5 走完浏览器配对、验证 cc session 能开起来之后,再考虑 St
 (LaunchAgent 持久化)和 Step 6(远程访问)。本机自测阶段就这样 `Ctrl-C`
 随起随停即可。
 
-### 4. 守护进程(LaunchAgent,可选)
+### 4. 守护进程(可选)
 
-让 ccanywhere 开机自启 + crash 自重启。参考 `docs/deployment.md` 写一个
-`~/Library/LaunchAgents/com.<you>.ccanywhere.plist`,然后:
+让 ccanywhere 开机自启 + crash 自重启。
+
+- **macOS**: LaunchAgent (`~/Library/LaunchAgents/com.<you>.ccanywhere.plist`)
+  — 完整 plist 模板见 [`docs/deployment-macos.md`](docs/deployment-macos.md)
+- **Linux**: systemd user unit (`~/.config/systemd/user/ccanywhere.service`)
+  — 模板见 [`docs/deployment-linux.md`](docs/deployment-linux.md)
+
+任一方式装好后:
 
 ```bash
+# macOS
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.<you>.ccanywhere.plist
-launchctl print gui/$(id -u)/com.<you>.ccanywhere | head    # 看 state=running
+# Linux
+systemctl --user enable --now ccanywhere.service
+
 curl -sf http://127.0.0.1:8081/healthz                       # 应返 {"ok":true,...}
 ```
 
@@ -227,9 +237,9 @@ cp examples/frpc.toml ~/.config/ccanywhere/frpc.toml
 | `src/ws/server.ts` | WebSocket 协议、leading-edge debounce、心跳 |
 | `web/src/` | React 前端：登录、workspace、xterm 集成 |
 | `examples/config.json` | ccanywhere 配置模板 |
-| `examples/frpc.toml` | frpc 配置模板（https + https2http plugin，注释里附 plain TCP fallback） |
-| `examples/launchd/` | LaunchAgent / LaunchDaemon plist 模板（含证书自动续签 timer） |
-| `scripts/cert-issue.sh` | 一键 Let's Encrypt 申请脚本（DNS-01 via 腾讯云 / 可改其他 DNS） |
+| `examples/frpc.toml` | frpc 配置模板（仅 frp 隧道路径用;https + https2http plugin） |
+| `examples/launchd/` | macOS LaunchAgent plist 模板（证书自动续签 timer） |
+| `scripts/cert-issue.sh` | 一键 Let's Encrypt 申请脚本，**author 本机 setup**（macOS launchd + frpc + 腾讯云 DNS）;按顶部注释 fork 改 3 行可换其他 DNS / reload 命令 |
 
 ## 测试
 
@@ -246,7 +256,9 @@ self-hosted runner labels `[self-hosted, macOS, ccanywhere]`,外部 fork
 
 ## 文档
 
-- [`docs/deployment.md`](docs/deployment.md) — macOS LaunchAgent + frpc + 证书配置
+- [`docs/deployment.md`](docs/deployment.md) — 部署总览:config、build、隧道、证书、排错
+- [`docs/deployment-macos.md`](docs/deployment-macos.md) — macOS LaunchAgent 模板 + 安装步骤
+- [`docs/deployment-linux.md`](docs/deployment-linux.md) — Linux systemd unit 模板 + 安装步骤
 - [`docs/hooks.md`](docs/hooks.md) — opt-in 把 hook 段贴进 `~/.claude/settings.json`，
   让 web 端的 session 状态徽标实时反映 cc 的 busy/idle
 

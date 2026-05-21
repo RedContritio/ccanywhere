@@ -1,11 +1,24 @@
 #!/usr/bin/env bash
 # 一键申请 Let's Encrypt 证书 + 装到 ccanywhere 期望的路径。
 #
+# ============================================================
+# THIS SCRIPT ENCODES THE AUTHOR'S LOCAL SETUP
+#   macOS launchd + frpc + 腾讯云 DNSPod
+# Fork and adapt the 3 marked lines below for your stack:
+#   [adapt 1] DNS provider plugin (default: dns_tencent)
+#   [adapt 2] DNS provider credential env names
+#   [adapt 3] RELOAD_CMD (default: launchctl kickstart frpc)
+# ============================================================
+#
 # DNS provider: 默认以**腾讯云 DNSPod (dns_tencent)** 为 example。换
 # Cloudflare / AWS Route53 / 阿里云等只需 (1) 改下面 `--dns dns_tencent`
 # 为对应 acme.sh plugin (如 `dns_cf` / `dns_aws` / `dns_ali`),
 # (2) export 对应 plugin 的凭证 env (见 acme.sh wiki:
 # https://github.com/acmesh-official/acme.sh/wiki/dnsapi)。
+#
+# RELOAD_CMD: 默认是 macOS launchd 重启 frpc。Linux systemd 用户改成
+# `sudo systemctl reload <your-reverse-proxy>.service` 即可;caddy 用
+# `sudo systemctl reload caddy` (它会自动读新 cert)。
 #
 # 前置：
 # export CCANYWHERE_DOMAIN='cc.your-domain.com'
@@ -13,8 +26,9 @@
 # export Tencent_SecretId='...'   # 换 provider 时改对应 env name
 # export Tencent_SecretKey='...'
 #
-# 续签：每天的 launchd timer 跑 `acme.sh --cron` 自动检查；本脚本只用
-# 于第一次申请。续签时 acme.sh 从 ~/.acme.sh/account.conf 读凭证。
+# 续签：每天的 timer (macOS launchd / Linux systemd) 跑 `acme.sh --cron`
+# 自动检查；本脚本只用于第一次申请。续签时 acme.sh 从
+# ~/.acme.sh/account.conf 读凭证。
 
 set -euo pipefail
 
@@ -29,6 +43,8 @@ DOMAIN="$CCANYWHERE_DOMAIN"
 EMAIL="$CCANYWHERE_ACME_EMAIL"
 CERT_DIR="$HOME/.config/ccanywhere/certs"
 ACME_HOME="$HOME/.acme.sh"
+# [adapt 3] RELOAD_CMD: 装新 cert 后跑这个命令重启 reverse proxy 让
+# 新 cert 生效。默认是 author 的 macOS launchd + frpc setup。
 RELOAD_CMD="sudo /bin/launchctl kickstart -k system/com.fatedier.frpc"
 
 echo "[cert-issue] domain=$DOMAIN email=$EMAIL"
@@ -38,6 +54,9 @@ if [[ ! -x "$ACME_HOME/acme.sh" ]]; then
   curl -fsSL https://get.acme.sh | sh -s "email=$EMAIL"
 fi
 
+# [adapt 2] DNS provider credential env names。换 provider 时改下面 var
+# names (例: dns_cf 用 CF_Token / CF_Account_ID, dns_aws 用 AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY, 见 acme.sh wiki dnsapi 页)。
 if [[ -z "${Tencent_SecretId:-}" || -z "${Tencent_SecretKey:-}" ]]; then
   echo "[cert-issue] 错误：先 export Tencent_SecretId 和 Tencent_SecretKey" >&2
   echo "  export Tencent_SecretId='your-secret-id'" >&2
@@ -49,6 +68,8 @@ fi
 "$ACME_HOME/acme.sh" --set-default-ca --server letsencrypt
 
 echo "[cert-issue] 申请证书（DNS-01 challenge via 腾讯云 DNSPod）..."
+# [adapt 1] DNS provider plugin。换 provider 时改下面 --dns 参数
+# (例: --dns dns_cf / --dns dns_aws / --dns dns_ali)。
 "$ACME_HOME/acme.sh" --issue --dns dns_tencent -d "$DOMAIN"
 
 mkdir -p "$CERT_DIR"

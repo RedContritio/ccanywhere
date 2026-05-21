@@ -11,9 +11,8 @@ Main deployment docs: [deployment.md](./deployment.md); proxy:
 
 ## 1. 前置
 
-- macOS Docker Desktop 运行中
-- ccanywhere proxy 已配置并运行（`ccanywhere proxy serve`
-  独立 LaunchAgent listen :8082）
+- docker daemon 运行中 (macOS Docker Desktop / Linux native)
+- ccanywhere proxy 已配置并运行 (由 main service 自动 spawn,listen :8082)
 - `isolationPolicy` + `users.<name>.runtime` 已在 config 配好
 
 ## 2. build user runtime image
@@ -54,10 +53,10 @@ config 设非 owner user `runtime: 'shared-container'`：
 }
 ```
 
-restart ccanywhere main server：
+restart ccanywhere main server (reload 命令见
+[deployment.md](./deployment.md) §3),然后:
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
 sleep 3 && curl -sf http://127.0.0.1:8081/healthz
 # {"ok":true,"isolation":{"mode":"strict","ready":true}}
 ```

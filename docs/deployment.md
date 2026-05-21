@@ -1,16 +1,16 @@
 # Deployment
 
-macOS 单机部署 ccanywhere(Linux 类似,systemd 替代 launchd)。HTTPS
-frontend 默认 caddy(见 README §4);其它 reverse proxy + DNS-01 cert 流程
-见 `scripts/cert-issue.sh` 内嵌使用说明;tunnel(frp / Tailscale /
+单机部署 ccanywhere(macOS 走 LaunchAgent,Linux 走 systemd user unit)。
+HTTPS frontend 默认 caddy(见 README §4);其它 reverse proxy + DNS-01
+cert 流程见 `scripts/cert-issue.sh` 内嵌使用说明;tunnel(frp / Tailscale /
 Cloudflare Tunnel)参考各自官方文档 reverse-proxy 到 `127.0.0.1:8081`。
 Staging 实例(同域不同 port)见 [deployment-staging.md](./deployment-staging.md)。
 
 ## 前置
 
-- macOS（或 Linux），Node 20+，pnpm
+- macOS 或 Linux,Node 20+,pnpm
 - cc CLI 装好且 user 已经在本机用 `claude /login` 登过
-- **可选**：远程访问需要 reverse-proxy(caddy / frp / Tailscale / 等),
+- **可选**:远程访问需要 reverse-proxy(caddy / frp / Tailscale / 等),
   本机自测可以跳;主 README §6 列了各方案细节
 
 ## 1. 构建
@@ -58,76 +58,19 @@ which claude
 LaunchAgent / LaunchDaemon 的 PATH 默认是 `/usr/bin:/bin:/usr/sbin:/sbin`，
 **不含** `~/.local/bin`。把 `claudeBin` 写绝对路径最稳。
 
-## 3. ccanywhere 作为 LaunchAgent
+## 3. ccanywhere 作为常驻服务
 
-写 `~/Library/LaunchAgents/com.<you>.ccanywhere.plist`：
+按平台选一份 service install 文档跟着做:
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.&lt;you&gt;.ccanywhere</string>
+- **macOS LaunchAgent**: [deployment-macos.md](./deployment-macos.md)
+- **Linux systemd**: [deployment-linux.md](./deployment-linux.md)
 
-  <key>ProgramArguments</key>
-  <array>
-    <string>/Users/&lt;you&gt;/.nvm/versions/node/&lt;version&gt;/bin/node</string>
-    <string>/path/to/ccanywhere/dist/cli.js</string>
-  </array>
+后续 §5 排错 / §6 升级里出现 `<reload-service>` 占位符,按平台展开:
 
-  <key>WorkingDirectory</key>
-  <string>/path/to/ccanywhere</string>
-
-  <key>RunAtLoad</key><true/>
-
-  <key>KeepAlive</key>
-  <dict>
-    <key>SuccessfulExit</key><false/>
-  </dict>
-
-  <key>StandardOutPath</key>
-  <string>/Users/&lt;you&gt;/.config/ccanywhere/server.log</string>
-  <key>StandardErrorPath</key>
-  <string>/Users/&lt;you&gt;/.config/ccanywhere/server.log</string>
-
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/Users/&lt;you&gt;/.nvm/versions/node/&lt;version&gt;/bin:/usr/local/bin:/usr/bin:/bin</string>
-    <key>NODE_ENV</key><string>production</string>
-    <key>HOME</key><string>/Users/&lt;you&gt;</string>
-  </dict>
-</dict>
-</plist>
-```
-
-**注意**：
-
-- `node` 路径用 `which node` 拿绝对值(nvm `~/.nvm/.../bin/node` 随版本
-  变;brew Apple Silicon `/opt/homebrew/bin/node` / Intel `/usr/local/bin/node`)
-- `WorkingDirectory` 设到 repo 根（让 server 的 `web/dist` 自动解析）
-- log 路径 `~/.config/ccanywhere/server.log` 集中放置
-
-加载：
-
-```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.<you>.ccanywhere.plist
-launchctl print gui/$(id -u)/com.<you>.ccanywhere | head -10
-# 应该看到 state = running
-```
-
-重启（应用 config / 重 build 后）：
-
-```bash
-launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
-```
-
-卸载：
-
-```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.<you>.ccanywhere.plist
-```
+| 平台 | reload 命令 |
+|------|------------|
+| macOS | `launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere` |
+| Linux | `systemctl --user restart ccanywhere.service` |
 
 ## 4. 验证
 
@@ -158,14 +101,15 @@ mac 终端跑 `ccanywhere approve` 选择该 pending → 浏览器自动跳到 w
 | 申请配对没看到 pending | webOrigin 配错 / rpID 不匹配（浏览器侧 `navigator.credentials.create` 失败） | config 里 `webOrigin` 必须等于浏览器实际访问的 origin（含 scheme + host） |
 | pending list 一直空 | 浏览器 register-init 收到了，但 register-complete 失败（可能因为 webOrigin 不匹配） | 看 server.log 是否有 `verification_failed` |
 | 创建 session 即 dead | `claudeBin` 找不到（PATH 问题） | 改为绝对路径 |
-| 创建 session 后跳到 cc 登录页 | 你跑的是 M5 旧版（CLAUDE_CONFIG_DIR 注入） | `git pull && pnpm build:all && launchctl kickstart -k …` |
+| 创建 session 后跳到 cc 登录页 | 你跑的是 M5 旧版（CLAUDE_CONFIG_DIR 注入） | `git pull && pnpm build:all && <reload-service>` |
 | 卡顿明显 | 旧版 100ms trailing-flush | 同上，确认在 M-hook-opt-in 之后的版本 |
 | 公网 / 返回 404 envelope | `web/dist/` 不存在 / 路径解析错 | `pnpm build:all` 后重启 |
-| frpc 重启后 proxy already exists 一直在 retry | frps 旧 connection 还没超时清理 | 等 60 秒，或在 frps 端踢旧 client |
-| 浏览器 `ERR_SSL_PROTOCOL_ERROR` / 连不上 443 | frps `vhostHTTPSPort` 没配，或公网 443 被防火墙挡 | `frps.toml` 加 `vhostHTTPSPort = 443` 重启 frps；云厂商安全组放行 443 |
-| `acme.sh --issue` 卡在 "Verifying" | DNS 没生效或 TXT 记录写错 | `dig +short TXT _acme-challenge.cc.<domain>` 验证；DNS-01 凭证（Tencent_SecretId/Key）有没有 export |
-| 续签 timer 跑了但 reverse proxy 没拿到新证书 | `reloadcmd` 静默失败(常见原因:sudoers NOPASSWD 没配,或 reload 命令路径不对) | `tail ~/.config/ccanywhere/cert-renew.log` 看错误;按 reverse proxy 实际 reload 命令调 `--reloadcmd` |
-| 浏览器证书 valid 但 `502 Bad Gateway` | frpc 拿到流量后回源 `127.0.0.1:8081` 不通 | `curl http://127.0.0.1:8081/healthz` 确认 ccanywhere 在跑 |
+| 浏览器 `ERR_SSL_PROTOCOL_ERROR` / 连不上 443 | reverse proxy 没监听 443,或公网 443 被防火墙挡 | 检查 reverse proxy 实际监听端口;云厂商安全组放行 443 |
+| 浏览器证书 valid 但 `502 Bad Gateway` | reverse proxy 拿到流量后回源 `127.0.0.1:8081` 不通 | `curl http://127.0.0.1:8081/healthz` 确认 ccanywhere 在跑 |
+
+平台特定排错(LaunchAgent / systemd 服务状态、证书续签 timer、frpc 重启
+等)见 [deployment-macos.md](./deployment-macos.md) /
+[deployment-linux.md](./deployment-linux.md)。
 
 ## 6. 升级流程
 
@@ -173,7 +117,7 @@ mac 终端跑 `ccanywhere approve` 选择该 pending → 浏览器自动跳到 w
 git pull
 pnpm install
 pnpm build:all
-launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere
+<reload-service>           # 见 §3 reload 命令表
 ```
 
 ### ⚠️ 从 quota 之前的版本升级（重要）

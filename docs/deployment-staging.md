@@ -1,6 +1,12 @@
 # Deployment — Staging 实例（同域不同 port）
 
-跑一份独立的 ccanywhere instance 用于 e2e 测试或 dogfood-staging，与 prod
+> **本文以 macOS LaunchAgent + frpc tunnel 为例**(author 实际部署)。
+> Linux 上把 §2 plist 换成 systemd unit (参考
+> [deployment-linux.md](./deployment-linux.md))、§3 `launchctl kickstart`
+> 换成你的 frpc reload 命令即可。caddy / nginx 反代用户跳过 §3 改在自
+> 己 reverse-proxy 配置里加 staging vhost + 重启反代。
+
+跑一份独立的 ccanywhere instance 用于 e2e 测试或 dogfood-staging,与 prod
 完全隔离。架构：
 
 ```
@@ -98,7 +104,9 @@ hostHeaderRewrite = "cc.<your-domain>"
 frps 端确保 `vhostHTTPSPort` 没限制并放行 7443，或单独配 `vhostHTTPSPort2`
 之类（看 frps 版本支持）。
 
-`sudo launchctl kickstart -k system/com.fatedier.frpc` 重 frpc 应用配置。
+重启 frpc 应用配置（按你 frpc 的装法,macOS launchd 装法是
+`sudo launchctl kickstart -k system/com.fatedier.frpc`,Linux systemd
+装法是 `sudo systemctl restart frpc.service`）。
 
 ## 4. 浏览器访问
 

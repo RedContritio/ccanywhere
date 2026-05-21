@@ -77,8 +77,8 @@ ccanywhere main process 启动时通过 `child_process.spawn` 起 proxy 子
 
 - **独立 OS process** — credentials 文件 read 仅在 proxy 子进程,main
   process RCE 不直接拿到 owner key
-- **lifecycle 绑定** — 装 `~/Library/LaunchAgents/com.<you>.ccanywhere
-  .plist` 一个就够;main 起 = proxy 起,main 停 = proxy 停
+- **lifecycle 绑定** — main service unit (macOS LaunchAgent / Linux
+  systemd) 一个就够;main 起 = proxy 起,main 停 = proxy 停
 - **mini supervisor** — proxy 子进程 crash 时按退避序列重启
   (1s/2s/5s/10s/30s);60s 窗口内连续 5 次 crash 触发 give-up,main
   继续跑(owner host 路径仍能用)
@@ -87,8 +87,8 @@ ccanywhere main process 启动时通过 `child_process.spawn` 起 proxy 子
   proxy 子进程 → 5s grace → SIGKILL → main exit
 
 用户无需任何 LaunchAgent 安装步骤。第一节配好 credentials 文件 +
-`launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere` 后 proxy
-自动跑起来:
+reload main service(reload 命令见 [deployment.md](./deployment.md) §3)后
+proxy 自动跑起来:
 
 ```bash
 curl -sf http://127.0.0.1:8082/healthz
@@ -172,7 +172,7 @@ owner 真凭据存在两处 surface(vs 仅 macOS Keychain 多一处):
 
 ```bash
 git pull && pnpm install && pnpm build:all
-launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere-proxy
+<reload-service>           # main service reload, 见 deployment.md §3
 sleep 2 && curl -sf http://127.0.0.1:8082/healthz
 ```
 

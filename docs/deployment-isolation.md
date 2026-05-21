@@ -178,7 +178,7 @@ isolationPolicy: 'host-only' to override all.
 2. 编辑 `~/.config/ccanywhere/config.json`:
    - 为每个 user 加 `runtime: 'host'`,**或**
    - 加全局 `isolationPolicy: 'host-only'`
-3. `launchctl kickstart -k gui/$(id -u)/com.<you>.ccanywhere`
+3. reload main service (reload 命令见 [deployment.md](./deployment.md) §3)
 4. `curl -sf http://127.0.0.1:8081/healthz` → 必须返
    `{"ok":true,"isolation":{"mode":"strict","ready":true}}` 或
    `"host-only"` mode
