@@ -36,8 +36,8 @@ export interface OpRecord {
 //
 // Body size impact: ~120 B per op JSON × MAX_OPS ≈ 780 KB worst-case
 // POST body, comfortably under fastify's default 1 MB limit and within
-// what a slow mobile uplink (0.4 Mbps observed in dogfood) can ship in
-// ~16 s. The server schema cap (src/server/routes/feedback.ts) is set
+// what a slow mobile uplink (~0.4 Mbps) can ship in ~16 s. The server
+// schema cap (src/server/routes/feedback.ts) is set
 // generously above this so legitimate submissions are never 400'd —
 // growing this constant doesn't require a server change as long as it
 // stays well under that ceiling.

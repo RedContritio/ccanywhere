@@ -78,10 +78,9 @@ describe('REST API with historyRoot for resume validation', () => {
    * second `POST /api/sessions { mode: 'resume', sessionId: 'X' }` while
    * an active web-session is already driving cc-X MUST attach to the
    * existing web-session (status 200, same body.id) rather than spawn a
-   * second cc process for the same jsonl history.
-   *
-   * Feedback 2026-05-09 "两次 resume 同 session 但有两个窗口" — pre-fix
-   * report. This test guards the fix from regressing.
+   * second cc process for the same jsonl history. Regression guard for
+   * "two windows on the same session" — the second resume must attach
+   * idempotently instead of duplicating.
    */
   it('second resume of same sessionId attaches (200) to existing web session', async () => {
     // First resume spawned by hand with a long-lived sleep so the lock
