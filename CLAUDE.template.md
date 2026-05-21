@@ -81,7 +81,3 @@ endpoint、claudeBin 路径、prod cookieName 等）。**任何写入这个文�
   - 先按上一节流程请求授权
   - 写入后自己 deploy + healthz 验证（捕获用户 config 漏改的 fatal）
 - 不能仅"docs 写了就完事"
-
-历史教训：commit `8349fa7` 加 `guestProjectsRoot` 必填；docs
-写了但 prod config 没同步；同笔 ship 没自己 deploy 验证。结果一周后下次
-`launchctl kickstart` 时服务起不来——root cause 早被埋下，触发延迟才暴露。
