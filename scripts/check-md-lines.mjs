@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
 const LIMITS = [
+  // openspec specs / proposals are single-source-of-truth — they run long.
+  { pattern: /^openspec\//, max: 600 },
   { pattern: /\.md$/, max: 300 },
 ];
 
