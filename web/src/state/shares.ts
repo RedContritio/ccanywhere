@@ -77,5 +77,7 @@ export const useSharesStore = create<SharesStore>((set, get) => ({
 }));
 
 export function resetSharesStoreForTest(): void {
-  useSharesStore.setState(initial, true);
+  // zustand 5: `replace: true` 要求 newState 类型完整 (含 actions);
+  // 这里只重置数据字段, partial-merge 留下 actions, 不传 replace flag。
+  useSharesStore.setState(initial);
 }

@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ccJsonlPathOf, QuotaPathError, runStartupSanityCheck } from './path.js';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { ccJsonlPathOf, QuotaPathError, runStartupSanityCheck, type SanityLogger } from './path.js';
 
 describe('ccJsonlPathOf', () => {
   it('encodes a standard cwd by replacing / with - and adds leading -', () => {
@@ -30,11 +30,13 @@ describe('ccJsonlPathOf', () => {
 
 describe('runStartupSanityCheck', () => {
   let projectsRoot: string;
-  let logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
+  // vitest 4 changed Mock<T> generic; explicit signature lets logger
+  // satisfy SanityLogger's callable shape while still exposing Mock API.
+  let logger: SanityLogger & { info: Mock<(msg: string) => void>; warn: Mock<(msg: string) => void> };
 
   beforeEach(() => {
     projectsRoot = mkdtempSync(join(tmpdir(), 'ccanywhere-quota-path-'));
-    logger = { info: vi.fn(), warn: vi.fn() };
+    logger = { info: vi.fn<(msg: string) => void>(), warn: vi.fn<(msg: string) => void>() };
   });
 
   afterEach(() => {

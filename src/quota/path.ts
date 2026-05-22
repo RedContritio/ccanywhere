@@ -44,7 +44,7 @@ export type SanityResult =
   | { readonly kind: 'verified'; readonly samplePath: string }
   | { readonly kind: 'skipped'; readonly reason: string };
 
-interface SanityLogger {
+export interface SanityLogger {
   info(msg: string): void;
   warn(msg: string): void;
 }
