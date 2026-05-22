@@ -8,6 +8,26 @@ describe('encodeProjectCwd', () => {
   it('replaces slashes with dashes after resolve', () => {
     expect(encodeProjectCwd('/Users/foo/proj')).toBe('-Users-foo-proj');
   });
+
+  // cc encodes EVERY non-alphanumeric char to '-', not just '/'. A project
+  // dir `gicg_mono` lands at `~/.claude/projects/-Users-…-gicg-mono` — the
+  // underscore becomes a dash. Encoding only '/' misses it and reads an
+  // empty history.
+  it('replaces underscore / dot — every non-alphanumeric char — with dash', () => {
+    expect(encodeProjectCwd('/Users/foo/gicg_mono')).toBe(
+      '-Users-foo-gicg-mono',
+    );
+    expect(encodeProjectCwd('/Users/foo/my.proj')).toBe('-Users-foo-my-proj');
+  });
+
+  // cc caps the encoded name at 200 chars, appending '-' + a base36 hash
+  // of the full path so over-long cwds still map to a stable unique dir.
+  it('caps over-200-char encodings with a hash suffix', () => {
+    const cwd = `/${'a'.repeat(300)}`;
+    const enc = encodeProjectCwd(cwd);
+    expect(enc.slice(0, 200)).toBe(`-${'a'.repeat(300)}`.slice(0, 200));
+    expect(enc).toMatch(/^.{200}-[0-9a-z]+$/);
+  });
 });
 
 describe('listHistory', () => {
