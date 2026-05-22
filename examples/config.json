@@ -1,0 +1,8 @@
+{
+  "port": 8081,
+  "bindHost": "127.0.0.1",
+  "claudeBin": "/Users/<you>/.local/bin/claude",
+
+  "workspace": "/Users/<you>/ccanywhere-workspace",
+  "webOrigin": "https://cc.example.com"
+}

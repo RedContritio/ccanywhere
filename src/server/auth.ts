@@ -1,0 +1,188 @@
+import type { FastifyInstance } from 'fastify';
+import type { Device } from '../devices/types.js';
+import type { DeviceStore } from '../devices/store.js';
+import type { TokenStore } from '../tokens/store.js';
+import type { User } from '../users/types.js';
+import type { UserStore } from '../users/store.js';
+import { logger } from '../log.js';
+import { SESSION_COOKIE_NAME } from './routes/auth.js';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    /** Set by the cookie session middleware on /api/* and /ws/* requests. */
+    authDevice?: Device;
+    /**
+     * resolved user behind the request. Set whenever a valid
+     * session cookie (device-issued or token-issued) authenticates the
+     * request. Either owner (device session) or any user kind (token
+     * session, ).
+     */
+    user?: User;
+    /** Legacy: filled when the request's bearer matches an internalHookToken. */
+    authTokenLabel?: string;
+  }
+}
+
+export interface RegisterAuthOptions {
+  readonly store: DeviceStore;
+  /** : required once token-based login is wired (step 3). */
+  readonly userStore?: UserStore;
+  readonly tokenStore?: TokenStore;
+  readonly internalHookToken: string;
+  readonly cliToken: string;
+  /**
+   * Optional override for the session cookie name. Defaults to
+   * `SESSION_COOKIE_NAME`. Override only for multi-instance same-domain
+   * deployments (e.g. staging) — see `config/schema.ts` `cookieName`.
+   */
+  readonly cookieName?: string;
+}
+
+function extractBearer(authHeader: unknown): string | null {
+  if (typeof authHeader !== 'string') return null;
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const v = authHeader.slice('Bearer '.length).trim();
+  return v.length > 0 ? v : null;
+}
+
+/**
+ * URL prefixes that bypass cookie auth — they handle their own challenge/
+ * response flow or are intentionally public.
+ */
+const AUTH_PUBLIC_PREFIXES: ReadonlyArray<string> = [
+  '/api/auth/register-init',
+  '/api/auth/register-complete',
+  '/api/auth/register-status',
+  '/api/auth/login-init',
+  '/api/auth/login-complete',
+  '/api/auth/token',
+];
+
+export async function registerAuth(
+  app: FastifyInstance,
+  opts: RegisterAuthOptions,
+): Promise<void> {
+  if (opts.internalHookToken.length < 16) {
+    throw new Error('internalHookToken must be at least 16 chars');
+  }
+  if (opts.cliToken.length < 16) {
+    throw new Error('cliToken must be at least 16 chars');
+  }
+
+  app.addHook('onRequest', async (req, reply) => {
+    const url = req.url.split('?')[0] ?? '';
+
+    const isUpgrade =
+      typeof req.headers.upgrade === 'string' &&
+      req.headers.upgrade.toLowerCase() === 'websocket';
+
+    const rejectUpgrade = (status: number, message: string): void => {
+      const socket = req.raw.socket;
+      const body = `HTTP/1.1 ${status} Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`;
+      try {
+        socket.write(body);
+      } catch {
+        // ignore
+      }
+      socket.destroy();
+      void reply.hijack();
+      logger.debug({ url, message }, 'ws upgrade rejected');
+    };
+
+    // 1) Hook receiver — its own bearer-token domain.
+    if (url.startsWith('/api/hook/')) {
+      const token = extractBearer(req.headers.authorization);
+      if (token !== opts.internalHookToken) {
+        await reply
+          .code(401)
+          .send({ error: { code: 'unauthorized', message: 'invalid hook token' } });
+      }
+      return;
+    }
+
+    // 2) CLI internal RPC — only reachable from local mac CLI with the
+    // cliToken file (mode 0600 in ~/.config/ccanywhere/).
+    if (url.startsWith('/api/internal/')) {
+      const token = extractBearer(req.headers.authorization);
+      if (token !== opts.cliToken) {
+        await reply
+          .code(401)
+          .send({ error: { code: 'unauthorized', message: 'invalid cli token' } });
+      }
+      return;
+    }
+
+    // 3) Public auth flow endpoints.
+    if (AUTH_PUBLIC_PREFIXES.some((p) => url === p || url.startsWith(`${p}?`))) {
+      return;
+    }
+
+    // 4) Non-API routes are public (SPA, /healthz, SPA fallback).
+    if (!url.startsWith('/api/') && !url.startsWith('/ws/')) {
+      return;
+    }
+
+    // 5) Everything else is gated by cookie session.
+    const cookieName = opts.cookieName ?? SESSION_COOKIE_NAME;
+    const sessionId = req.cookies[cookieName];
+    if (typeof sessionId !== 'string' || sessionId.length === 0) {
+      if (isUpgrade) {
+        rejectUpgrade(401, 'missing session cookie');
+      } else {
+        await reply
+          .code(401)
+          .send({ error: { code: 'unauthorized', message: 'missing session' } });
+      }
+      return;
+    }
+    // Try device session first (owner via WebAuthn).
+    const device = opts.store.authenticateSession(sessionId);
+    if (device) {
+      req.authDevice = device;
+      if (opts.userStore !== undefined) {
+        const user = opts.userStore.findById(device.userId);
+        if (user === null || user.kind !== 'owner') {
+          if (isUpgrade) {
+            rejectUpgrade(401, 'device user invalid');
+          } else {
+            await reply
+              .code(401)
+              .send({ error: { code: 'unauthorized', message: 'device user invalid' } });
+          }
+          return;
+        }
+        req.user = user;
+      }
+      logger.debug(
+        { url, method: req.method, deviceId: device.id, ip: req.ip },
+        'authed request (device)',
+      );
+      return;
+    }
+
+    // Fall back to token session (any user kind via POST /api/auth/token,
+    // — owner can self-issue and use a token too).
+    if (opts.tokenStore !== undefined && opts.userStore !== undefined) {
+      const token = opts.tokenStore.verify(sessionId);
+      if (token) {
+        const user = opts.userStore.findById(token.userId);
+        if (user !== null) {
+          req.user = user;
+          logger.debug(
+            { url, method: req.method, userId: user.id, ip: req.ip },
+            'authed request (token)',
+          );
+          return;
+        }
+      }
+    }
+
+    if (isUpgrade) {
+      rejectUpgrade(401, 'invalid or expired session');
+    } else {
+      await reply
+        .code(401)
+        .send({ error: { code: 'unauthorized', message: 'invalid or expired session' } });
+    }
+  });
+}

@@ -1,0 +1,10 @@
+packages:
+  - .
+  - web
+
+allowBuilds:
+  esbuild: true
+  node-pty: true
+
+minimumReleaseAgeExclude:
+  - vite@8.0.14

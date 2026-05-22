@@ -1,0 +1,68 @@
+name: e2e
+
+# Playwright visual + smoke against the prod ccanywhere instance. Two
+# constraints make this self-hosted-only:
+#   1. globalSetup mints the e2e user's token via /api/internal/users on
+#      127.0.0.1 — cloud runners can't reach the loopback RPC.
+#   2. browser traffic targets the prod webOrigin configured in
+#      `~/.config/ccanywhere/config.json`, which routes through frpc +
+#      the host mac. The runner must be that mac (or any host where
+#      ccanywhere is reachable on loopback).
+#
+# Enablement is gated by `vars.E2E_ENABLED == 'true'` so the job stays
+# dormant until you register a self-hosted runner with labels
+# `[self-hosted, macOS, ccanywhere]` and flip the variable in repo
+# settings → Actions → Variables.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Self-hosted runner serves one e2e at a time (playwright.config.ts pins
+# workers:1 + fullyParallel:false). Let new pushes preempt older runs on
+# the same ref so the queue doesn't pile up.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: playwright visual e2e
+    if: ${{ vars.E2E_ENABLED == 'true' }}
+    runs-on: [self-hosted, macOS, ccanywhere]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        # Functional smoke runs on 3 browsers; visual screenshots
+        # stay chromium-only (playwright.config.ts).
+        run: pnpm -F ccanywhere-web exec playwright install --with-deps chromium webkit firefox
+
+      - name: Build web (e2e hits the bundle served by ccanywhere)
+        run: pnpm -F ccanywhere-web build
+
+      - name: Run e2e
+        run: pnpm -F ccanywhere-web e2e
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-screenshots
+          path: web/test-results/
+          retention-days: 7

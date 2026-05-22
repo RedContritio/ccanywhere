@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent: 每天凌晨 4 点跑 acme.sh --cron 检查证书。
+  到期前 30 天自动续签 + 触发 install-cert 时配置的 reloadcmd
+  （重启 frpc 让新证书生效）。
+
+  使用前用 sed 把所有 __YOU__ 替换为你的 mac 用户名:
+    cp examples/launchd/com.example.cc-cert-renew.plist \
+       ~/Library/LaunchAgents/com.__YOU__.cc-cert-renew.plist
+    sed -i '' "s/__YOU__/$(whoami)/g" ~/Library/LaunchAgents/com.*.cc-cert-renew.plist
+    mv ~/Library/LaunchAgents/com.__YOU__.cc-cert-renew.plist \
+       ~/Library/LaunchAgents/com.$(whoami).cc-cert-renew.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.$(whoami).cc-cert-renew.plist
+
+  立即试跑: launchctl kickstart gui/$(id -u)/com.$(whoami).cc-cert-renew
+  日志:    ~/.config/ccanywhere/cert-renew.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.__YOU__.cc-cert-renew</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>/Users/__YOU__/.acme.sh/acme.sh --cron --home /Users/__YOU__/.acme.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>4</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key><false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/__YOU__/.config/ccanywhere/cert-renew.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/__YOU__/.config/ccanywhere/cert-renew.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>/Users/__YOU__</string>
+    <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
