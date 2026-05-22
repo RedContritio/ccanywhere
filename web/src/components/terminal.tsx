@@ -139,12 +139,20 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     // "page" event when the user drags: ydisp changes but no PTY input
     // is emitted, so all our other traces missed it.
     const scrollDisposer = term.onScroll((ydisp) => {
-      recordOp('term.scroll', {
-        ydisp,
-        viewportY: term.buffer.active.viewportY,
-        baseY: term.buffer.active.baseY,
-        cursorY: term.buffer.active.cursorY,
-      });
+      // onScroll fires per scrolled line — a snapshot replay alone emits
+      // ~1.5k events in a second, flooding the 60s ops ring and evicting
+      // genuine user-action traces. Throttle to a sample; the trail
+      // matters, not a dense recording (same 100ms as touch events).
+      recordOpThrottled(
+        'term.scroll',
+        {
+          ydisp,
+          viewportY: term.buffer.active.viewportY,
+          baseY: term.buffer.active.baseY,
+          cursorY: term.buffer.active.cursorY,
+        },
+        100,
+      );
     });
     const selectionDisposer = term.onSelectionChange(() => {
       const sel = term.getSelection();
