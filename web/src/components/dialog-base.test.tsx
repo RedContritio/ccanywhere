@@ -77,4 +77,29 @@ describe('DialogBase', () => {
     fireEvent.keyDown(document.body, { key: 'Escape' });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  // Regression: a tall body (long project / history list on a small mobile
+  // viewport) used to push the fixed, vertically-centered dialog past the
+  // top + bottom edges of the screen — unreachable and unscrollable. The
+  // dialog must cap its height to the viewport and scroll the body slot
+  // internally instead, keeping title + footer pinned.
+  it('caps height to the viewport and scrolls the body slot internally', () => {
+    render(
+      <DialogBase
+        open
+        onOpenChange={() => {}}
+        title="T"
+        footer={<button type="button">Confirm</button>}
+      >
+        <p data-testid="dlg-body">body</p>
+      </DialogBase>,
+    );
+    const content = document.querySelector('[data-slot="dialog-content"]');
+    // Height is bounded relative to the viewport so the centered dialog
+    // never overflows off-screen.
+    expect(content?.className).toMatch(/max-h-\[/);
+    // The body wrapper — not the whole fixed dialog — absorbs the overflow.
+    const bodyWrap = screen.getByTestId('dlg-body').parentElement;
+    expect(bodyWrap?.className).toMatch(/overflow-y-auto/);
+  });
 });

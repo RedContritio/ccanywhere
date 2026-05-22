@@ -100,4 +100,24 @@ describe('ListBase', () => {
     expect(screen.getByRole('list', { name: 'static' })).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
   });
+
+  // A long list inside a dialog must scroll within itself rather than grow
+  // the dialog — otherwise sibling controls (sort buttons, mode tabs) get
+  // pushed off-screen on mobile. `scroll` flips overflow + min-h-0 so the
+  // caller's flex layout can shrink it.
+  it('scrolls internally + allows flex shrink when scroll is set', () => {
+    render(
+      <ListBase
+        items={items}
+        getKey={(x) => x.id}
+        renderPrimary={(x) => x.label}
+        onSelect={() => {}}
+        ariaLabel="picker"
+        scroll
+      />,
+    );
+    const group = screen.getByRole('radiogroup', { name: 'picker' });
+    expect(group.className).toMatch(/overflow-y-auto/);
+    expect(group.className).toMatch(/min-h-0/);
+  });
 });

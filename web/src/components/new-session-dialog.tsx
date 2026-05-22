@@ -253,7 +253,7 @@ export function NewSessionDialog({
       <form
         id="new-session-form"
         onSubmit={onPrimary}
-        className="space-y-4"
+        className="flex max-h-full flex-col gap-4"
       >
         {step === 1 && (
           <Step1ProjectPicker
@@ -290,7 +290,7 @@ export function NewSessionDialog({
         )}
 
         {error !== null && (
-          <p className="text-sm text-danger" role="alert">
+          <p className="shrink-0 text-sm text-danger" role="alert">
             {error}
           </p>
         )}

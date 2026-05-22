@@ -23,10 +23,10 @@ export function Step2HistoryPicker({
   onSelectResumeId,
 }: Props): JSX.Element {
   return (
-    <div className="space-y-2">
-      <Label>选择要接续的会话</Label>
+    <div className="flex min-h-0 flex-col gap-2">
+      <Label className="shrink-0">选择要接续的会话</Label>
       {historyLoading ? (
-        <p className="text-xs text-fg-muted">加载历史中...</p>
+        <p className="shrink-0 text-xs text-fg-muted">加载历史中...</p>
       ) : (
         <ListBase
           items={history}
@@ -39,6 +39,7 @@ export function Step2HistoryPicker({
           onSelect={onSelectResumeId}
           ariaLabel="历史会话"
           emptyLabel="该项目还没有可接续的历史会话"
+          scroll
         />
       )}
     </div>

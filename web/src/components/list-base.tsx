@@ -11,6 +11,14 @@ export interface ListBaseProps<T> {
   readonly ariaLabel?: string;
   readonly emptyLabel?: string;
   readonly className?: string;
+  /**
+   * When true the (non-empty) list scrolls within itself instead of
+   * growing. Used inside a flex-column dialog body: the caller's flex
+   * layout supplies the height, the list shrinks to the available space
+   * and scrolls — keeping sibling controls (sort buttons, mode tabs) and
+   * the dialog chrome fixed. Only flips overflow + min-h-0; no fixed cap.
+   */
+  readonly scroll?: boolean;
 }
 
 /**
@@ -35,6 +43,7 @@ export function ListBase<T>({
   ariaLabel,
   emptyLabel = '空',
   className,
+  scroll,
 }: ListBaseProps<T>): JSX.Element {
   if (items.length === 0) {
     return (
@@ -55,7 +64,13 @@ export function ListBase<T>({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-md border border-border bg-bg',
+        'rounded-md border border-border bg-bg',
+        // overflow-hidden clips rows to the rounded corners; when `scroll`
+        // is set the vertical axis must scroll instead — overflow-x stays
+        // hidden (corner clip), min-h-0 lets the flex parent shrink it.
+        scroll
+          ? 'min-h-0 overflow-x-hidden overflow-y-auto'
+          : 'overflow-hidden',
         className,
       )}
       role={interactive ? 'radiogroup' : 'list'}

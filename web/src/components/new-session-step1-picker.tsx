@@ -55,9 +55,9 @@ export function Step1ProjectPicker({
   onModeChange,
 }: Props): JSX.Element {
   return (
-    <>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
+    <div className="flex min-h-0 flex-col gap-4">
+      <div className="flex min-h-0 flex-col gap-2">
+        <div className="flex shrink-0 items-center justify-between">
           <Label>项目</Label>
           <div
             className="inline-flex gap-1 text-xs"
@@ -89,6 +89,7 @@ export function Step1ProjectPicker({
             renderSecondary={renderSecondary}
             onSelect={onSelectProject}
             ariaLabel="项目"
+            scroll
           />
         ) : (
           <EmptyState
@@ -99,7 +100,7 @@ export function Step1ProjectPicker({
       </div>
 
       {projectAction === 'new' ? (
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Input
             type="text"
             placeholder="目录名（直接落在 Projects/ 下）"
@@ -142,13 +143,14 @@ export function Step1ProjectPicker({
           type="button"
           variant="ghost"
           size="sm"
+          className="shrink-0 self-start"
           onClick={() => onProjectAction('new')}
         >
           + 新建项目
         </Button>
       )}
 
-      <div className="space-y-2">
+      <div className="flex shrink-0 flex-col gap-2">
         <Label>模式</Label>
         <Tabs
           value={mode}
@@ -160,6 +162,6 @@ export function Step1ProjectPicker({
           </TabsList>
         </Tabs>
       </div>
-    </>
+    </div>
   );
 }

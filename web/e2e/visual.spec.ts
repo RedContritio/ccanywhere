@@ -450,6 +450,107 @@ test.describe('design-system visual', () => {
     // web/src/components/workspace-header-actions.test.tsx — e2e against
     // a real live session route hits a SPA URL/store race that's not
     // worth fighting here.
+
+    // DIAGNOSE (feedback 2026-05-22T16-57-36): double scrollbar after
+    // Step2 → 返回 → Step1. Counts overflow-y scroll containers inside
+    // the dialog at each step and logs which elements actually overflow.
+    test('diagnose: double scrollbar on step2 → return → step1', async ({
+      page,
+    }) => {
+      await page.route('**/api/sessions', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ sessions: [] }),
+        }),
+      );
+      const projects = Array.from({ length: 25 }, (_, i) => ({
+        id: `proj-${i}`,
+        name: `project-number-${i}`,
+        path: `/tmp/project-number-${i}`,
+        modifiedAt: Date.now() - i * 3_600_000,
+      }));
+      await page.route('**/api/projects', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ projects }),
+        }),
+      );
+      const history = Array.from({ length: 35 }, (_, i) => ({
+        sessionId: `hist-${i}`,
+        modifiedAt: Date.now() - i * 3_600_000,
+        preview: `历史会话预览 ${i}`,
+      }));
+      await page.route('**/api/projects/*/history', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ history }),
+        }),
+      );
+
+      await page.goto('/workspace');
+      await page.waitForLoadState('networkidle');
+      await page.getByRole('button', { name: '打开侧边栏' }).tap();
+      // `+ 新建` exists in both the hidden desktop sidebar and the drawer —
+      // scope to the open Sheet so we click the visible one.
+      const sheet = page.locator('[data-slot="sheet-content"]');
+      await sheet.getByRole('button', { name: '+ 新建' }).click();
+      await page.waitForSelector('[data-slot="dialog-content"]');
+
+      const countScrollers = async (label: string): Promise<string[]> => {
+        const scrollers = await page.evaluate(() => {
+          const dialog = document.querySelector('[data-slot="dialog-content"]');
+          if (dialog === null) return [];
+          const out: string[] = [];
+          dialog.querySelectorAll('*').forEach((el) => {
+            const cs = getComputedStyle(el);
+            if (
+              (cs.overflowY === 'auto' || cs.overflowY === 'scroll') &&
+              el.scrollHeight > el.clientHeight + 1
+            ) {
+              out.push(
+                `${String(el.className).slice(0, 70)} [client=${el.clientHeight} scroll=${el.scrollHeight}]`,
+              );
+            }
+          });
+          return out;
+        });
+        // eslint-disable-next-line no-console
+        console.log(`[${label}] ${scrollers.length} scroller(s):\n  ${scrollers.join('\n  ')}`);
+        return scrollers;
+      };
+
+      await countScrollers('step1-initial');
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, 'diag-step1-initial.png'),
+        fullPage: false,
+      });
+
+      const dialog = page.locator('[data-slot="dialog-content"]');
+      await dialog.locator('[role="radio"]').first().click();
+      await page.getByRole('tab', { name: '从历史接续' }).click();
+      await page.getByRole('button', { name: '下一步' }).click();
+      await dialog.locator('[role="radiogroup"]').waitFor();
+      await countScrollers('step2');
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, 'diag-step2.png'),
+        fullPage: false,
+      });
+
+      await page.getByRole('button', { name: '返回' }).click();
+      await dialog.locator('[role="radiogroup"]').waitFor();
+      const back = await countScrollers('step1-after-return');
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, 'diag-step1-after-return.png'),
+        fullPage: false,
+      });
+
+      // eslint-disable-next-line no-console
+      console.log(`REPRO: ${back.length >= 2 ? 'DOUBLE SCROLLBAR' : 'single/none'}`);
+      expect(back.length, 'step1 should have at most one scroll container').toBeLessThanOrEqual(1);
+    });
   });
 
   test('new-session step 2 history with long preview truncates (regression: dialog must not overflow)', async ({
